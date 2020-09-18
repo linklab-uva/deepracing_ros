@@ -15,7 +15,7 @@
 #include <deepracing_msgs/msg/timestamped_packet_session_data.hpp>
 #include <deepracing_msgs/msg/boundary_line.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
-#include "f1_datalogger_ros/utils/f1_msg_utils.h"
+#include "deepracing_ros/utils/f1_msg_utils.h"
 
 Json::Value readJsonFile(std::shared_ptr<rclcpp::Node> node, std::string filepath)
 {
@@ -191,7 +191,7 @@ int main(int argc, char** argv)
     rclcpp::ParameterValue track_dir_param = node->declare_parameter("track_dir",rclcpp::ParameterValue(std::string(std::getenv("F1_TRACK_DIR"))));
     std::string track_dir = track_dir_param.get<std::string>();
     std::string track_name = "";
-    std::array<std::string,25> track_name_array = f1_datalogger_ros::F1MsgUtils::track_names();
+    std::array<std::string,25> track_name_array = deepracing_ros::F1MsgUtils::track_names();
 
     while (rclcpp::is_initialized())
     {
@@ -238,7 +238,7 @@ int main(int argc, char** argv)
             pcl_conversions::moveFromPCL(outercloudPC2, outercloudMSG);
             pcl_conversions::moveFromPCL(racelinecloudPC2, racelinecloudMSG);
         }
-        innercloudMSG.header.frame_id = f1_datalogger_ros::F1MsgUtils::world_coordinate_name; 
+        innercloudMSG.header.frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name; 
         outercloudMSG.set__header( innercloudMSG.header );
         racelinecloudMSG.set__header( innercloudMSG.header );
         innerPA.set__header( innercloudMSG.header );

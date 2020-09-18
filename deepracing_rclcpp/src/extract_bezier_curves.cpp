@@ -19,6 +19,7 @@
 #include <deepracing_msgs/msg/bezier_curve.hpp>
 #include <deepracing_msgs/msg/timestamped_packet_motion_data.hpp>
 
+#include <f1_datalogger/proto_dll_macro.h>
 #include <f1_datalogger/proto/BezierCurve.pb.h>
 #include <google/protobuf/util/json_util.h>
 #include <iostream>

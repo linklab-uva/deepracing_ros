@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(f1_datalogger_ros)
+project(deepracing_rclcpp)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -50,8 +50,8 @@ target_link_libraries(f1_msg_utils
 )
 if(WIN32)
   target_compile_definitions(f1_msg_utils 
-    PRIVATE "F1_DATALOGGER_ROS_PUBLIC=__declspec(dllexport)"
-    INTERFACE "F1_DATALOGGER_ROS_PUBLIC=__declspec(dllimport)"
+    PRIVATE "DEEPRACING_ROS_PUBLIC=__declspec(dllexport)"
+    INTERFACE "DEEPRACING_ROS_PUBLIC=__declspec(dllimport)"
   )
 endif()
 target_include_directories(f1_msg_utils
