@@ -31,8 +31,9 @@ setup(
     license='Apache License, Version 2.0',
     tests_require=['pytest'],
     packages=list(set(find_packages(exclude=['test'])+[
-                os.path.join(package_name,"controls"),
-                os.path.join(package_name,"convert"),
+                python_pkg_name
+                # os.path.join(python_pkg_name,"controls"),
+                # os.path.join(python_pkg_name,"convert"),
               ])),
    # data_files=[
        # ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
