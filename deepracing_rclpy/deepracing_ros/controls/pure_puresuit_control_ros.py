@@ -28,7 +28,7 @@ import torch.nn as NN
 import torch.utils.data as data_utils
 import deepracing_models.nn_models.Models
 import matplotlib.pyplot as plt
-from deepracing_msgs.msg import BoundaryLine, TimestampedPacketCarStatusData, TimestampedPacketCarTelemetryData, TimestampedPacketMotionData, PacketCarTelemetryData, PacketMotionData, CarMotionData, CarStatusData, CarTelemetryData, PacketHeader
+from deepracing_msgs.msg import CarControl, BoundaryLine, TimestampedPacketCarStatusData, TimestampedPacketCarTelemetryData, TimestampedPacketMotionData, PacketCarTelemetryData, PacketMotionData, CarMotionData, CarStatusData, CarTelemetryData, PacketHeader
 from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion, PoseArray
 from scipy.spatial.transform import Rotation as Rot
 from std_msgs.msg import Float64
@@ -57,8 +57,7 @@ class PurePursuitControllerROS(Node):
         self.velsetpoint = 0.0
         self.current_speed = 0.0
         self.throttle_out = 0.0
-        self.controller = py_f1_interface.F1Interface(1)
-        self.controller.setControl(0.0,0.0,0.0)
+        self.control_pub = self.create_publisher(CarControl, "/car_control", 1)
 
         
 
@@ -154,11 +153,6 @@ class PurePursuitControllerROS(Node):
                 '/outer_track_boundary/pose_array',
                 self.outerBoundaryCB,
                 1)
-        # self.racingline_sub = self.create_subscription(
-        #     PoseArray,
-        #     '/optimal_raceline/pose_array',
-        #     self.racelineCB,
-        #     1)
         self.control_thread = threading.Thread(target=self.lateralControl)
         
     def innerBoundaryCB(self, boundary_msg: PoseArray ):
@@ -289,11 +283,9 @@ class PurePursuitControllerROS(Node):
         self.setpoint_publisher.publish(Float64(data=self.velsetpoint))
 
         if self.velsetpoint>self.current_speed:
-            self.controller.setControl(delta,1.0,0.0)
+            self.control_pub.publish(CarControl(steering=delta, throttle=1.0, brake=0.0))
         else:
-            self.controller.setControl(delta,0.0,1.0)
-        # if self.use_drs and self.current_status_data.m_drs_allowed==1 and self.current_telemetry_data.drs==0:
-        #     self.controller.pushDRS()
+            self.control_pub.publish(CarControl(steering=delta, throttle=0.0, brake=1.0))
     def lateralControl(self):
         timer = timeit.Timer(stmt=self.setControl, timer=timeit.default_timer)
         while self.running:
