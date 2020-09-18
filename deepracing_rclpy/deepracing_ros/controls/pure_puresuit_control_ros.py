@@ -282,7 +282,7 @@ class PurePursuitControllerROS(Node):
         self.velsetpoint = speeds[lookahead_index_vel].item()
         self.setpoint_publisher.publish(Float64(data=self.velsetpoint))
 
-        if self.velsetpoint>self.current_speed:
+        if self.current_speed<self.velsetpoint:
             self.control_pub.publish(CarControl(steering=delta, throttle=1.0, brake=0.0))
         else:
             self.control_pub.publish(CarControl(steering=delta, throttle=0.0, brake=1.0))
