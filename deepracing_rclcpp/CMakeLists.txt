@@ -18,6 +18,7 @@ endif()
 # find dependencies
 
 find_package(ament_cmake REQUIRED)
+find_package(cv_bridge REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)
 find_package(image_transport REQUIRED)
@@ -39,14 +40,12 @@ find_package(tf2_ros REQUIRED)
 #Provides imported targets for f1_datalogger, armadillo, Boost, Eigen3, Opencv, and (on Windows) vJoy_plusplus
 find_package(f1_datalogger CONFIG REQUIRED)
 
-find_package(cv_bridge REQUIRED)
-
 add_library(f1_msg_utils SHARED src/utils/f1_msg_utils.cpp)
 ament_target_dependencies(f1_msg_utils cv_bridge sensor_msgs std_msgs deepracing_msgs rclcpp rosidl_default_runtime)
 target_link_libraries(f1_msg_utils
- f1_datalogger::f1_datalogger_udp_utils
- f1_datalogger::f1_datalogger_proto
- Eigen3::Eigen
+f1_datalogger::headers
+f1_datalogger::f1_datalogger_proto
+Eigen3::Eigen
 )
 if(WIN32)
   target_compile_definitions(f1_msg_utils 
@@ -73,14 +72,6 @@ target_link_libraries(path_converter
  Eigen3::Eigen
  f1_msg_utils
 )
-
-add_executable(ros_rebroadcaster src/ros_rebroadcaster.cpp)
-ament_target_dependencies(ros_rebroadcaster cv_bridge image_transport sensor_msgs std_msgs deepracing_msgs)
-target_link_libraries(ros_rebroadcaster
- f1_msg_utils
- f1_datalogger::f1_datalogger
-)
-
 add_executable(extract_bezier_curves src/extract_bezier_curves.cpp)
 ament_target_dependencies(extract_bezier_curves rosbag2_cpp rosbag2_storage sensor_msgs std_msgs deepracing_msgs)
 target_link_libraries(extract_bezier_curves
@@ -108,6 +99,24 @@ target_link_libraries(boundary_publisher
   jsoncpp_lib
 )
 
+set(nodes_to_install_
+  tf_updater
+  path_converter
+  extract_bezier_curves
+  boundary_publisher
+)
+
+if(TARGET f1_datalogger::f1_datalogger)
+  add_executable(ros_rebroadcaster src/ros_rebroadcaster.cpp)
+  ament_target_dependencies(ros_rebroadcaster cv_bridge image_transport sensor_msgs std_msgs deepracing_msgs)
+  target_link_libraries(ros_rebroadcaster
+  f1_msg_utils
+  f1_datalogger::f1_datalogger
+  )
+  list(APPEND nodes_to_install_ ros_rebroadcaster)
+endif()
+
+
  ament_export_dependencies(ament_cmake)
  ament_export_dependencies(rclcpp)
  ament_export_dependencies(image_tools)
@@ -116,24 +125,12 @@ target_link_libraries(boundary_publisher
  ament_export_dependencies(f1_datalogger)
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # uncomment the line when a copyright and license is not present in all source files
-  #set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # uncomment the line when this package is not in a git repo
-  #set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
-install(TARGETS
-    ros_rebroadcaster
-    tf_updater
-    path_converter
-    extract_bezier_curves
-    boundary_publisher
+install(TARGETS f1_msg_utils
     DESTINATION lib/${PROJECT_NAME}
 )
-install(TARGETS
-    f1_msg_utils
+install(TARGETS ${nodes_to_install_}
     EXPORT ${PROJECT_NAME}
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
