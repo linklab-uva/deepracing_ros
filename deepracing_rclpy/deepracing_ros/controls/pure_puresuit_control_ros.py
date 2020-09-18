@@ -28,7 +28,7 @@ import torch.nn as NN
 import torch.utils.data as data_utils
 import deepracing_models.nn_models.Models
 import matplotlib.pyplot as plt
-from f1_datalogger_msgs.msg import BoundaryLine, TimestampedPacketCarStatusData, TimestampedPacketCarTelemetryData, TimestampedPacketMotionData, PacketCarTelemetryData, PacketMotionData, CarMotionData, CarStatusData, CarTelemetryData, PacketHeader
+from deepracing_msgs.msg import BoundaryLine, TimestampedPacketCarStatusData, TimestampedPacketCarTelemetryData, TimestampedPacketMotionData, PacketCarTelemetryData, PacketMotionData, CarMotionData, CarStatusData, CarTelemetryData, PacketHeader
 from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion, PoseArray
 from scipy.spatial.transform import Rotation as Rot
 from std_msgs.msg import Float64

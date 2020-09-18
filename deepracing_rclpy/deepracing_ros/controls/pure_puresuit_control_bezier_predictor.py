@@ -26,11 +26,11 @@ import scipy.integrate as integrate
 import socket
 import scipy.spatial
 import queue
-from f1_datalogger_rospy.controls.pure_puresuit_control_ros import PurePursuitControllerROS as PPC
+from deepracing_ros.controls.pure_puresuit_control_ros import PurePursuitControllerROS as PPC
 import deepracing_models.math_utils as mu
 import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image, CompressedImage
-from f1_datalogger_msgs.msg import PathRaw, ImageWithPath, BezierCurve as BCMessage
+from deepracing_msgs.msg import PathRaw, ImageWithPath, BezierCurve as BCMessage
 from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion
 from nav_msgs.msg import Path
 from std_msgs.msg import Float64, Header

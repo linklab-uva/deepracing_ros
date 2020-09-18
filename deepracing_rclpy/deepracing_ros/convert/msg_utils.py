@@ -1,4 +1,4 @@
-import f1_datalogger_msgs.msg as f1dmsgs # BezierCurve, TimestampedPacketMotionData, PacketMotionData, CarMotionData, PacketHeader
+import deepracing_msgs.msg as drmsgs # BezierCurve, TimestampedPacketMotionData, PacketMotionData, CarMotionData, PacketHeader
 import geometry_msgs.msg as geo_msgs#  Point, PointStamped, Vector3, Vector3Stamped
 from sensor_msgs.msg import PointCloud2, PointField
 import numpy as np
@@ -98,22 +98,22 @@ def pointCloud2ToNumpy(cloud: PointCloud2, field_names=None, skip_nans=False, uv
                   offset += point_step
 
 
-def extractPosition(packet : f1dmsgs.PacketMotionData , car_index = None):
+def extractPosition(packet : drmsgs.PacketMotionData , car_index = None):
    if car_index is None:
       idx = packet.m_header.player_car_index
    else:
       idx = car_index
-   motion_data : f1dmsgs.CarMotionData = packet.car_motion_data[idx]
+   motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
    position = np.array( (motion_data.world_position.point.x, motion_data.world_position.point.y, motion_data.world_position.point.z), dtype=np.float64)
    return position 
 
-def extractPose(packet : f1dmsgs.PacketMotionData, car_index = None):
+def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
    if car_index is None:
       idx = packet.header.player_car_index
    else:
       idx = car_index
    position = extractPosition(packet, car_index=idx)
-   motion_data : f1dmsgs.CarMotionData = packet.car_motion_data[idx]
+   motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
 
    rightdir : geo_msgs.Vector3 = motion_data.world_right_dir.vector
    forwarddir : geo_msgs.Vector3 = motion_data.world_forward_dir.vector

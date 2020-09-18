@@ -10,7 +10,7 @@ from collections import namedtuple
 import ctypes
 import math
 import struct
-import f1_datalogger_rospy.convert
+import deepracing_ros.convert
 
 
 class PCDListener(Node):
@@ -31,7 +31,7 @@ class PCDListener(Node):
         field_names=None
 
         print("Converting a message to numpy")
-        pcd_as_numpy_array = np.array(list(f1_datalogger_rospy.convert.pointCloud2ToNumpy(msg, field_names=field_names)))
+        pcd_as_numpy_array = np.array(list(deepracing_ros.convert.pointCloud2ToNumpy(msg, field_names=field_names)))
         print(pcd_as_numpy_array)
         
  

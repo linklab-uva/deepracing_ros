@@ -14,7 +14,7 @@ import rclpy, rclpy.clock, rclpy.time
 from rclpy.node import Node
 from rclpy import Parameter
 from std_msgs.msg import String
-from f1_datalogger_msgs.msg import TimestampedPacketMotionData, CarMotionData
+from deepracing_msgs.msg import TimestampedPacketMotionData, CarMotionData
 from geometry_msgs.msg import PoseStamped, Pose
 from geometry_msgs.msg import PointStamped, Point, Point32
 import numpy as np

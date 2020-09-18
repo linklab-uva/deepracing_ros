@@ -18,7 +18,7 @@ from rclpy.clock import Clock, ROSClock
 
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
-from f1_datalogger_msgs.msg import TimestampedPacketMotionData, CarMotionData, ImageWithPath, BezierCurve as BCMessage
+from deepracing_msgs.msg import TimestampedPacketMotionData, CarMotionData, ImageWithPath, BezierCurve as BCMessage
 from geometry_msgs.msg import PoseStamped, Pose
 from geometry_msgs.msg import PointStamped, Point
 import numpy as np
@@ -33,7 +33,7 @@ import cv_bridge
 from sensor_msgs.msg import Image, CompressedImage
 from nav_msgs.msg import Path
 from geometry_msgs.msg import Point, Pose, Vector3, Quaternion, PoseStamped
-from f1_datalogger_msgs.msg import BezierCurve
+from deepracing_msgs.msg import BezierCurve
 from typing import List
 import cv2
 import os

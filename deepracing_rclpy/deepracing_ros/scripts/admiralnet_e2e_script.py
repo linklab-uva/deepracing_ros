@@ -15,13 +15,13 @@ import time
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from f1_datalogger_msgs.msg import TimestampedPacketMotionData, CarMotionData
+from deepracing_msgs.msg import TimestampedPacketMotionData, CarMotionData
 from geometry_msgs.msg import PoseStamped, Pose
 from geometry_msgs.msg import PointStamped, Point
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
-from f1_datalogger_rospy.controls.pure_puresuit_control_ros import PurePursuitControllerROS
-from f1_datalogger_rospy.controls.admiralnet_e2e_ros import AdmiralNetE2EROS
+from deepracing_ros.controls.pure_puresuit_control_ros import PurePursuitControllerROS
+from deepracing_ros.controls.admiralnet_e2e_ros import AdmiralNetE2EROS
 
 def main(args=None):
     rclpy.init(args=args)
