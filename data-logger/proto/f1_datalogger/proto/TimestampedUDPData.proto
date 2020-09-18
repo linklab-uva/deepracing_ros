@@ -1,7 +1,0 @@
-syntax = "proto3";
-package deepf1.protobuf;
-import "UDPData.proto";
-message TimestampedUDPData {
-  UDPData udp_packet = 1;
-  double timestamp = 2;
-}

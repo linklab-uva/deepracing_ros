@@ -1,7 +1,0 @@
-#!/bin/bash
-extrapythonpaths=@python_proto_path_@:@CMAKE_SOURCE_DIR@/python:@CMAKE_BINARY_DIR@/src/controllers/python_cpp_bindings
-if [[ -z "${PYTHONPATH}" ]]; then
-  export PYTHONPATH=${extrapythonpaths}
-else
-  export PYTHONPATH=${PYTHONPATH}:${extrapythonpaths}
-fi

@@ -1,5 +1,3 @@
-# deepracing
-Autonomously learning to race autonomously
+# deepracing ROS2 Bindings
 
-
-Uses PyTorch for deep learning
+ROS2 Bindings for the deepracing framework

@@ -1,7 +1,0 @@
-if(MSVC)
-	find_package(Armadillo CONFIG REQUIRED HINTS "C:/Program Files/Armadillo/share/Armadillo/CMake;C:/Program Files (x86)/Armadillo/share/Armadillo/CMake")
-else()	
-	find_package(Armadillo REQUIRED )
-endif()
-message(STATUS "Found Armadillo includes ${ARMADILLO_INCLUDE_DIRS}")
-message(STATUS "Found Armadillo librares ${ARMADILLO_LIBRARIES}")

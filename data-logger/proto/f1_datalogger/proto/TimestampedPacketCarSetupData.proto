@@ -1,8 +1,0 @@
-syntax = "proto3";
-package deepf1.twenty_eighteen.protobuf;
-import "PacketCarSetupData.proto";
-message TimestampedPacketCarSetupData {
-		PacketCarSetupData  udp_packet = 1;
-        double timestamp = 2;
-
-}
