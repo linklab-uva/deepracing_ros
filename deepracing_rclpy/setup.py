@@ -2,7 +2,8 @@ from setuptools import find_packages
 from setuptools import setup
 import os
 from glob import glob
-package_name = 'f1_datalogger_rospy'
+package_name = 'deepracing_rclpy'
+python_pkg_name = "deepracing_ros"
 
 setup(
     name=package_name,
@@ -42,17 +43,17 @@ setup(
     #],
     entry_points={
         'console_scripts': [
-            'pose_publisher = %s.scripts.pose_publisher:main' % (package_name),
-            'bezier_rviz = %s.scripts.bezier_rviz:main' % (package_name),
-            'waypoint_plot_recorder = %s.scripts.record_plots_waypoint:main' % (package_name),
-            'pure_pursuit_bezier = %s.scripts.admiralnet_bezier_script:main' % (package_name),
-            'pure_pursuit_waypoint = %s.scripts.admiralnet_waypoint_script:main' % (package_name),
-            'pure_pursuit_oracle = %s.scripts.oracle_pure_pursuit_script:main' % (package_name),
-            'pilotnet = %s.scripts.pilotnet_script:main' % (package_name),
-            'cnnlstm = %s.scripts.cnnlstm_script:main' % (package_name),
-            'admiralnet_e2e = %s.scripts.admiralnet_e2e_script:main' % (package_name),
-            'generate_steering_calibration = %s.scripts.generate_steering_calibration:main' % (package_name),
-            'point_cloud_display = %s.scripts.point_cloud_display:main' % (package_name),
+            'pose_publisher = %s.scripts.pose_publisher:main' % (python_pkg_name),
+            'bezier_rviz = %s.scripts.bezier_rviz:main' % (python_pkg_name),
+            'waypoint_plot_recorder = %s.scripts.record_plots_waypoint:main' % (python_pkg_name),
+            'pure_pursuit_bezier = %s.scripts.admiralnet_bezier_script:main' % (python_pkg_name),
+            'pure_pursuit_waypoint = %s.scripts.admiralnet_waypoint_script:main' % (python_pkg_name),
+            'pure_pursuit_oracle = %s.scripts.oracle_pure_pursuit_script:main' % (python_pkg_name),
+            'pilotnet = %s.scripts.pilotnet_script:main' % (python_pkg_name),
+            'cnnlstm = %s.scripts.cnnlstm_script:main' % (python_pkg_name),
+            'admiralnet_e2e = %s.scripts.admiralnet_e2e_script:main' % (python_pkg_name),
+            'generate_steering_calibration = %s.scripts.generate_steering_calibration:main' % (python_pkg_name),
+            'point_cloud_display = %s.scripts.point_cloud_display:main' % (python_pkg_name),
             
         ],
     },
