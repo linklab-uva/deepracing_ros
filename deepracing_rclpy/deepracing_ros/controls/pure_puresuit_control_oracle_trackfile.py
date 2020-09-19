@@ -115,6 +115,14 @@ class OraclePurePursuitControllerROS(PPC):
         self.additional_transform[0:3,0:3] = torch.from_numpy(additional_rotation.as_matrix()).to(self.device)
         self.additional_transform[0:3,3] = torch.from_numpy(additional_translation).to(self.device)
 
+        
+        forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
+        self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
+
+        
+        lateral_dimension_param : Parameter = self.declare_parameter("lateral_dimension", value=0)
+        self.lateral_dimension : int = lateral_dimension_param.get_parameter_value().integer_value
+
 
         
 
@@ -168,7 +176,7 @@ class OraclePurePursuitControllerROS(PPC):
 
         radii = torch.pow(least_squares_tangent_norms,3) / torch.norm(torch.cross(least_squares_tangents, least_squares_normals), p=2, dim=1)
 
-        xz_idx = torch.tensor( [0,2] , dtype=torch.int64).to(self.device)
+        xz_idx = torch.tensor( [self.lateral_dimension,self.forward_dimension] , dtype=torch.int64).to(self.device)
 
         speeds = self.max_speed*(torch.ones_like(radii)).double().to(self.device)
         centripetal_accelerations = torch.square(speeds)/radii
