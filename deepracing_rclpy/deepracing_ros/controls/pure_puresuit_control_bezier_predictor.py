@@ -89,7 +89,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
 
         self.path_publisher = self.create_publisher(BCMessage, "/predicted_path", 1)
         self.global_path_publisher = self.create_publisher(BCMessage, "/predicted_path_global", 1)
-        model_file_param = self.get_parameter("model_file")
+        model_file_param = self.declare_parameter("model_file", value=None)
         if (model_file_param.type_==Parameter.Type.NOT_SET):
             raise ValueError("The parameter \"model_file\" must be set for this rosnode")
         model_file = model_file_param.get_parameter_value().string_value

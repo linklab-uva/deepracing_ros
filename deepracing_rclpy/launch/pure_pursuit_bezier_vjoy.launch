@@ -1,0 +1,7 @@
+<launch>
+   <arg name="params_file"/>
+   <!-- <node pkg="deepracing_rclpy" exec="vjoy_control_node"/> -->
+   <node pkg="deepracing_rclpy" exec="pure_pursuit_bezier"/>
+        <param from="$(arg params_file)"/>
+   </node>
+</launch>

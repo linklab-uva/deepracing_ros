@@ -53,43 +53,42 @@ import torch
 class OraclePurePursuitControllerROS(PPC):
     def __init__(self):
         super(OraclePurePursuitControllerROS, self).__init__()
-        raceline_file_param : Parameter = self.get_parameter_or("raceline_file", Parameter("raceline_file") )
+        raceline_file_param : Parameter = self.declare_parameter("raceline_file")#, Parameter("raceline_file") )
         if raceline_file_param.type_==Parameter.Type.NOT_SET:
             raise ValueError("\"raceline_file\" parameter not set")
         self.raceline_file = raceline_file_param.get_parameter_value().string_value
         with open(self.raceline_file,"r") as f:
             self.raceline_dictionary = json.load(f)
-        self.raceline = torch.cat( [ torch.tensor(self.raceline_dictionary["x"]).unsqueeze(0),\
-                                     torch.tensor(self.raceline_dictionary["y"]).unsqueeze(0),\
-                                     torch.tensor(self.raceline_dictionary["z"]).unsqueeze(0),\
-                                     torch.ones_like(torch.tensor(self.raceline_dictionary["z"])).unsqueeze(0)], dim=0 ).double()
+        raclinenp = np.column_stack([self.raceline_dictionary["x"], self.raceline_dictionary["y"], self.raceline_dictionary["z"]])
+        self.kdtree = KDTree(raclinenp)
+        self.raceline = torch.cat( [ torch.from_numpy(raclinenp[:,0]).unsqueeze(0),\
+                                     torch.from_numpy(raclinenp[:,1]).unsqueeze(0),\
+                                     torch.from_numpy(raclinenp[:,2]).unsqueeze(0),\
+                                     torch.ones_like(torch.from_numpy(raclinenp[:,0])).unsqueeze(0)], dim=0).double().to(self.device)
 
-        self.kdtree = KDTree(self.raceline[0:3].numpy().copy().transpose())
 
-        self.raceline_dists = torch.tensor(self.raceline_dictionary["dist"]).double().cuda(0)
-        #self.raceline = self.raceline[:,0:-1].cuda(0)
-        self.raceline = self.raceline.cuda(0)
+        self.raceline_dists = torch.tensor(self.raceline_dictionary["dist"]).double().to(self.device)
         
         self.cvbridge : cv_bridge.CvBridge = cv_bridge.CvBridge()
 
 
 
-        plot_param : Parameter = self.get_parameter_or("plot",Parameter("plot", value=False))
+        plot_param : Parameter = self.declare_parameter("plot", value=False)#,Parameter("plot", value=False))
         self.plot : bool = plot_param.get_parameter_value().bool_value
 
-        forward_indices_param : Parameter = self.get_parameter_or("forward_indices",Parameter("forward_indices", value=120))
+        forward_indices_param : Parameter = self.declare_parameter("forward_indices", value=200)#,Parameter("forward_indices", value=120))
         self.forward_indices : int = forward_indices_param.get_parameter_value().integer_value
 
-        sample_indices_param : Parameter = self.get_parameter_or("sample_indices",Parameter("sample_indices", value=120))
+        sample_indices_param : Parameter = self.declare_parameter("sample_indices", value=60)#,Parameter("sample_indices", value=120))
         self.sample_indices : int = sample_indices_param.get_parameter_value().integer_value
 
-        bezier_order_param : Parameter = self.get_parameter_or("bezier_order",Parameter("bezier_order", value=7))
+        bezier_order_param : Parameter = self.declare_parameter("bezier_order", value=5)#,Parameter("bezier_order", value=7))
         self.bezier_order : int = bezier_order_param.get_parameter_value().integer_value
 
-        self.s_torch_lstsq = torch.linspace(0,1,self.forward_indices, dtype=torch.float64).unsqueeze(0).cuda(0)
+        self.s_torch_lstsq = torch.linspace(0,1,self.forward_indices, dtype=torch.float64, device=self.device).unsqueeze(0)
         self.bezierMlstsq = mu.bezierM(self.s_torch_lstsq, self.bezier_order)
         
-        self.s_torch_sample = torch.linspace(0,1,self.sample_indices, dtype=torch.float64).unsqueeze(0).cuda(0)
+        self.s_torch_sample = torch.linspace(0,1,self.sample_indices, dtype=torch.float64, device=self.device).unsqueeze(0)
         self.bezierM = mu.bezierM(self.s_torch_sample, self.bezier_order)
         # self.bezierMdot = mu.bezierM(self.s_torch_sample, self.bezier_order-1)
         self.bezierMdotdot = mu.bezierM(self.s_torch_sample, self.bezier_order-2)
@@ -107,7 +106,10 @@ class OraclePurePursuitControllerROS(PPC):
     def getTrajectory(self):
         if not torch.any(self.current_pose_mat[0:3,0:3].bool()).item():
             return super().getTrajectory()
-        current_pose_mat = self.current_pose_mat.cuda(self.gpu)
+        if self.device == torch.device("cpu"):
+            current_pose_mat = self.current_pose_mat.clone()
+        else:
+            current_pose_mat = self.current_pose_mat.to(self.device)
 
         (d, I1) = self.kdtree.query(np.array([self.current_pose.pose.position.x, self.current_pose.pose.position.y, self.current_pose.pose.position.z], dtype=np.float64))
         current_pose_inv = torch.inverse(current_pose_mat)
@@ -116,7 +118,7 @@ class OraclePurePursuitControllerROS(PPC):
 
         I2 = I1 + self.forward_indices
 
-        sample_idx = torch.arange(I1, I2, step=1, dtype=torch.int64).cuda(0) % raceline_local.shape[1]
+        sample_idx = torch.arange(I1, I2, step=1, dtype=torch.int64).to(self.device) % raceline_local.shape[1]
 
         raceline_points_local = raceline_local[0:3,sample_idx]
 
@@ -142,9 +144,9 @@ class OraclePurePursuitControllerROS(PPC):
 
         radii = torch.pow(least_squares_tangent_norms,3) / torch.norm(torch.cross(least_squares_tangents, least_squares_normals), p=2, dim=1)
 
-        xz_idx = torch.tensor( [0,2] , dtype=torch.int64).cuda(0)
+        xz_idx = torch.tensor( [0,2] , dtype=torch.int64).to(self.device)
 
-        speeds = self.max_speed*(torch.ones_like(radii)).double().cuda(0)
+        speeds = self.max_speed*(torch.ones_like(radii)).double().to(self.device)
         centripetal_accelerations = torch.square(speeds)/radii
         max_allowable_speeds = torch.sqrt(self.max_centripetal_acceleration*radii)
         idx = centripetal_accelerations>self.max_centripetal_acceleration

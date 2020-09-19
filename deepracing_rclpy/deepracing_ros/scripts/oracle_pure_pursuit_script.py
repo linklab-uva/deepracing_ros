@@ -22,18 +22,25 @@ import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 from deepracing_ros.controls.pure_puresuit_control_ros import PurePursuitControllerROS
 from deepracing_ros.controls.pure_puresuit_control_oracle_trackfile import OraclePurePursuitControllerROS
+from deepracing_ros.utils import AsyncSpinner
+from rclpy.executors import MultiThreadedExecutor
 
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
+    spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor(8))
     node = OraclePurePursuitControllerROS()
+    spinner.addNode(node)
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     node.start()
+    spinner.spin()
+    rate : rclpy.timer.Rate = node.create_rate(1.0)
     try:
-        rclpy.spin(node)
+        while rclpy.ok():
+            rate.sleep()
     except KeyboardInterrupt:
         node.stop()
-    node.destroy_node()
+    spinner.shutdown()
     rclpy.shutdown()
     
 
