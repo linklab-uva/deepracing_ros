@@ -52,6 +52,7 @@ class PurePursuitControllerROS(Node):
         self.current_motion_data : CarMotionData  = CarMotionData()
         self.current_status_data : CarStatusData  = CarStatusData()
         self.current_telemetry_data : CarTelemetryData  = CarTelemetryData()
+        self.current_velocity : Vector3Stamped = Vector3Stamped()
         self.setpoint_publisher = self.create_publisher(Float64, "vel_setpoint", 1)
         self.dt_publisher = self.create_publisher(Float64, "dt", 1)
         self.velsetpoint = 0.0
@@ -164,8 +165,8 @@ class PurePursuitControllerROS(Node):
 
     def initSubscriptions(self):
         self.velocity_control_sub = self.create_subscription(
-            TimestampedPacketMotionData,
-            '/motion_data',
+            Vector3Stamped,
+            '/car_velocity',
             self.velocityControl,
             1)
         self.status_data_sub = self.create_subscription(
@@ -235,20 +236,11 @@ class PurePursuitControllerROS(Node):
     def statusUpdate(self, msg : TimestampedPacketCarStatusData):
         self.current_status_data = msg.udp_packet.car_status_data[0]
 
-    def velocityControl(self, msg : TimestampedPacketMotionData):
-        self.current_motion_packet = deepcopy(msg)
-        packet : PacketMotionData = self.current_motion_packet.udp_packet
-        header : PacketHeader = packet.header
-        motion_data_vec : list = packet.car_motion_data
-        if len(motion_data_vec)==0:
-            return
-        self.current_motion_data = motion_data_vec[header.player_car_index]
-        velrosstamped : Vector3Stamped = self.current_motion_data.world_velocity
-        if (velrosstamped.header.frame_id == ""):
-           return
-        velros : Vector3 = velrosstamped.vector
-        vel = np.array( (velros.x, velros.y, velros.z), dtype=np.float64)
+    def velocityControl(self, msg : Vector3Stamped):
+        velros = deepcopy(msg)
+        vel = np.array( (velros.vector.x, velros.vector.y, velros.vector.z), dtype=np.float64)
         speed = la.norm(vel)
+        self.current_velocity = velros
         self.current_speed = speed
         
     def getTrajectory(self):

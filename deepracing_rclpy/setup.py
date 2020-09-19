@@ -56,6 +56,7 @@ setup(
             'admiralnet_e2e = %s.scripts.admiralnet_e2e_script:main' % (python_pkg_name),
             'generate_steering_calibration = %s.scripts.generate_steering_calibration:main' % (python_pkg_name),
             'point_cloud_display = %s.scripts.point_cloud_display:main' % (python_pkg_name),
+            'velocity_publisher = %s.scripts.velocity_publisher:main' % (python_pkg_name),
             'vjoy_control_node = %s.scripts.vjoy_control_node:main' % (python_pkg_name),
             
         ],

@@ -208,7 +208,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
     # def imageCallback(self, img_msg : Image):
     #     self.addToBuffer(img_msg)
     def getTrajectory(self):
-        if self.current_motion_data.world_velocity.header.frame_id == "":
+        if self.current_velocity.header.frame_id == "":
             return super().getTrajectory()
         stamp = self.rosclock.now()
         imnp = np.array(self.image_buffer).astype(np.float64).copy()
