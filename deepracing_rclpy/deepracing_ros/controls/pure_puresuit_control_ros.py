@@ -149,7 +149,6 @@ class PurePursuitControllerROS(Node):
         self.current_pose_mat = torch.zeros([4,4],dtype=torch.float64)
         self.current_pose_mat[3,3]=1.0
         self.current_pose_inv_mat = self.current_pose_mat.clone()
-        self.pose_sub = self.create_subscription( PoseStamped, '/car_pose', self.poseCallback, 1)
         
         if self.boundary_check:
             self.inner_boundary_sub = self.create_subscription(
@@ -179,6 +178,7 @@ class PurePursuitControllerROS(Node):
             '/telemetry_data',
             self.telemetryUpdate,
             1)
+        self.pose_sub = self.create_subscription( PoseStamped, '/car_pose', self.poseCallback, 1)
 
         
     def innerBoundaryCB(self, boundary_msg: PoseArray ):
