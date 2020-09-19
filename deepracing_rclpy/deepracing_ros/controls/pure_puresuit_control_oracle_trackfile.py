@@ -57,17 +57,28 @@ class OraclePurePursuitControllerROS(PPC):
         if raceline_file_param.type_==Parameter.Type.NOT_SET:
             raise ValueError("\"raceline_file\" parameter not set")
         self.raceline_file = raceline_file_param.get_parameter_value().string_value
-        with open(self.raceline_file,"r") as f:
-            self.raceline_dictionary = json.load(f)
-        raclinenp = np.column_stack([self.raceline_dictionary["x"], self.raceline_dictionary["y"], self.raceline_dictionary["z"]])
+        racelinefile_ext = os.path.splitext(os.path.basename(self.raceline_file))[1].lower()
+        if racelinefile_ext==".json":
+            with open(self.raceline_file,"r") as f:
+                raceline_dictionary = json.load(f)
+            raclinenp = np.column_stack([raceline_dictionary["x"], raceline_dictionary["y"], raceline_dictionary["z"]])
+            self.raceline_dists = torch.tensor(raceline_dictionary["dist"]).double().to(self.device)
+        elif racelinefile_ext==".csv":
+            raclinenp = np.loadtxt(self.raceline_file,dtype=float, skiprows=1,delimiter=",")
+            raclinediffs = raclinenp[1:] - raclinenp[:-1]
+            raclinediffnorms = np.linalg.norm(raclinediffs, ord=2, axis=1)
+            raclinediffnp = np.hstack([np.array([0.0]), np.cumsum(raclinediffnorms)])
+            self.raceline_dists = torch.from_numpy(raclinediffnp).double().to(self.device)
+        else:
+            raise ValueError("Only .json and .csv extensions are supported")
         self.kdtree = KDTree(raclinenp)
-        self.raceline = torch.cat( [ torch.from_numpy(raclinenp[:,0]).unsqueeze(0),\
-                                     torch.from_numpy(raclinenp[:,1]).unsqueeze(0),\
-                                     torch.from_numpy(raclinenp[:,2]).unsqueeze(0),\
-                                     torch.ones_like(torch.from_numpy(raclinenp[:,0])).unsqueeze(0)], dim=0).double().to(self.device)
+        self.raceline = torch.stack( [ torch.from_numpy(raclinenp[:,0]),\
+                                     torch.from_numpy(raclinenp[:,1]),\
+                                     torch.from_numpy(raclinenp[:,2]),\
+                                     torch.ones_like(torch.from_numpy(raclinenp[:,0]))], dim=0).double().to(self.device)
+        assert(self.raceline_dists.shape[0] == self.raceline.shape[1])
 
 
-        self.raceline_dists = torch.tensor(self.raceline_dictionary["dist"]).double().to(self.device)
         
         self.cvbridge : cv_bridge.CvBridge = cv_bridge.CvBridge()
 
@@ -93,6 +104,17 @@ class OraclePurePursuitControllerROS(PPC):
         # self.bezierMdot = mu.bezierM(self.s_torch_sample, self.bezier_order-1)
         self.bezierMdotdot = mu.bezierM(self.s_torch_sample, self.bezier_order-2)
 
+        
+        additional_translation_param : Parameter = self.declare_parameter("additional_translation", value=[0.0,0.0,-self.L/2])
+        additional_translation : np.ndarray = np.array(additional_translation_param.get_parameter_value().double_array_value)
+        
+        additional_rotation_param : Parameter = self.declare_parameter("additional_rotation", value=[0.0,0.0,0.0,1.0])
+        additional_rotation : Rot = Rot.from_quat(np.array(additional_rotation_param.get_parameter_value().double_array_value))
+
+        self.additional_transform = torch.eye(4, device=self.device, dtype=torch.float64)
+        self.additional_transform[0:3,0:3] = torch.from_numpy(additional_rotation.as_matrix()).to(self.device)
+        self.additional_transform[0:3,3] = torch.from_numpy(additional_translation).to(self.device)
+
 
         
 
@@ -111,10 +133,12 @@ class OraclePurePursuitControllerROS(PPC):
         else:
             current_pose_mat = self.current_pose_mat.to(self.device)
 
-        (d, I1) = self.kdtree.query(np.array([self.current_pose.pose.position.x, self.current_pose.pose.position.y, self.current_pose.pose.position.z], dtype=np.float64))
         current_pose_inv = torch.inverse(current_pose_mat)
-
-        raceline_local = torch.matmul(current_pose_inv,self.raceline)
+        overalltransform = torch.matmul(self.additional_transform, current_pose_inv)
+        raceline_local = torch.matmul(overalltransform,self.raceline)
+        
+        I1 = torch.argmin(torch.norm(raceline_local[0:3],p=2,dim=0)).item()
+        #(d, I1) = self.kdtree.query(np.array([self.current_pose.pose.position.x, self.current_pose.pose.position.y, self.current_pose.pose.position.z], dtype=np.float64))
 
         I2 = I1 + self.forward_indices
 

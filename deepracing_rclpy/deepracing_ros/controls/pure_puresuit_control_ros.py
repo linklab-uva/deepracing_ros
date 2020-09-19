@@ -58,7 +58,7 @@ class PurePursuitControllerROS(Node):
         self.current_speed = 0.0
         self.throttle_out = 0.0
         self.control_thread = threading.Thread(target=self.lateralControl)
-        direct_vjoy_param : Parameter = self.declare_parameter("direct_vjoy", value=True)
+        direct_vjoy_param : Parameter = self.declare_parameter("direct_vjoy", value=False)
         self.direct_vjoy = direct_vjoy_param.get_parameter_value().bool_value
         if self.direct_vjoy:
             self.get_logger().info("Controlling the car directly with vjoy")
@@ -275,7 +275,7 @@ class PurePursuitControllerROS(Node):
         D = torch.norm(lookaheadVector, p=2)
         lookaheadDirection = lookaheadVector/D
         alpha = torch.atan2(lookaheadDirection[0],lookaheadDirection[1])
-        print(alpha)
+       # print(alpha)
         physical_angle = (torch.atan((2 * self.L*torch.sin(alpha)) / D)).item()
         if (physical_angle > 0) :
             delta = self.left_steer_factor*physical_angle + self.left_steer_offset

@@ -152,7 +152,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         self.net.load_state_dict(torch.load(model_file,map_location=torch.device("cpu")))
         self.get_logger().info('Loaded model file: %s' % (model_file) )
         self.get_logger().info('Moving model params to GPU %d' % (self.gpu,))
-        self.net = self.net.cuda(self.gpu)
+        self.net = self.net.to(self.device)
         self.net = self.net.eval()
         self.ib_viol_counter=1
         self.ob_viol_counter=1
@@ -160,23 +160,23 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         self.get_logger().info('Moved model params to GPU %d' % (self.gpu,))
         self.image_buffer = RB(self.net.context_length,dtype=(float,(3,66,200)))
         self.s_np = np.linspace(0,1,self.num_sample_points)
-        self.s_torch = torch.from_numpy(self.s_np.copy()).unsqueeze(0).double().cuda(self.gpu)
+        self.s_torch = torch.from_numpy(self.s_np.copy()).unsqueeze(0).double().to(self.device)
         self.bezier_order = self.net.params_per_dimension-1+int(self.fix_first_point)
-        self.bezierM = mu.bezierM(self.s_torch,self.bezier_order).double().cuda(self.gpu)
+        self.bezierM = mu.bezierM(self.s_torch,self.bezier_order).double().to(self.device)
         self.bezierMderiv = mu.bezierM(self.s_torch,self.bezier_order-1)
         self.bezierM2ndderiv = mu.bezierM(self.s_torch,self.bezier_order-2)
         self.buffertimer = timeit.Timer(stmt=self.addToBuffer)
         if self.fix_first_point:
             self.initial_zeros = torch.zeros(1,1,2).double()
             if self.gpu>=0:
-                self.initial_zeros = self.initial_zeros.cuda(self.gpu) 
+                self.initial_zeros = self.initial_zeros.to(self.device) 
         self.bezierM.requires_grad = False
       #  self.bezierMderiv.requires_grad = False
         self.bezierM2ndderiv.requires_grad = False
         if use_compressed_images_param.get_parameter_value().bool_value:
-            self.image_sub = self.create_subscription( CompressedImage, '/f1_screencaps/cropped/compressed', self.addToBuffer, 10)
+            self.image_sub = self.create_subscription( CompressedImage, '/f1_screencaps/cropped/compressed', self.addToBuffer, 1)
         else:
-            self.image_sub = self.create_subscription( Image, '/f1_screencaps/cropped', self.addToBuffer, 10)
+            self.image_sub = self.create_subscription( Image, '/f1_screencaps/cropped', self.addToBuffer, 1)
     def addToBuffer(self, img_msg):
         try:
             if isinstance(img_msg,CompressedImage):
@@ -217,7 +217,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             imtorch.required_grad = False
             if ( not imtorch.shape[0] == self.net.context_length ):
                 return super().getTrajectory()
-            inputtorch : torch.Tensor = imtorch.unsqueeze(0).double().cuda(self.gpu)
+            inputtorch : torch.Tensor = imtorch.unsqueeze(0).double().to(self.device)
             network_predictions = self.net(inputtorch)
             if self.fix_first_point:  
                 bezier_control_points = torch.cat((self.initial_zeros,network_predictions.transpose(1,2)),dim=1)    
@@ -252,7 +252,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
                 # ob_closest_idx = torch.argmin(ob_distances)
                 _, ib_closest_idx = self.inner_boundary_kdtree.query(current_pm[0:3,3].numpy())
                 _, ob_closest_idx = self.outer_boundary_kdtree.query(current_pm[0:3,3].numpy())
-                current_pm = current_pm.cuda(self.gpu)
+                current_pm = current_pm.to(self.device)
                 x_aug_global = torch.matmul(current_pm, x_samp_aug)
 
                 deltaidx = int(round((100.0/self.track_distance)*self.inner_boundary_inv.shape[0])) 
@@ -306,7 +306,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
 
             cross_prod_norms = torch.abs(predicted_tangents[0,:,0]*predicted_normals[:,1] - predicted_tangents[0,:,1]*predicted_normals[:,0])
             radii = torch.pow(predicted_tangent_norms[0],3) / cross_prod_norms
-            speeds = self.max_speed*(torch.ones_like(radii)).double().cuda(0)
+            speeds = self.max_speed*(torch.ones_like(radii)).double().to(self.device)
             centripetal_accelerations = torch.square(speeds)/radii
             max_allowable_speeds = torch.sqrt(self.max_centripetal_acceleration*radii)
             idx = centripetal_accelerations>self.max_centripetal_acceleration

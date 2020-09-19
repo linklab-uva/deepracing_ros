@@ -152,6 +152,8 @@ public:
 
     rclcpp::ParameterValue top_left_row_p = node->declare_parameter("top_left_row",rclcpp::ParameterValue(32));
     top_left_row_ =  top_left_row_p.get<int>();
+    RCLCPP_INFO(node->get_logger(),"Cropping from row %d\n", top_left_row_);
+
 
     rclcpp::ParameterValue top_left_col_p = node->declare_parameter("top_left_col",rclcpp::ParameterValue(0));
     top_left_col_ =  top_left_col_p.get<int>();
@@ -194,30 +196,30 @@ public:
     }
 
     
-    cv::Mat bgraimage, rgbimage;
+    cv::Mat rgbimage;
 
     cv::Range rowrange, colrange;
-    if(crop_height_ >0 && crop_width_ >0)
-    {
-      rowrange = cv::Range(top_left_row_,top_left_row_+crop_height_ - 1);
-      colrange = cv::Range(top_left_col_,top_left_col_+crop_width_ - 1);
-    }
-    else
-    {
-      rowrange = cv::Range(top_left_row_, imin.rows-1);
-      colrange = cv::Range(top_left_col_, imin.cols-1);
-    }
-    if(resize_width_ >0 && resize_height_ >0)
-    {
-      cv::resize(imin(rowrange,colrange),bgraimage,cv::Size(resize_width_,resize_height_),0.0,0.0,cv::INTER_AREA);
-    }
-    else
-    {
-      bgraimage = imin(rowrange,colrange);
-    }
+    rowrange = cv::Range(top_left_row_,top_left_row_+crop_height_ - 1);
+    colrange = cv::Range(top_left_col_,top_left_col_+crop_width_ - 1);
+    cv::cvtColor(imin(rowrange,colrange),rgbimage,cv::COLOR_BGRA2RGB);
+    cv::resize(rgbimage,rgbimage,cv::Size(resize_width_,resize_height_),0.0,0.0,cv::INTER_AREA);
+    // if(crop_height_ >0 && crop_width_ >0)
+    // {
+    // }
+    // else
+    // {
+    //   rowrange = cv::Range(top_left_row_, imin.rows-1);
+    //   colrange = cv::Range(top_left_col_, imin.cols-1);
+    // }
+    // if(resize_width_ >0 && resize_height_ >0)
+    // {
+      
+    // }
+    // else
+    // {
+    //   bgraimage = imin(rowrange,colrange);
+    // }
 
-
-    cv::cvtColor(bgraimage,rgbimage,cv::COLOR_BGRA2RGB);
     this->it_cropped_publisher_.publish( cv_bridge::CvImage(header, "rgb8", rgbimage).toImageMsg() );
   }
   void init(const deepf1::TimePoint& begin, const cv::Size& window_size) override
