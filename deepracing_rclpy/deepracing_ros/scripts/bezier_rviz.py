@@ -65,7 +65,7 @@ class PathPublisher(Node):
         
     def bcCallback(self, msg : BezierCurve):
         if(not (len(msg.control_points_forward) == len(msg.control_points_lateral))):
-            self.get_logger().error("Invalid Bezier Curve received, forward dimension has %d control point values, but lateral dimension has %d control point values" (len(msg.control_points_forward) ,len(msg.control_points_lateral) ))
+            self.get_logger().error("Invalid Bezier Curve received, forward dimension has %d control point values, but lateral dimension has %d control point values" % (len(msg.control_points_forward) ,len(msg.control_points_lateral) ))
             return
             
         bezier_order = len(msg.control_points_forward)-1
