@@ -113,6 +113,9 @@ class PurePursuitControllerROS(Node):
         
         right_steer_offset_param : Parameter = self.declare_parameter("right_steer_offset",value=0.0)#, Parameter("right_steer_offset",value=0.0))
         self.right_steer_offset : float = right_steer_offset_param.get_parameter_value().double_value
+
+        sleeptime_param : Parameter = self.declare_parameter("sleeptime", value=0.0)#, Parameter("boundary_check",value=False))
+        self.sleeptime : float = sleeptime_param.get_parameter_value().double_value
         
         use_drs_param : Parameter = self.declare_parameter("use_drs",value=False)#, Parameter("use_drs",value=False))
         self.use_drs : bool = use_drs_param.get_parameter_value().bool_value
@@ -163,11 +166,6 @@ class PurePursuitControllerROS(Node):
                 1)
 
     def initSubscriptions(self):
-        self.velocity_control_sub = self.create_subscription(
-            Vector3Stamped,
-            '/car_velocity',
-            self.velocityControl,
-            1)
         self.status_data_sub = self.create_subscription(
             TimestampedPacketCarStatusData,
             '/status_data',
@@ -178,7 +176,8 @@ class PurePursuitControllerROS(Node):
             '/telemetry_data',
             self.telemetryUpdate,
             1)
-        self.pose_sub = self.create_subscription( PoseStamped, '/car_pose', self.poseCallback, 1)
+        self.pose_sub = self.create_subscription(PoseStamped, '/ego_pose', self.poseCallback, 1)
+        self.velocity_sub = self.create_subscription(Vector3Stamped,'/ego_velocity',self.velocityCallback,1)
 
         
     def innerBoundaryCB(self, boundary_msg: PoseArray ):
@@ -223,6 +222,14 @@ class PurePursuitControllerROS(Node):
         pinv = torch.cat([R.transpose(0,1), -torch.matmul(R.transpose(0,1),v).unsqueeze(1)], dim=1 )
         self.current_pose_mat[0:3], self.current_pose_inv_mat[0:3] = (p, pinv)
         #self.current_pose_inv_mat = torch.inverse(self.current_pose_mat)
+
+    def velocityCallback(self, msg : Vector3Stamped):
+        velros = deepcopy(msg)
+        vel = np.array( (velros.vector.x, velros.vector.y, velros.vector.z), dtype=np.float64)
+        speed = la.norm(vel)
+        self.current_speed = speed
+        self.current_velocity = velros
+        
         
     def start(self):
         self.control_thread.start()
@@ -235,17 +242,11 @@ class PurePursuitControllerROS(Node):
 
     def statusUpdate(self, msg : TimestampedPacketCarStatusData):
         self.current_status_data = msg.udp_packet.car_status_data[0]
-
-    def velocityControl(self, msg : Vector3Stamped):
-        velros = deepcopy(msg)
-        vel = np.array( (velros.vector.x, velros.vector.y, velros.vector.z), dtype=np.float64)
-        speed = la.norm(vel)
-        self.current_velocity = velros
-        self.current_speed = speed
-        
     def getTrajectory(self):
         return None, None, None
     def setControl(self):
+        if self.sleeptime>0.0:
+            time.sleep(self.sleeptime)
         lookahead_positions, v_local_forward_, distances_forward_, = self.getTrajectory()
         if lookahead_positions is None:
             return
@@ -253,6 +254,8 @@ class PurePursuitControllerROS(Node):
             distances_forward = la.norm(lookahead_positions, axis=1)
         else:
             distances_forward = distances_forward_
+        print(lookahead_positions[::2,:])
+        #print(v_local_forward_.shape)
         speeds = torch.norm(v_local_forward_, p=2, dim=1)
         lookahead_distance = max(self.lookahead_gain*self.current_speed, 5.0)
         lookahead_distance_vel = self.velocity_lookahead_gain*self.current_speed

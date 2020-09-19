@@ -134,7 +134,7 @@ class OraclePurePursuitControllerROS(PPC):
         imnp = self.cvbridge.imgmsg_to_cv2(img_msg, desired_encoding="rgb8") 
         self.current_image = imnp.copy()
     def getTrajectory(self):
-        if not torch.any(self.current_pose_mat[0:3,0:3].bool()).item():
+        if (self.current_velocity.header.frame_id=="") or (not torch.any(self.current_pose_mat[0:3,0:3].bool()).item()):
             return super().getTrajectory()
         if self.device == torch.device("cpu"):
             current_pose_mat = self.current_pose_mat.clone()

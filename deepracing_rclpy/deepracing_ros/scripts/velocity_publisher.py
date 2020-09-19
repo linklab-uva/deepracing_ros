@@ -28,7 +28,7 @@ class VelocityPublisher(Node):
     def __init__(self):
         super().__init__('velocity_publisher', allow_undeclared_parameters=True, automatically_declare_parameters_from_overrides=True)
         self.sub = self.create_subscription(TimestampedPacketMotionData, '/motion_data', self.motion_data_callback, 1)
-        self.vel_pub = self.create_publisher(Vector3Stamped, '/car_velocity', 1)
+        self.vel_pub = self.create_publisher(Vector3Stamped, '/ego_velocity', 1)
         
     def motion_data_callback(self, msg):
         motion_data : CarMotionData  = msg.udp_packet.car_motion_data[msg.udp_packet.header.player_car_index]
