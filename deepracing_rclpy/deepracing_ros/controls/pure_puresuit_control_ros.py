@@ -176,7 +176,7 @@ class PurePursuitControllerROS(Node):
             '/telemetry_data',
             self.telemetryUpdate,
             1)
-        self.pose_sub = self.create_subscription(PoseStamped, '/ego_pose', self.poseCallback, 1)
+        self.pose_sub = self.create_subscription(PoseStamped, '/cg_pose', self.poseCallback, 1)
         self.velocity_sub = self.create_subscription(Vector3Stamped,'/ego_velocity',self.velocityCallback,1)
 
         
@@ -254,7 +254,7 @@ class PurePursuitControllerROS(Node):
             distances_forward = la.norm(lookahead_positions, axis=1)
         else:
             distances_forward = distances_forward_
-        print(lookahead_positions[::2,:])
+       # print(lookahead_positions[::2,:])
         #print(v_local_forward_.shape)
         speeds = torch.norm(v_local_forward_, p=2, dim=1)
         lookahead_distance = max(self.lookahead_gain*self.current_speed, 5.0)
