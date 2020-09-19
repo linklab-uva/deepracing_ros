@@ -1,1 +1,1 @@
-from .msg_utils import extractPose, extractPosition, pointCloud2ToNumpy
+from .msg_utils import extractPose, extractPosition, pointCloud2ToNumpy, numpy2PointCloud2

@@ -1,11 +1,13 @@
 import deepracing_msgs.msg as drmsgs # BezierCurve, TimestampedPacketMotionData, PacketMotionData, CarMotionData, PacketHeader
 import geometry_msgs.msg as geo_msgs#  Point, PointStamped, Vector3, Vector3Stamped
 from sensor_msgs.msg import PointCloud2, PointField
+from std_msgs.msg import Header
 import numpy as np
 import numpy.linalg as la
 import scipy.spatial.transform
 import math
 import struct
+from typing import List
 # _DATATYPES = {
 # PointField.INT8    : ('b', 1),\
 # PointField.UINT8  : ('B', 1),\
@@ -97,7 +99,23 @@ def pointCloud2ToNumpy(cloud: PointCloud2, field_names=None, skip_nans=False, uv
                   yield unpack_from(data, offset)
                   offset += point_step
 
-
+def numpy2PointCloud2(points : np.ndarray, field_names : List[str], header : Header, is_bigendian = False):
+   numfields = len(field_names)
+   assert(numfields==points.shape[1])
+   pc2out = PointCloud2(header=header, is_bigendian = is_bigendian, is_dense = True, width = points.shape[0], height = 1)
+   if points.dtype==np.float64:
+      bytesperfield = 8
+      dtypemsg = PointField.FLOAT64
+   elif points.dtype==np.float32:
+      bytesperfield = 4
+      dtypemsg = PointField.FLOAT32
+   else:
+      raise ValueError("Only float32 and float64 arrays are supported")
+   pc2out.point_step = bytesperfield*numfields
+   pc2out.row_step=pc2out.point_step*pc2out.width
+   pc2out.fields=[PointField(name=name, offset=i*bytesperfield, count=1, datatype=dtypemsg) for (i,name) in enumerate(field_names)]
+   pc2out.data = points.flatten().tobytes()
+   return pc2out
 def extractPosition(packet : drmsgs.PacketMotionData , car_index = None):
    if car_index is None:
       idx = packet.m_header.player_car_index
