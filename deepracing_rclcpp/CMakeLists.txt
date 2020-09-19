@@ -25,9 +25,6 @@ find_package(image_transport REQUIRED)
 find_package(jsoncpp CONFIG REQUIRED)
 find_package(laser_geometry REQUIRED)
 find_package(nav_msgs REQUIRED)
-find_package(PCL CONFIG REQUIRED QUIET COMPONENTS common core features geometry filters io keypoints segmentation surface)
-find_package(pcl_conversions REQUIRED)
-find_package(pcl_ros REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_storage REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -79,32 +76,41 @@ target_link_libraries(extract_bezier_curves
 )
 #target_include_directories(ros_rebroadcaster PRIVATE ${cv_bridge_INCLUDE_DIRS})
 
-add_executable(boundary_publisher src/boundary_publisher.cpp)
-ament_target_dependencies(boundary_publisher deepracing_msgs rclcpp pcl_conversions pcl_msgs pcl_ros sensor_msgs std_msgs)
-target_include_directories(boundary_publisher
- PUBLIC
- ${PCL_COMMON_INCLUDE_DIRS}
-)
-target_link_libraries(boundary_publisher
-#  ${PCL_KDTREE_LIBRARIES}
-#  ${PCL_SEARCH_LIBRARIES}
-  ${PCL_COMMON_LIBRARIES}
-  ${PCL_FEATURES_LIBRARIES}
-  ${PCL_FILTERS_LIBRARIES}
-  ${PCL_GEOMETRY_LIBRARIES}
-  ${PCL_KEYPOINTS_LIBRARIES}
-  ${PCL_SURFACE_LIBRARIES}
-  ${PCL_LIBRARIES}
-  f1_msg_utils
-  jsoncpp_lib
-)
-
 set(nodes_to_install_
   tf_updater
   path_converter
   extract_bezier_curves
-  boundary_publisher
 )
+
+
+find_package(PCL CONFIG QUIET COMPONENTS common core features geometry filters io keypoints segmentation surface)
+find_package(pcl_conversions QUIET)
+find_package(pcl_ros QUIET)
+
+if (pcl_ros_FOUND)
+  add_executable(boundary_publisher src/boundary_publisher.cpp)
+  ament_target_dependencies(boundary_publisher deepracing_msgs rclcpp pcl_conversions pcl_msgs pcl_ros sensor_msgs std_msgs)
+  target_include_directories(boundary_publisher
+  PUBLIC
+  ${PCL_COMMON_INCLUDE_DIRS}
+  )
+  target_link_libraries(boundary_publisher
+  #  ${PCL_KDTREE_LIBRARIES}
+  #  ${PCL_SEARCH_LIBRARIES}
+    ${PCL_COMMON_LIBRARIES}
+    ${PCL_FEATURES_LIBRARIES}
+    ${PCL_FILTERS_LIBRARIES}
+    ${PCL_GEOMETRY_LIBRARIES}
+    ${PCL_KEYPOINTS_LIBRARIES}
+    ${PCL_SURFACE_LIBRARIES}
+    ${PCL_LIBRARIES}
+    f1_msg_utils
+    jsoncpp_lib
+  )
+  list(APPEND nodes_to_install_ boundary_publisher)
+  
+endif()
+
 
 if(TARGET f1_datalogger::f1_datalogger)
   add_executable(ros_rebroadcaster src/ros_rebroadcaster.cpp)
@@ -113,7 +119,6 @@ if(TARGET f1_datalogger::f1_datalogger)
   f1_msg_utils
   f1_datalogger::f1_datalogger
   )
-  list(APPEND nodes_to_install_ ros_rebroadcaster)
 endif()
 
 
