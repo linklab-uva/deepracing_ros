@@ -127,10 +127,10 @@ if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
 endif()
-install(TARGETS f1_msg_utils
+install(TARGETS ${nodes_to_install_}
     DESTINATION lib/${PROJECT_NAME}
 )
-install(TARGETS ${nodes_to_install_}
+install(TARGETS f1_msg_utils
     EXPORT ${PROJECT_NAME}
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
