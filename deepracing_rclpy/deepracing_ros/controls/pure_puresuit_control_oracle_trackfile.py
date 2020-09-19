@@ -56,7 +56,11 @@ class OraclePurePursuitControllerROS(PPC):
         raceline_file_param : Parameter = self.declare_parameter("raceline_file")#, Parameter("raceline_file") )
         if raceline_file_param.type_==Parameter.Type.NOT_SET:
             raise ValueError("\"raceline_file\" parameter not set")
-        self.raceline_file = raceline_file_param.get_parameter_value().string_value
+        raceline_file = raceline_file_param.get_parameter_value().string_value
+        if  os.path.isabs(raceline_file):
+            self.raceline_file = raceline_file
+        else:
+            self.raceline_file = os.path.join(os.getenv("F1_TRACK_DIR"), raceline_file)
         racelinefile_ext = os.path.splitext(os.path.basename(self.raceline_file))[1].lower()
         if racelinefile_ext==".json":
             with open(self.raceline_file,"r") as f:
