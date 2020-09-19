@@ -176,7 +176,7 @@ class PurePursuitControllerROS(Node):
             '/telemetry_data',
             self.telemetryUpdate,
             1)
-        self.pose_sub = self.create_subscription(PoseStamped, '/cg_pose', self.poseCallback, 1)
+        self.pose_sub = self.create_subscription(PoseStamped, '/rear_axle_pose', self.poseCallback, 1)
         self.velocity_sub = self.create_subscription(Vector3Stamped,'/ego_velocity',self.velocityCallback,1)
 
         
