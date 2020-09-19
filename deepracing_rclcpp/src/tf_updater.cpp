@@ -38,7 +38,7 @@ class NodeWrapperTfUpdater_
      worldToTrack.transform.rotation.w = quat.w();
      this->statictfbroadcaster->sendTransform(worldToTrack);
      this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("/motion_data", 1, std::bind(&NodeWrapperTfUpdater_::packetCallback, this, std::placeholders::_1));
-     this->pose_publisher = this->node->create_publisher<geometry_msgs::msg::PoseStamped>("/car_pose", 1);
+     this->pose_publisher = this->node->create_publisher<geometry_msgs::msg::PoseStamped>("/ego_pose", 1);
      
      
     }  
