@@ -47,6 +47,8 @@ from scipy.spatial import KDTree
 from copy import deepcopy
 import json
 import torch
+from deepracing_msgs.srv import SetPurePursuitPath
+import deepracing_ros.convert as c
 
 class OraclePurePursuitControllerROS(PPC):
     def __init__(self):
@@ -122,11 +124,34 @@ class OraclePurePursuitControllerROS(PPC):
         lateral_dimension_param : Parameter = self.declare_parameter("lateral_dimension", value=0)
         self.lateral_dimension : int = lateral_dimension_param.get_parameter_value().integer_value
 
+        self.setPathService = self.create_service(SetPurePursuitPath, "/pure_pursuit/set_path", self.setTrackfileCB)
+
 
         
 
+    def setTrackfileCB(self, request : SetPurePursuitPath.Request, response : SetPurePursuitPath.Response):
+        response.return_code = SetPurePursuitPath.Response.UNKNOWN_ERROR
+        try:
+            pathnp = c.pointCloud2ToNumpy(request.new_path, field_names=["x","y","z"])
+        except Exception as e:
+            response.return_code=SetPurePursuitPath.Response.INVALID_POINT_CLOUD
+            response.message = str(e)
+            return response
+        try:
+            pathtorch = torch.ones(4, pathnp.shape[0], dtype=torch.float64, device=self.device)
+            pathtorch[0:3,:] = torch.from_numpy(pathnp.transpose().copy()).double().to(self.device)
+            pathdiffs = pathnp[1:] - pathnp[0:-1]
+            pathdiffnorms = np.linalg.norm(pathdiffs, ord=2, axis=1)
+            pathdists = np.hstack([np.array([0.0]), np.cumsum(pathdiffnorms) ])
+        except Exception as e:
+            response.return_code=SetPurePursuitPath.Response.UNKNOWN_ERROR
+            response.message = str(e)
+            return response
+        response.return_code=SetPurePursuitPath.Response.SUCCESS
+        response.message=""
+        self.raceline_dists, self.raceline = torch.from_numpy(pathdiffs).double().to(self.device), pathtorch 
+        return response
         
-
     def imageCallback(self, img_msg : Image):
         if img_msg.height<=0 or img_msg.width<=0:
             return
