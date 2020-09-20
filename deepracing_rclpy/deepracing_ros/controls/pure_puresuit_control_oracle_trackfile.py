@@ -84,11 +84,6 @@ class OraclePurePursuitControllerROS(PPC):
         assert(self.raceline_dists.shape[0] == self.raceline.shape[1])
 
 
-        
-        self.cvbridge : cv_bridge.CvBridge = cv_bridge.CvBridge()
-
-
-
         plot_param : Parameter = self.declare_parameter("plot", value=False)#,Parameter("plot", value=False))
         self.plot : bool = plot_param.get_parameter_value().bool_value
 
