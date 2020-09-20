@@ -29,11 +29,16 @@ find_package(rosidl_default_generators REQUIRED)
 
 # declare the message files to generate code for
 file(GLOB msg_files
-     LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
-     "msg/*.msg"
-     )
+  LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+  "msg/*.msg"
+  )
+file(GLOB srv_files
+  LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+  "srv/*.srv"
+  )
 rosidl_generate_interfaces(${PROJECT_NAME}
   ${msg_files}
+  ${srv_files}
   DEPENDENCIES geometry_msgs sensor_msgs std_msgs visualization_msgs trajectory_msgs tf2_msgs
 )
 

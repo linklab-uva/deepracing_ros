@@ -1,0 +1,6 @@
+sensor_msgs/PointCloud2 new_path
+---
+uint8 return_code
+string message
+uint8 SUCCESS=0
+uint8 UNKNOWN_ERROR=1

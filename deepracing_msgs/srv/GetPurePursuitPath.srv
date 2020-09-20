@@ -1,0 +1,8 @@
+std_msgs/Empty leave_this_blank
+---
+sensor_msgs/PointCloud2 current_path
+string message
+uint8 SUCCESS=0
+uint8 INVALID_POINT_CLOUD=1
+uint8 PATH_READ_ONLY=2
+uint8 UNKNOWN_ERROR=3
