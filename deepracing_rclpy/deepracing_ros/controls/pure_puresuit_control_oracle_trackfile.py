@@ -29,7 +29,6 @@ import deepracing_models.math_utils as mu
 import torch
 import torch.nn as NN
 import torch.utils.data as data_utils
-import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image, CompressedImage
 from deepracing_msgs.msg import PathRaw, ImageWithPath
 from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion
