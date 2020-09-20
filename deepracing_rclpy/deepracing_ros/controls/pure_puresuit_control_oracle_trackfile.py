@@ -43,7 +43,7 @@ from rclpy.clock import Clock, ROSClock
 import deepracing_models.nn_models.Models as M
 from scipy.spatial.transform import Rotation as Rot
 from scipy.spatial.kdtree import KDTree
-import cv_bridge, cv2, numpy as np
+import cv2, numpy as np
 from scipy.spatial import KDTree
 from copy import deepcopy
 import json
