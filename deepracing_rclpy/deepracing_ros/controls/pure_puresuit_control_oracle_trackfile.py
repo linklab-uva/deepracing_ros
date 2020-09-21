@@ -136,7 +136,7 @@ class OraclePurePursuitControllerROS(PPC):
             pathnp = np.array(list(c.pointCloud2ToNumpy(request.new_path, field_names=["x","y","z"])))
         except Exception as e:
             response.return_code=SetPurePursuitPath.Response.INVALID_POINT_CLOUD
-            response.message = str(e)
+            response.message = str(e.with_traceback())
             return response
         try:
             pathtorch = torch.ones(4, pathnp.shape[0], dtype=torch.float64, device=self.device)
@@ -146,7 +146,7 @@ class OraclePurePursuitControllerROS(PPC):
             pathdists = np.hstack([np.array([0.0]), np.cumsum(pathdiffnorms) ])
         except Exception as e:
             response.return_code=SetPurePursuitPath.Response.UNKNOWN_ERROR
-            response.message = str(e)
+            response.message = str(e.with_traceback())
             return response
         response.return_code=SetPurePursuitPath.Response.SUCCESS
         response.message=""
