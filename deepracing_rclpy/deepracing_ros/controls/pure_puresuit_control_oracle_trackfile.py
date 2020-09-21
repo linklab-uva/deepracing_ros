@@ -133,7 +133,7 @@ class OraclePurePursuitControllerROS(PPC):
         print("Got a request to update pure pursuit raceline:")
         response.return_code = SetPurePursuitPath.Response.UNKNOWN_ERROR
         try:
-            pathnp = c.pointCloud2ToNumpy(request.new_path, field_names=["x","y","z"])
+            pathnp = np.array(list(c.pointCloud2ToNumpy(request.new_path, field_names=["x","y","z"])))
         except Exception as e:
             response.return_code=SetPurePursuitPath.Response.INVALID_POINT_CLOUD
             response.message = str(e)
