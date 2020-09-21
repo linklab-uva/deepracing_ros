@@ -151,7 +151,7 @@ class OraclePurePursuitControllerROS(PPC):
         response.return_code=SetPurePursuitPath.Response.SUCCESS
         response.message=""
         self.raceline_dists, self.raceline = torch.from_numpy(pathdiffs).double().to(self.device), pathtorch 
-        print("Update pure pursuit raceline:")
+        print("Updated pure pursuit raceline.")
     
         return response
         
