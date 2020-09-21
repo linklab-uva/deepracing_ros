@@ -130,6 +130,7 @@ class OraclePurePursuitControllerROS(PPC):
         
 
     def setTrackfileCB(self, request : SetPurePursuitPath.Request, response : SetPurePursuitPath.Response):
+        print("Got a request to update pure pursuit raceline:")
         response.return_code = SetPurePursuitPath.Response.UNKNOWN_ERROR
         try:
             pathnp = c.pointCloud2ToNumpy(request.new_path, field_names=["x","y","z"])
