@@ -53,14 +53,17 @@ import deepracing_ros.convert as c
 class OraclePurePursuitControllerROS(PPC):
     def __init__(self):
         super(OraclePurePursuitControllerROS, self).__init__()
-        raceline_file_param : Parameter = self.declare_parameter("raceline_file")#, Parameter("raceline_file") )
+        raceline_file_param : Parameter = self.declare_parameter("raceline_file")
         if raceline_file_param.type_==Parameter.Type.NOT_SET:
             raise ValueError("\"raceline_file\" parameter not set")
         raceline_file = raceline_file_param.get_parameter_value().string_value
         if  os.path.isabs(raceline_file):
             self.raceline_file = raceline_file
         else:
-            self.raceline_file = os.path.join(os.getenv("F1_TRACK_DIR"), raceline_file)
+            envsearchdirs = [s for s in str.split(os.getenv("F1_TRACK_DIRS",""), os.pathsep) if s!=""]
+            self.raceline_file = deepracing.searchForFile(raceline_file,envsearchdirs)
+        if self.raceline_file is None:
+            raise ValueError("\"raceline_file\" parameter must either be an absolute path or in a directory contained in an environment variable F1_TRACK_DIRS")
         racelinefile_ext = os.path.splitext(os.path.basename(self.raceline_file))[1].lower()
         if racelinefile_ext==".json":
             with open(self.raceline_file,"r") as f:
@@ -124,13 +127,13 @@ class OraclePurePursuitControllerROS(PPC):
         lateral_dimension_param : Parameter = self.declare_parameter("lateral_dimension", value=0)
         self.lateral_dimension : int = lateral_dimension_param.get_parameter_value().integer_value
 
-        self.setPathService = self.create_service(SetPurePursuitPath, "/pure_pursuit/set_path", self.setTrackfileCB)
+        self.setPathService = self.create_service(SetPurePursuitPath, "/pure_pursuit/set_path", self.setPathCB)
 
 
         
 
-    def setTrackfileCB(self, request : SetPurePursuitPath.Request, response : SetPurePursuitPath.Response):
-        print("Got a request to update pure pursuit raceline:")
+    def setPathCB(self, request : SetPurePursuitPath.Request, response : SetPurePursuitPath.Response):
+        print("Got a request to update pure pursuit raceline")
         response.return_code = SetPurePursuitPath.Response.UNKNOWN_ERROR
         try:
             pathnp = np.array(list(c.pointCloud2ToNumpy(request.new_path, field_names=["x","y","z"])))
@@ -150,7 +153,7 @@ class OraclePurePursuitControllerROS(PPC):
             return response
         response.return_code=SetPurePursuitPath.Response.SUCCESS
         response.message=""
-        self.raceline_dists, self.raceline = torch.from_numpy(pathdiffs).double().to(self.device), pathtorch 
+        self.raceline_dists, self.raceline = torch.from_numpy(pathdists).double().to(self.device), pathtorch 
         print("Updated pure pursuit raceline.")
     
         return response
