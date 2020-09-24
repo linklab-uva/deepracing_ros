@@ -56,7 +56,6 @@ class PurePursuitControllerROS(Node):
         self.velsetpoint = 0.0
         self.current_speed = 0.0
         self.throttle_out = 0.0
-        self.control_thread = threading.Thread(target=self.lateralControl)
         direct_vjoy_param : Parameter = self.declare_parameter("direct_vjoy", value=False)
         self.direct_vjoy = direct_vjoy_param.get_parameter_value().bool_value
         if self.direct_vjoy:
@@ -162,6 +161,7 @@ class PurePursuitControllerROS(Node):
                 '/outer_track_boundary/pose_array',
                 self.outerBoundaryCB,
                 1)
+        self.control_thread = threading.Thread(target=self.lateralControl)
 
     def initSubscriptions(self):
         self.status_data_sub = self.create_subscription(
@@ -254,8 +254,7 @@ class PurePursuitControllerROS(Node):
             distances_forward = la.norm(lookahead_positions, axis=1)
         else:
             distances_forward = distances_forward_
-       # print(lookahead_positions[::2,:])
-        #print(v_local_forward_.shape)
+
         speeds = torch.norm(v_local_forward_, p=2, dim=1)
         lookahead_distance = max(self.lookahead_gain*self.current_speed, 5.0)
         lookahead_distance_vel = self.velocity_lookahead_gain*self.current_speed
