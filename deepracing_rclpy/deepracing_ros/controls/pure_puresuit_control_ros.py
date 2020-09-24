@@ -214,12 +214,14 @@ class PurePursuitControllerROS(Node):
 
     def poseCallback(self, pose_msg : PoseStamped):
         self.current_pose = pose_msg
-        R = torch.from_numpy(Rot.from_quat( np.array([pose_msg.pose.orientation.x, pose_msg.pose.orientation.y, pose_msg.pose.orientation.z, pose_msg.pose.orientation.w], dtype=np.float64) ).as_matrix())
+        R = torch.from_numpy(Rot.from_quat( np.array([pose_msg.pose.orientation.x, pose_msg.pose.orientation.y, pose_msg.pose.orientation.z, pose_msg.pose.orientation.w], dtype=np.float64) ).as_matrix()).double()
         v = torch.from_numpy(np.array([pose_msg.pose.position.x, pose_msg.pose.position.y, pose_msg.pose.position.z], dtype=np.float64 ) )
-        p = torch.cat([R, v.unsqueeze(1)], dim=1 )
-        pinv = torch.cat([R.transpose(0,1), -torch.matmul(R.transpose(0,1),v).unsqueeze(1)], dim=1 )
-        self.current_pose_mat[0:3], self.current_pose_inv_mat[0:3] = (p, pinv)
-        #self.current_pose_inv_mat = torch.inverse(self.current_pose_mat)
+        p, pinv = torch.eye(4,dtype=torch.float64), torch.eye(4,dtype=torch.float64)
+        p[0:3,0:3] = R
+        p[0:3,3] = v
+        pinv[0:3,0:3] = p[0:3,0:3].transpose(0,1)
+        pinv[0:3,3] = torch.matmul(pinv[0:3,0:3], -p[0:3,3])
+        self.current_pose_mat, self.current_pose_inv_mat = p, pinv
 
     def velocityCallback(self, msg : Vector3Stamped):
         velros = deepcopy(msg)
