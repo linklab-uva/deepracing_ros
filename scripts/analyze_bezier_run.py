@@ -1,4 +1,4 @@
-import cv_bridge, rclpy, rclpy.time, rclpy.duration, f1_datalogger_rospy
+import cv_bridge, rclpy, rclpy.time, rclpy.duration, deepracing_ros
 import argparse
 import typing
 from typing import List
@@ -8,7 +8,7 @@ import rosbag2_py
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
-from f1_datalogger_msgs.msg import BezierCurve, TimestampedPacketMotionData, PacketMotionData, CarMotionData, PacketHeader
+from deepracing_msgs.msg import BezierCurve, TimestampedPacketMotionData, PacketMotionData, CarMotionData, PacketHeader
 from geometry_msgs.msg import PointStamped, Point, Vector3Stamped, Vector3
 from sensor_msgs.msg import CompressedImage
 
@@ -19,7 +19,7 @@ import deepracing, deepracing.pose_utils, deepracing_models
 import numpy as np
 import cv2
 
-import f1_datalogger_rospy.convert
+import deepracing_ros.convert
 from scipy.spatial.transform import Rotation, RotationSpline
 from scipy.interpolate import BSpline, make_interp_spline
 
@@ -66,7 +66,7 @@ if bag_dir[-2:] in {"\\\\","//"}:
     bag_dir = bag_dir[0:-2]
 elif bag_dir[-1] in {"\\","/"}:
     bag_dir = bag_dir[0:-1]
-topic_types, type_map, reader = f1_datalogger_rospy.open_bagfile(bag_dir)
+topic_types, type_map, reader = deepracing_ros.utils.rosbag_utils.open_bagfile(bag_dir)
 with open(os.path.join(bag_dir,"metadata.yaml"),"r") as f:
     metadata_dict = yaml.load(f,Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
 topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
@@ -187,7 +187,7 @@ plt.show()
 
 
 bridge = cv_bridge.CvBridge()
-poses = [f1_datalogger_rospy.convert.extractPose(msg) for msg in motion_packet_msgs]
+poses = [deepracing_ros.convert.extractPose(msg) for msg in motion_packet_msgs]
 
 positions = np.array( [ pose[0] for pose in poses ] )
 position_spline : BSpline = make_interp_spline(motion_timestamps, positions) 
