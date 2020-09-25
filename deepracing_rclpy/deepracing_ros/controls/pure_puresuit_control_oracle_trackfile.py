@@ -116,8 +116,8 @@ class OraclePurePursuitControllerROS(PPC):
         additional_rotation : Rot = Rot.from_quat(np.array(additional_rotation_param.get_parameter_value().double_array_value))
 
         self.additional_transform = torch.eye(4, device=self.device, dtype=torch.float64)
-        self.additional_transform[0:3,0:3] = torch.from_numpy(additional_rotation.as_matrix()).to(self.device)
-        self.additional_transform[0:3,3] = torch.from_numpy(additional_translation).to(self.device)
+        self.additional_transform[0:3,0:3] = torch.from_numpy(additional_rotation.as_matrix()).double().to(self.device)
+        self.additional_transform[0:3,3] = torch.from_numpy(additional_translation).double().to(self.device)
 
         
         forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
@@ -164,16 +164,16 @@ class OraclePurePursuitControllerROS(PPC):
         imnp = self.cvbridge.imgmsg_to_cv2(img_msg, desired_encoding="rgb8") 
         self.current_image = imnp.copy()
     def getTrajectory(self):
-        if (self.current_velocity.header.frame_id=="") or (not torch.any(self.current_pose_mat[0:3,0:3].bool()).item()):
+        if (self.current_velocity.header.frame_id=="") or (self.current_pose_mat is None):
             return super().getTrajectory()
-        if self.device == torch.device("cpu"):
-            current_pose_mat = self.current_pose_mat.clone()
-        else:
-            current_pose_mat = self.current_pose_mat.to(self.device)
-
+        # if self.device == torch.device("cpu"):
+        #     current_pose_mat = self.current_pose_mat.clone()
+        # else:
+        #     current_pose_mat = self.current_pose_mat.to(self.device)
+        current_pose_mat = torch.matmul( self.current_pose_mat, self.additional_transform )
+        #print("Current pose mat after transform: "+ str(current_pose_mat))
         current_pose_inv = torch.inverse(current_pose_mat)
-        overalltransform = torch.matmul(self.additional_transform, current_pose_inv)
-        raceline_local = torch.matmul(overalltransform,self.raceline)
+        raceline_local = torch.matmul(current_pose_inv,self.raceline)
         
         I1 = torch.argmin(torch.norm(raceline_local[0:3],p=2,dim=0)).item()
         #(d, I1) = self.kdtree.query(np.array([self.current_pose.pose.position.x, self.current_pose.pose.position.y, self.current_pose.pose.position.z], dtype=np.float64))

@@ -26,7 +26,7 @@ import torch.nn as NN
 import torch.utils.data as data_utils
 import deepracing_models.nn_models.Models
 from deepracing_msgs.msg import CarControl, BoundaryLine, TimestampedPacketCarStatusData, TimestampedPacketCarTelemetryData, TimestampedPacketMotionData, PacketCarTelemetryData, PacketMotionData, CarMotionData, CarStatusData, CarTelemetryData, PacketHeader
-from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion, PoseArray
+from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion, PoseArray, Twist, TwistStamped
 from scipy.spatial.transform import Rotation as Rot
 from std_msgs.msg import Float64
 import rclpy
@@ -50,7 +50,7 @@ class PurePursuitControllerROS(Node):
         self.current_motion_data : CarMotionData  = CarMotionData()
         self.current_status_data : CarStatusData  = CarStatusData()
         self.current_telemetry_data : CarTelemetryData  = CarTelemetryData()
-        self.current_velocity : Vector3Stamped = Vector3Stamped()
+        self.current_velocity : TwistStamped = TwistStamped()
         self.setpoint_publisher = self.create_publisher(Float64, "vel_setpoint", 1)
         self.dt_publisher = self.create_publisher(Float64, "dt", 1)
         self.velsetpoint = 0.0
@@ -146,9 +146,9 @@ class PurePursuitControllerROS(Node):
         
 
         self.current_pose : PoseStamped = PoseStamped()
-        self.current_pose_mat = torch.zeros([4,4],dtype=torch.float64)
-        self.current_pose_mat[3,3]=1.0
-        self.current_pose_inv_mat = self.current_pose_mat.clone()
+        self.current_pose_mat = None
+        # self.current_pose_mat[3,3]=1.0
+        self.current_pose_inv_mat = None
         
         if self.boundary_check:
             self.inner_boundary_sub = self.create_subscription(
@@ -174,8 +174,10 @@ class PurePursuitControllerROS(Node):
             '/telemetry_data',
             self.telemetryUpdate,
             1)
-        self.pose_sub = self.create_subscription(PoseStamped, '/rear_axle_pose', self.poseCallback, 1)
-        self.velocity_sub = self.create_subscription(Vector3Stamped,'/ego_velocity',self.velocityCallback,1)
+
+        update_qos = rclpy.qos.QoSProfile(depth=4)
+        self.pose_sub = self.create_subscription(PoseStamped, 'car_pose', self.poseCallback, update_qos)
+        self.velocity_sub = self.create_subscription(TwistStamped,'car_velocity',self.velocityCallback, update_qos)
 
         
     def innerBoundaryCB(self, boundary_msg: PoseArray ):
@@ -213,6 +215,7 @@ class PurePursuitControllerROS(Node):
         pass
 
     def poseCallback(self, pose_msg : PoseStamped):
+        #print("Got a new pose: " + str(pose_msg))
         self.current_pose = pose_msg
         R = torch.from_numpy(Rot.from_quat( np.array([pose_msg.pose.orientation.x, pose_msg.pose.orientation.y, pose_msg.pose.orientation.z, pose_msg.pose.orientation.w], dtype=np.float64) ).as_matrix()).double()
         v = torch.from_numpy(np.array([pose_msg.pose.position.x, pose_msg.pose.position.y, pose_msg.pose.position.z], dtype=np.float64 ) )
@@ -223,12 +226,13 @@ class PurePursuitControllerROS(Node):
         pinv[0:3,3] = torch.matmul(pinv[0:3,0:3], -p[0:3,3])
         self.current_pose_mat, self.current_pose_inv_mat = p, pinv
 
-    def velocityCallback(self, msg : Vector3Stamped):
+    def velocityCallback(self, msg : TwistStamped):
+       # print("Got a new velocity: " + str(msg))
         velros = deepcopy(msg)
-        vel = np.array( (velros.vector.x, velros.vector.y, velros.vector.z), dtype=np.float64)
+        linearvel = msg.twist.linear
+        vel = np.array( (linearvel.x, linearvel.y, linearvel.z), dtype=np.float64)
         speed = la.norm(vel)
-        self.current_speed = speed
-        self.current_velocity = velros
+        self.current_speed, self.current_velocity = speed, velros
         
         
     def start(self):
@@ -245,10 +249,13 @@ class PurePursuitControllerROS(Node):
     def getTrajectory(self):
         return None, None, None
     def setControl(self):
-        if self.sleeptime>0.0:
-            time.sleep(self.sleeptime)
         lookahead_positions, v_local_forward_, distances_forward_, = self.getTrajectory()
         if lookahead_positions is None:
+            print("Setting all zeros because lookahead_positions is none")
+            if self.direct_vjoy:
+                self.controller.setControl(0.0,0.0,0.0)
+            else:
+                self.control_pub.publish(CarControl(steering=0.0, throttle=0.0, brake=0.0))
             return
         if distances_forward_ is None:
             distances_forward = la.norm(lookahead_positions, axis=1)
