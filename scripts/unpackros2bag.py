@@ -1,4 +1,4 @@
-import cv_bridge, rclpy, rclpy.time, rclpy.duration, f1_datalogger_rospy
+import cv_bridge, rclpy, rclpy.time, rclpy.duration, deepracing_ros
 import argparse
 import typing
 from typing import List
@@ -8,8 +8,8 @@ import rosbag2_py
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
-from f1_datalogger_msgs.msg import BezierCurve, PacketMotionData, CarMotionData, PacketHeader
-from f1_datalogger_msgs.msg import TimestampedPacketMotionData, TimestampedPacketCarStatusData, TimestampedPacketCarTelemetryData, TimestampedPacketLapData, TimestampedPacketSessionData
+from deepracing_msgs.msg import BezierCurve, PacketMotionData, CarMotionData, PacketHeader
+from deepracing_msgs.msg import TimestampedPacketMotionData, TimestampedPacketCarStatusData, TimestampedPacketCarTelemetryData, TimestampedPacketLapData, TimestampedPacketSessionData
 from geometry_msgs.msg import PointStamped, Point, Vector3Stamped, Vector3
 from sensor_msgs.msg import CompressedImage
 
@@ -18,7 +18,7 @@ import torch, torchvision
 import deepracing, deepracing.pose_utils, deepracing_models
 
 
-import f1_datalogger_rospy.convert
+import deepracing_ros.convert
 from scipy.spatial.transform import Rotation, RotationSpline
 from scipy.interpolate import BSpline, make_interp_spline
 
@@ -66,7 +66,7 @@ viz = argdict["viz"]
 
 bridge = cv_bridge.CvBridge()
 
-topic_types, type_map, reader = f1_datalogger_rospy.open_bagfile(bag_dir)
+topic_types, type_map, reader = deepracing_ros.utils.rosbag_utils.open_bagfile(bag_dir)
 with open(os.path.join(bag_dir,"metadata.yaml"),"r") as f:
     metadata_dict = yaml.load(f,Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
 topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
@@ -79,7 +79,7 @@ status_data_msgs = []
 image_msgs = []
 idx = 0
 total_msgs = np.sum( topic_counts )
-#{'/f1_screencaps/cropped/compressed': 'sensor_msgs/msg/CompressedImage', '/motion_data': 'f1_datalogger_msgs/msg/TimestampedPacketMotionData', '/predicted_path': 'f1_datalogger_msgs/msg/BezierCurve'}
+#{'/f1_screencaps/cropped/compressed': 'sensor_msgs/msg/CompressedImage', '/motion_data': 'deepracing_msgs/msg/TimestampedPacketMotionData', '/predicted_path': 'deepracing_msgs/msg/BezierCurve'}
 print("Loading data from bag")
 msg_dict = {key : [] for key in topic_count_dict.keys()}
 for idx in tqdm(iterable=range(total_msgs)):
