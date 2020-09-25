@@ -119,6 +119,7 @@ if(TARGET f1_datalogger::f1_datalogger)
   f1_msg_utils
   f1_datalogger::f1_datalogger
   )
+  list(APPEND nodes_to_install_ ros_rebroadcaster)
 endif()
 
 
