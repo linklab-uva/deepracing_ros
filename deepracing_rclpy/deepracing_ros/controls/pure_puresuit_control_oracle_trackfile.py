@@ -49,11 +49,14 @@ import json
 import torch
 from deepracing_msgs.srv import SetPurePursuitPath
 import deepracing_ros.convert as c
+import deepracing.raceline_utils as raceline_utils
 
 class OraclePurePursuitControllerROS(PPC):
     def __init__(self):
         super(OraclePurePursuitControllerROS, self).__init__()
         raceline_file_param : Parameter = self.declare_parameter("raceline_file")
+        shift_distance_param : Parameter = self.declare_parameter("shift_distance", value=0.0)
+        shift_distance = shift_distance_param.get_parameter_value().double_value
         if raceline_file_param.type_==Parameter.Type.NOT_SET:
             raise ValueError("\"raceline_file\" parameter not set")
         raceline_file = raceline_file_param.get_parameter_value().string_value
@@ -74,10 +77,11 @@ class OraclePurePursuitControllerROS(PPC):
             racelinenp = np.loadtxt(self.raceline_file,dtype=float, skiprows=1,delimiter=",")
             if racelinenp.shape[1]==2:
                 racelinenp = np.column_stack([racelinenp, 0.73*np.ones_like(racelinenp[:,0])])
-            raclinediffs = racelinenp[1:] - racelinenp[:-1]
-            raclinediffnorms = np.linalg.norm(raclinediffs, ord=2, axis=1)
-            raclinediffnp = np.hstack([np.array([0.0]), np.cumsum(raclinediffnorms)])
-            self.raceline_dists = torch.from_numpy(raclinediffnp).double().to(self.device)
+            racelinedistsnp, racelinenp = raceline_utils.shiftRaceline(racelinenp, np.array([0.0,0.0,1.0]), shift_distance)
+            # raclinediffs = racelinenp[1:] - racelinenp[:-1]
+            # raclinediffnorms = np.linalg.norm(raclinediffs, ord=2, axis=1)
+            # racelinedistsnp = np.hstack([np.array([0.0]), np.cumsum(raclinediffnorms)])
+            self.raceline_dists = torch.from_numpy(racelinedistsnp).double().to(self.device)
         else:
             raise ValueError("Only .json and .csv extensions are supported")
         self.kdtree = KDTree(racelinenp)
@@ -85,6 +89,7 @@ class OraclePurePursuitControllerROS(PPC):
                                      torch.from_numpy(racelinenp[:,1]),\
                                      torch.from_numpy(racelinenp[:,2]),\
                                      torch.ones_like(torch.from_numpy(racelinenp[:,0]))], dim=0).double().to(self.device)
+
         assert(self.raceline_dists.shape[0] == self.raceline.shape[1])
 
 
