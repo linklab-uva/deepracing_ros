@@ -177,7 +177,7 @@ class PurePursuitControllerROS(Node):
         pass
 
     def poseCallback(self, pose_msg : PoseStamped):
-        #print("Got a new pose: " + str(pose_msg))
+        print("Got a new pose: " + str(pose_msg))
         
         R = torch.from_numpy(Rot.from_quat( np.array([pose_msg.pose.orientation.x, pose_msg.pose.orientation.y, pose_msg.pose.orientation.z, pose_msg.pose.orientation.w], dtype=np.float64) ).as_matrix()).double()
         v = torch.from_numpy(np.array([pose_msg.pose.position.x, pose_msg.pose.position.y, pose_msg.pose.position.z], dtype=np.float64 ) )
@@ -195,7 +195,7 @@ class PurePursuitControllerROS(Node):
             self.get_logger().error("Unable to acquire semaphore to setting the pose data")
 
     def velocityCallback(self, velocity_msg : TwistStamped):
-       # print("Got a new velocity: " + str(velocity_msg))
+        print("Got a new velocity: " + str(velocity_msg))
         linearvel = velocity_msg.twist.linear
         vel = np.array( (linearvel.x, linearvel.y, linearvel.z), dtype=np.float64)
         speed = la.norm(vel)
@@ -218,7 +218,7 @@ class PurePursuitControllerROS(Node):
         return None, None, None
     def setControl(self):
         while self.latch and ( (self.current_pose_mat is None) or (self.current_speed is None) ):# or (self.current_velocity.header.frame_id==""):
-            self.get_logger().info("Sleeping because latching is enabled and state data not yet received")
+            self.get_logger().debug("Sleeping because latching is enabled and state data not yet received")
             self.internal_rate.sleep()
         lookahead_positions, v_local_forward_, distances_forward_, = self.getTrajectory()
         current_speed = deepcopy(self.current_speed)
