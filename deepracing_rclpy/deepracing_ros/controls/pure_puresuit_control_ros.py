@@ -213,9 +213,15 @@ class PurePursuitControllerROS(Node):
 
     def getTrajectory(self):
         return None, None, None
-    def setControl(self):
+    def getControl(self) -> CarControl:
         
         lookahead_positions, v_local_forward_, distances_forward_, = self.getTrajectory()
+        if lookahead_positions is None:
+            self.get_logger().error("Returning all zeros becase lookahead_positions is None")
+            return CarControl(steering=0.0, throttle=0.0, brake=0.0)
+        if self.current_speed is None:
+            self.get_logger().error("Returning all zeros becase self.current_speed is None")
+            return CarControl(steering=0.0, throttle=0.0, brake=0.0)
         current_speed = deepcopy(self.current_speed)
         
         if distances_forward_ is None:
@@ -233,7 +239,6 @@ class PurePursuitControllerROS(Node):
         lookaheadVector = lookahead_positions[lookahead_index]
         lookaheadVectorVel = lookahead_positions[lookahead_index_vel]
 
-
         D = torch.norm(lookaheadVector, p=2)
         lookaheadDirection = lookaheadVector/D
         alpha = torch.atan2(lookaheadDirection[0],lookaheadDirection[1])
@@ -247,15 +252,9 @@ class PurePursuitControllerROS(Node):
         self.setpoint_publisher.publish(Float64(data=self.velsetpoint))
 
         if current_speed<self.velsetpoint:
-            if self.direct_vjoy:
-                self.controller.setControl(delta,1.0,0.0)
-            else:
-                self.control_pub.publish(CarControl(steering=delta, throttle=1.0, brake=0.0))
+            return CarControl(steering=delta, throttle=1.0, brake=0.0)
         else:
-            if self.direct_vjoy:
-                self.controller.setControl(delta,0.0,1.0)
-            else:
-                self.control_pub.publish(CarControl(steering=delta, throttle=0.0, brake=1.0))
+            return CarControl(steering=delta, throttle=0.0, brake=1.0)
 
     def lateralControl(self):
         while self.running:
