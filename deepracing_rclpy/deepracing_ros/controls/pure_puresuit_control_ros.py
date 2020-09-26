@@ -152,8 +152,8 @@ class PurePursuitControllerROS(Node):
 
     def initSubscriptions(self):
         update_qos = rclpy.qos.QoSProfile(depth=4)
-        self.pose_sub = self.create_subscription(PoseStamped, 'car_pose', self.poseCallback, update_qos)
-        self.velocity_sub = self.create_subscription(TwistStamped,'car_velocity',self.velocityCallback, update_qos)
+        self.pose_sub = self.create_subscription(PoseStamped, '/simulator/pose', self.poseCallback, update_qos)
+        self.velocity_sub = self.create_subscription(TwistStamped,'/simulator/twist',self.velocityCallback, update_qos)
         if self.boundary_check:
             self.inner_boundary_sub = self.create_subscription(
                 PointCloud2,
