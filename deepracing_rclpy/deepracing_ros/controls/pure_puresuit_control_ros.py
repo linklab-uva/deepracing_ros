@@ -174,7 +174,7 @@ class PurePursuitControllerROS(Node):
         pass
 
     def poseCallback(self, pose_msg : PoseStamped):
-        self.get_logger().info("Got a new pose: " + str(pose_msg))
+        self.get_logger().debug("Got a new pose: " + str(pose_msg))
         
         R = torch.from_numpy(Rot.from_quat( np.array([pose_msg.pose.orientation.x, pose_msg.pose.orientation.y, pose_msg.pose.orientation.z, pose_msg.pose.orientation.w], dtype=np.float64) ).as_matrix()).double()
         v = torch.from_numpy(np.array([pose_msg.pose.position.x, pose_msg.pose.position.y, pose_msg.pose.position.z], dtype=np.float64 ) )
@@ -192,7 +192,7 @@ class PurePursuitControllerROS(Node):
             self.get_logger().error("Unable to acquire semaphore to setting the pose data")
 
     def velocityCallback(self, velocity_msg : TwistStamped):
-        self.get_logger().info("Got a new velocity: " + str(velocity_msg))
+        self.get_logger().debug("Got a new velocity: " + str(velocity_msg))
         linearvel = velocity_msg.twist.linear
         vel = np.array( (linearvel.x, linearvel.y, linearvel.z), dtype=np.float64)
         speed = la.norm(vel)
@@ -242,7 +242,6 @@ class PurePursuitControllerROS(Node):
         D = torch.norm(lookaheadVector, p=2)
         lookaheadDirection = lookaheadVector/D
         alpha = torch.atan2(lookaheadDirection[0],lookaheadDirection[1])
-       # print(alpha)
         physical_angle = (torch.atan((2 * self.L*torch.sin(alpha)) / D)).item()
         if (physical_angle > 0) :
             delta = self.left_steer_factor*physical_angle + self.left_steer_offset
