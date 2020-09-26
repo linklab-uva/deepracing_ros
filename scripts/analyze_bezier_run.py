@@ -38,6 +38,7 @@ import shutil
 import time
 import cv2
 import yaml 
+import deepracing_ros.utils.rosbag_utils as rosbag_utils
 
 def extractPosition(vectormsg):
     return np.array( [ msg.x, msg.y, msg.z ] )
@@ -66,7 +67,7 @@ if bag_dir[-2:] in {"\\\\","//"}:
     bag_dir = bag_dir[0:-2]
 elif bag_dir[-1] in {"\\","/"}:
     bag_dir = bag_dir[0:-1]
-topic_types, type_map, reader = deepracing_ros.utils.rosbag_utils.open_bagfile(bag_dir)
+topic_types, type_map, reader = rosbag_utils.open_bagfile(bag_dir)
 with open(os.path.join(bag_dir,"metadata.yaml"),"r") as f:
     metadata_dict = yaml.load(f,Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
 topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
@@ -252,14 +253,14 @@ try:
         imnp = bridge.compressed_imgmsg_to_cv2(image_msgs[image_idx],desired_encoding="rgb8")
 
         _, innerboundary_idx = inner_boundary_kdtree.query(carposition)
-        innerboundary_sample_idx = np.flip(np.arange(innerboundary_idx-int(round(Nsamp/4)), innerboundary_idx+Nsamp, step=1, dtype=np.int32)%inner_boundary.shape[1])
+        innerboundary_sample_idx = np.flip(np.arange(innerboundary_idx-int(round(Nsamp/4)), innerboundary_idx+4*Nsamp, step=1, dtype=np.int32)%inner_boundary.shape[1])
         innerboundary_sample = inner_boundary[:,innerboundary_sample_idx]
         innerboundary_sample_local = np.matmul(homogenous_transform_inv,innerboundary_sample)
         #(ibdiffs, ibdiffidx) = inner_boundary_kdtree.query(bcvalsglobal[0:3].transpose())
 
 
         _, outerboundary_idx = outer_boundary_kdtree.query(carposition)
-        outerboundary_sample_idx = np.flip(np.arange(outerboundary_idx-int(round(Nsamp/4)), outerboundary_idx+Nsamp, step=1, dtype=np.int32)%outer_boundary.shape[1])
+        outerboundary_sample_idx = np.flip(np.arange(outerboundary_idx-int(round(Nsamp/4)), outerboundary_idx+4*Nsamp, step=1, dtype=np.int32)%outer_boundary.shape[1])
         outerboundary_sample = outer_boundary[:,outerboundary_sample_idx]
         outerboundary_sample_local = np.matmul(homogenous_transform_inv,outerboundary_sample)
 

@@ -28,7 +28,7 @@ from rclpy.executors import MultiThreadedExecutor
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
-    spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor(4))
+    spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor(6))
     node = OraclePurePursuitControllerROS()
     spinner.addNode(node)
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)

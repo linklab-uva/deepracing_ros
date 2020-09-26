@@ -10,6 +10,7 @@
 #include <boost/math/constants/constants.hpp>
 #include <tf2/convert.h>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
 
 class NodeWrapperTfUpdater_ 
 {
@@ -38,12 +39,15 @@ class NodeWrapperTfUpdater_
      worldToTrack.transform.rotation.w = quat.w();
      this->statictfbroadcaster->sendTransform(worldToTrack);
      this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("/motion_data", 1, std::bind(&NodeWrapperTfUpdater_::packetCallback, this, std::placeholders::_1));
-     this->pose_publisher = this->node->create_publisher<geometry_msgs::msg::PoseStamped>("/ego_pose", 1);
+     this->pose_publisher = this->node->create_publisher<geometry_msgs::msg::PoseStamped>("/simulator/pose", 1);
+     this->twist_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("/simulator/velocity", 1);
      
      
     }  
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketMotionData>::SharedPtr listener;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_publisher;
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_publisher;
+
     std::shared_ptr<rclcpp::Node> node;
     std::shared_ptr<tf2_ros::TransformBroadcaster> tfbroadcaster;
     std::shared_ptr<tf2_ros::StaticTransformBroadcaster> statictfbroadcaster;
@@ -79,10 +83,9 @@ class NodeWrapperTfUpdater_
       Eigen::Quaterniond rotationEigen(rotmat);
       rotationEigen.normalize();
       geometry_msgs::msg::TransformStamped transformMsg;
-      transformMsg.header.frame_id = "track";
-      transformMsg.header.stamp = motion_data.world_position.header.stamp;
-     // transformMsg.header.stamp = this->node->now();
-      transformMsg.child_frame_id = "car";
+      transformMsg.header.set__frame_id("track");
+      transformMsg.header.set__stamp(motion_data.world_position.header.stamp);
+      transformMsg.set__child_frame_id("car");
       transformMsg.transform.rotation.x = rotationEigen.x();
       transformMsg.transform.rotation.y = rotationEigen.y();
       transformMsg.transform.rotation.z = rotationEigen.z();
@@ -103,6 +106,12 @@ class NodeWrapperTfUpdater_
       pose.pose.set__orientation(transformMsg.transform.rotation);
 
       this->pose_publisher->publish(pose);
+
+      geometry_msgs::msg::TwistStamped car_velocity;
+      car_velocity.set__header(transformMsg.header);
+      car_velocity.twist.set__linear(motion_data.world_velocity.vector);
+      car_velocity.twist.set__angular(motion_data_packet->udp_packet.angular_velocity);
+      this->twist_publisher->publish(car_velocity);
       
 
 

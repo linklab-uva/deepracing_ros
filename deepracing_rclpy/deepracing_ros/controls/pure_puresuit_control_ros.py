@@ -25,8 +25,9 @@ import torch
 import torch.nn as NN
 import torch.utils.data as data_utils
 import deepracing_models.nn_models.Models
-from deepracing_msgs.msg import CarControl, BoundaryLine, TimestampedPacketCarStatusData, TimestampedPacketCarTelemetryData, TimestampedPacketMotionData, PacketCarTelemetryData, PacketMotionData, CarMotionData, CarStatusData, CarTelemetryData, PacketHeader
+from deepracing_msgs.msg import CarControl
 from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion, PoseArray, Twist, TwistStamped
+from sensor_msgs.msg import PointCloud2
 from scipy.spatial.transform import Rotation as Rot
 from std_msgs.msg import Float64
 import rclpy
@@ -38,23 +39,17 @@ from scipy.spatial.kdtree import KDTree
 from shapely.geometry import Point as ShapelyPoint, MultiPoint#, Point2d as ShapelyPoint2d
 from shapely.geometry.polygon import Polygon
 from shapely.geometry import LinearRing
-
 import timeit
+
 class PurePursuitControllerROS(Node):
     def __init__(self):
         super(PurePursuitControllerROS,self).__init__('pure_pursuit_control', allow_undeclared_parameters=False, automatically_declare_parameters_from_overrides=False)
        # self.get_logger().info("Hello Pure Pursuit!")
         self.packet_queue = queue.Queue()
         self.running = True
-        self.current_motion_packet : TimestampedPacketMotionData  = TimestampedPacketMotionData()
-        self.current_motion_data : CarMotionData  = CarMotionData()
-        self.current_status_data : CarStatusData  = CarStatusData()
-        self.current_telemetry_data : CarTelemetryData  = CarTelemetryData()
-        self.current_velocity : TwistStamped = TwistStamped()
         self.setpoint_publisher = self.create_publisher(Float64, "vel_setpoint", 1)
         self.dt_publisher = self.create_publisher(Float64, "dt", 1)
         self.velsetpoint = 0.0
-        self.current_speed = 0.0
         self.throttle_out = 0.0
         direct_vjoy_param : Parameter = self.declare_parameter("direct_vjoy", value=False)
         self.direct_vjoy = direct_vjoy_param.get_parameter_value().bool_value
@@ -120,6 +115,9 @@ class PurePursuitControllerROS(Node):
         boundary_check_param : Parameter = self.declare_parameter("boundary_check",value=False)#, Parameter("boundary_check",value=False))
         self.boundary_check : bool = boundary_check_param.get_parameter_value().bool_value
 
+        latch_param : Parameter = self.declare_parameter("latch",value=False)
+        self.latch : bool = latch_param.get_parameter_value().bool_value
+
         
         if self.use_drs:
             print("Using DRS")
@@ -147,76 +145,40 @@ class PurePursuitControllerROS(Node):
 
         self.current_pose : PoseStamped = PoseStamped()
         self.current_pose_mat = None
-        # self.current_pose_mat[3,3]=1.0
         self.current_pose_inv_mat = None
-        
-        if self.boundary_check:
-            self.inner_boundary_sub = self.create_subscription(
-                PoseArray,
-                '/inner_track_boundary/pose_array',
-                self.innerBoundaryCB,
-                1)
-            self.outer_boundary_sub = self.create_subscription(
-                PoseArray,
-                '/outer_track_boundary/pose_array',
-                self.outerBoundaryCB,
-                1)
+        self.current_velocity : TwistStamped = TwistStamped()
+        self.current_speed = None
         self.control_thread = threading.Thread(target=self.lateralControl)
+        self.pose_semaphore = threading.Semaphore()
+        self.velocity_semaphore = threading.Semaphore()
+        self.internal_rate = self.create_rate(60.0)
 
     def initSubscriptions(self):
-        self.status_data_sub = self.create_subscription(
-            TimestampedPacketCarStatusData,
-            '/status_data',
-            self.statusUpdate,
-            1)
-        self.telemetry_data_sub = self.create_subscription(
-            TimestampedPacketCarTelemetryData,
-            '/telemetry_data',
-            self.telemetryUpdate,
-            1)
-
         update_qos = rclpy.qos.QoSProfile(depth=4)
         self.pose_sub = self.create_subscription(PoseStamped, 'car_pose', self.poseCallback, update_qos)
         self.velocity_sub = self.create_subscription(TwistStamped,'car_velocity',self.velocityCallback, update_qos)
+        if self.boundary_check:
+            self.inner_boundary_sub = self.create_subscription(
+                PointCloud2,
+                '/inner_track_boundary/pcl',
+                self.innerBoundaryCB,
+                1)
+            self.outer_boundary_sub = self.create_subscription(
+                PointCloud2,
+                '/outer_track_boundary/pcl',
+                self.outerBoundaryCB,
+                1)
 
         
-    def innerBoundaryCB(self, boundary_msg: PoseArray ):
-        if self.boundary_check and (self.inner_boundary is None):
-            positions = np.row_stack([np.array([p.position.x, p.position.y, p.position.z]) for p in boundary_msg.poses])
-            self.inner_boundary_kdtree = KDTree(positions)
-            quaternions = np.row_stack([np.array([p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w]) for p in boundary_msg.poses])
-            rotations = Rot.from_quat(quaternions)
-            rotmats = rotations.as_matrix()
-            inner_boundary = torch.zeros(positions.shape[0], 4, 4, dtype=torch.float64, device=self.device)
-            inner_boundary[:,0:3,0:3] = torch.from_numpy(rotmats).double().to(self.device)
-            inner_boundary[:,0:3,3] = torch.from_numpy(positions).double().to(self.device)
-            inner_boundary[:,3,3]=1.0
-            inner_boundary_inv = torch.inverse(inner_boundary)
-          #  print(inner_boundary[0:10])
-            self.inner_boundary, self.inner_boundary_inv = (inner_boundary, inner_boundary_inv)
-            del self.inner_boundary_sub
+    def innerBoundaryCB(self, boundary_msg: PointCloud2 ):
+        pass
             
-    def outerBoundaryCB(self, boundary_msg: PoseArray ):
-        if self.boundary_check and (self.outer_boundary is None):
-            positions = np.row_stack([np.array([p.position.x, p.position.y, p.position.z]) for p in boundary_msg.poses])
-            self.outer_boundary_kdtree = KDTree(positions)
-            quaternions = np.row_stack([np.array([p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w]) for p in boundary_msg.poses])
-            rotations = Rot.from_quat(quaternions)
-            rotmats = rotations.as_matrix()
-            outer_boundary = torch.zeros(positions.shape[0], 4, 4, dtype=torch.float64, device=self.device)
-            outer_boundary[:,0:3,0:3] = torch.from_numpy(rotmats).double().to(self.device)
-            outer_boundary[:,0:3,3] = torch.from_numpy(positions).double().to(self.device)
-            outer_boundary[:,3,3]=1.0
-            outer_boundary_inv = torch.inverse(outer_boundary)
-            self.outer_boundary, self.outer_boundary_inv = (outer_boundary, outer_boundary_inv)
-            del self.outer_boundary_sub
-            
-    def racelineCB(self, boundary_msg: BoundaryLine ):
+    def outerBoundaryCB(self, boundary_msg: PointCloud2 ):
         pass
 
     def poseCallback(self, pose_msg : PoseStamped):
         #print("Got a new pose: " + str(pose_msg))
-        self.current_pose = pose_msg
+        
         R = torch.from_numpy(Rot.from_quat( np.array([pose_msg.pose.orientation.x, pose_msg.pose.orientation.y, pose_msg.pose.orientation.z, pose_msg.pose.orientation.w], dtype=np.float64) ).as_matrix()).double()
         v = torch.from_numpy(np.array([pose_msg.pose.position.x, pose_msg.pose.position.y, pose_msg.pose.position.z], dtype=np.float64 ) )
         p, pinv = torch.eye(4,dtype=torch.float64), torch.eye(4,dtype=torch.float64)
@@ -224,15 +186,26 @@ class PurePursuitControllerROS(Node):
         p[0:3,3] = v
         pinv[0:3,0:3] = p[0:3,0:3].transpose(0,1)
         pinv[0:3,3] = torch.matmul(pinv[0:3,0:3], -p[0:3,3])
-        self.current_pose_mat, self.current_pose_inv_mat = p, pinv
+        if self.pose_semaphore.acquire(timeout=1.0):
+            self.current_pose_inv_mat = pinv
+            self.current_pose_mat = p
+            self.current_pose = pose_msg
+            self.pose_semaphore.release()
+        else:
+            self.get_logger().error("Unable to acquire semaphore to setting the pose data")
 
-    def velocityCallback(self, msg : TwistStamped):
-       # print("Got a new velocity: " + str(msg))
-        velros = deepcopy(msg)
-        linearvel = msg.twist.linear
+    def velocityCallback(self, velocity_msg : TwistStamped):
+       # print("Got a new velocity: " + str(velocity_msg))
+        linearvel = velocity_msg.twist.linear
         vel = np.array( (linearvel.x, linearvel.y, linearvel.z), dtype=np.float64)
         speed = la.norm(vel)
-        self.current_speed, self.current_velocity = speed, velros
+        if self.velocity_semaphore.acquire(timeout=1.0):
+            self.current_velocity = deepcopy(velocity_msg)
+            self.current_speed =  speed
+            self.velocity_semaphore.release()
+        else:
+            self.get_logger().error("Unable to acquire semaphore to setting the velocity data")
+        
         
         
     def start(self):
@@ -241,17 +214,26 @@ class PurePursuitControllerROS(Node):
         self.running = False
         time.sleep(0.5)
 
-    def telemetryUpdate(self, msg : TimestampedPacketCarTelemetryData):
-        self.current_telemetry_data = msg.udp_packet.car_telemetry_data[0]
-
-    def statusUpdate(self, msg : TimestampedPacketCarStatusData):
-        self.current_status_data = msg.udp_packet.car_status_data[0]
     def getTrajectory(self):
         return None, None, None
     def setControl(self):
+        while self.latch and ( (self.current_pose_mat is None) or (self.current_speed is None) ):# or (self.current_velocity.header.frame_id==""):
+            self.get_logger().info("Sleeping because latching is enabled and state data not yet received")
+            self.internal_rate.sleep()
         lookahead_positions, v_local_forward_, distances_forward_, = self.getTrajectory()
+        if self.latch:
+            if self.pose_semaphore.acquire(timeout=1.0):
+                self.current_pose_mat = None
+                self.pose_semaphore.release()
+            else:
+                self.get_logger().error("Unable to acquire semaphore to reset the pose data to None")
+            if self.velocity_semaphore.acquire(timeout=1.0):
+                self.speed = None
+                self.velocity_semaphore.release()
+            else:
+                self.get_logger().error("Unable to acquire semaphore to reset the velocity data to None")
         if lookahead_positions is None:
-            print("Setting all zeros because lookahead_positions is none")
+            self.get_logger().error("Setting all zeros because lookahead_positions is none")
             if self.direct_vjoy:
                 self.controller.setControl(0.0,0.0,0.0)
             else:
@@ -295,6 +277,7 @@ class PurePursuitControllerROS(Node):
                 self.controller.setControl(delta,0.0,1.0)
             else:
                 self.control_pub.publish(CarControl(steering=delta, throttle=0.0, brake=1.0))
+
     def lateralControl(self):
         while self.running:
             self.setControl()

@@ -41,6 +41,7 @@ import json
 from rosidl_runtime_py import message_to_ordereddict, message_to_yaml, set_message_fields
 import numpy as np
 import io
+import deepracing_ros.utils.rosbag_utils as rosbag_utils
 
 def extractPosition(vectormsg):
     return np.array( [ msg.x, msg.y, msg.z ] )
@@ -66,7 +67,7 @@ viz = argdict["viz"]
 
 bridge = cv_bridge.CvBridge()
 
-topic_types, type_map, reader = deepracing_ros.utils.rosbag_utils.open_bagfile(bag_dir)
+topic_types, type_map, reader = rosbag_utils.open_bagfile(bag_dir)
 with open(os.path.join(bag_dir,"metadata.yaml"),"r") as f:
     metadata_dict = yaml.load(f,Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
 topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}

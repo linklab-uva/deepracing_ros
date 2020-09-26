@@ -133,7 +133,7 @@ class OraclePurePursuitControllerROS(PPC):
         
 
     def setPathCB(self, request : SetPurePursuitPath.Request, response : SetPurePursuitPath.Response):
-        print("Got a request to update pure pursuit raceline")
+        self.get_logger().info("Got a request to update pure pursuit raceline")
         response.return_code = SetPurePursuitPath.Response.UNKNOWN_ERROR
         try:
             pathnp = np.array(list(c.pointCloud2ToNumpy(request.new_path, field_names=["x","y","z"])))
@@ -154,17 +154,11 @@ class OraclePurePursuitControllerROS(PPC):
         response.return_code=SetPurePursuitPath.Response.SUCCESS
         response.message=""
         self.raceline_dists, self.raceline = torch.from_numpy(pathdists).double().to(self.device), pathtorch 
-        print("Updated pure pursuit raceline.")
-    
+        self.get_logger().info("Updated pure pursuit raceline")
         return response
         
-    def imageCallback(self, img_msg : Image):
-        if img_msg.height<=0 or img_msg.width<=0:
-            return
-        imnp = self.cvbridge.imgmsg_to_cv2(img_msg, desired_encoding="rgb8") 
-        self.current_image = imnp.copy()
     def getTrajectory(self):
-        if (self.current_velocity.header.frame_id=="") or (self.current_pose_mat is None):
+        if (self.current_pose_mat is None):
             return super().getTrajectory()
         # if self.device == torch.device("cpu"):
         #     current_pose_mat = self.current_pose_mat.clone()

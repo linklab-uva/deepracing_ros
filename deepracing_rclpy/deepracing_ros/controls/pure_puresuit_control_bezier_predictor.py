@@ -114,32 +114,36 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
 
 
 
-        plot_param : Parameter = self.get_parameter_or("plot",Parameter("plot", value=False))
+        plot_param : Parameter = self.declare_parameter("plot", value=False)
         self.plot : bool = plot_param.get_parameter_value().bool_value
+        if(self.plot):
+            print("Publishing predicted bezier curves")
+        else:
+            print("Not publishing predicted bezier curves")
 
-        use_compressed_images_param : Parameter = self.get_parameter_or("use_compressed_images",Parameter("use_compressed_images", value=False))
+        use_compressed_images_param : Parameter = self.declare_parameter("use_compressed_images", value=False)
 
-        deltaT_param : Parameter = self.get_parameter_or("deltaT",Parameter("deltaT", value=1.54))
+        deltaT_param : Parameter = self.declare_parameter("deltaT", value=1.54)
         self.deltaT : float = deltaT_param.get_parameter_value().double_value
 
-        x_scale_factor_param : Parameter = self.get_parameter_or("x_scale_factor",Parameter("x_scale_factor", value=1.0))
+        x_scale_factor_param : Parameter = self.declare_parameter("x_scale_factor", value=1.0)
         self.xscale_factor : float = x_scale_factor_param.get_parameter_value().double_value
 
-        z_offset_param : Parameter = self.get_parameter_or("z_offset",Parameter("z_offset", value=self.L/2.0))
+        z_offset_param : Parameter = self.declare_parameter("z_offset", value=self.L/2.0)
         self.z_offset : float = z_offset_param.get_parameter_value().double_value
 
 
-        velocity_scale_param : Parameter = self.get_parameter_or("velocity_scale_factor",Parameter("velocity_scale_factor", value=1.0))
+        velocity_scale_param : Parameter = self.declare_parameter("velocity_scale_factor", value=1.0)
         self.velocity_scale_factor : float = velocity_scale_param.get_parameter_value().double_value
         
-        num_sample_points_param : Parameter = self.get_parameter_or("num_sample_points",Parameter("num_sample_points", value=60))
+        num_sample_points_param : Parameter = self.declare_parameter("num_sample_points", value=60)
         self.num_sample_points : int = num_sample_points_param.get_parameter_value().integer_value
 
         
-        crop_origin_param : Parameter = self.get_parameter_or("crop_origin",Parameter("crop_origin", value=[-1, -1]))
+        crop_origin_param : Parameter = self.declare_parameter("crop_origin", value=[-1, -1])
         self.crop_origin = list(crop_origin_param.get_parameter_value().integer_array_value)
 
-        crop_size_param : Parameter = self.get_parameter_or("crop_size",Parameter("crop_size", value=[-1, -1]))
+        crop_size_param : Parameter = self.declare_parameter("crop_size", value=[-1, -1])
         self.crop_size  = list(crop_size_param.get_parameter_value().integer_array_value)
 
 
@@ -208,7 +212,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
     # def imageCallback(self, img_msg : Image):
     #     self.addToBuffer(img_msg)
     def getTrajectory(self):
-        if self.current_velocity.header.frame_id == "":
+        if (self.boundary_check or self.plot) and (self.current_pose_mat is None):
             return super().getTrajectory()
         stamp = self.rosclock.now()
         imnp = np.array(self.image_buffer).astype(np.float64).copy()
