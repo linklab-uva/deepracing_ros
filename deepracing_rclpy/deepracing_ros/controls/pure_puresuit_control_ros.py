@@ -115,9 +115,6 @@ class PurePursuitControllerROS(Node):
         boundary_check_param : Parameter = self.declare_parameter("boundary_check",value=False)#, Parameter("boundary_check",value=False))
         self.boundary_check : bool = boundary_check_param.get_parameter_value().bool_value
 
-        latch_param : Parameter = self.declare_parameter("latch",value=False)
-        self.latch : bool = latch_param.get_parameter_value().bool_value
-
         
         if self.use_drs:
             print("Using DRS")
