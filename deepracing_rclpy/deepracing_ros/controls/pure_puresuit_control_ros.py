@@ -187,9 +187,9 @@ class PurePursuitControllerROS(Node):
         pinv[0:3,0:3] = p[0:3,0:3].transpose(0,1)
         pinv[0:3,3] = torch.matmul(pinv[0:3,0:3], -p[0:3,3])
         if self.pose_semaphore.acquire(timeout=1.0):
+            self.current_pose = pose_msg
             self.current_pose_inv_mat = pinv
             self.current_pose_mat = p
-            self.current_pose = pose_msg
             self.pose_semaphore.release()
         else:
             self.get_logger().error("Unable to acquire semaphore to setting the pose data")
@@ -221,6 +221,7 @@ class PurePursuitControllerROS(Node):
             self.get_logger().info("Sleeping because latching is enabled and state data not yet received")
             self.internal_rate.sleep()
         lookahead_positions, v_local_forward_, distances_forward_, = self.getTrajectory()
+        current_speed = deepcopy(self.current_speed)
         if self.latch:
             if self.pose_semaphore.acquire(timeout=1.0):
                 self.current_pose_mat = None
@@ -245,8 +246,8 @@ class PurePursuitControllerROS(Node):
             distances_forward = distances_forward_
 
         speeds = torch.norm(v_local_forward_, p=2, dim=1)
-        lookahead_distance = max(self.lookahead_gain*self.current_speed, 5.0)
-        lookahead_distance_vel = self.velocity_lookahead_gain*self.current_speed
+        lookahead_distance = max(self.lookahead_gain*current_speed, 5.0)
+        lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
 
         lookahead_index = torch.argmin(torch.abs(distances_forward-lookahead_distance))
         lookahead_index_vel = torch.argmin(torch.abs(distances_forward-lookahead_distance_vel))
@@ -267,7 +268,7 @@ class PurePursuitControllerROS(Node):
         self.velsetpoint = speeds[lookahead_index_vel].item()
         self.setpoint_publisher.publish(Float64(data=self.velsetpoint))
 
-        if self.current_speed<self.velsetpoint:
+        if current_speed<self.velsetpoint:
             if self.direct_vjoy:
                 self.controller.setControl(delta,1.0,0.0)
             else:
