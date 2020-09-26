@@ -217,29 +217,10 @@ class PurePursuitControllerROS(Node):
     def getTrajectory(self):
         return None, None, None
     def setControl(self):
-        while self.latch and ( (self.current_pose_mat is None) or (self.current_speed is None) ):# or (self.current_velocity.header.frame_id==""):
-            self.get_logger().debug("Sleeping because latching is enabled and state data not yet received")
-            self.internal_rate.sleep()
+        
         lookahead_positions, v_local_forward_, distances_forward_, = self.getTrajectory()
         current_speed = deepcopy(self.current_speed)
-        if self.latch:
-            if self.pose_semaphore.acquire(timeout=1.0):
-                self.current_pose_mat = None
-                self.pose_semaphore.release()
-            else:
-                self.get_logger().error("Unable to acquire semaphore to reset the pose data to None")
-            if self.velocity_semaphore.acquire(timeout=1.0):
-                self.speed = None
-                self.velocity_semaphore.release()
-            else:
-                self.get_logger().error("Unable to acquire semaphore to reset the velocity data to None")
-        if lookahead_positions is None:
-            self.get_logger().error("Setting all zeros because lookahead_positions is none")
-            if self.direct_vjoy:
-                self.controller.setControl(0.0,0.0,0.0)
-            else:
-                self.control_pub.publish(CarControl(steering=0.0, throttle=0.0, brake=0.0))
-            return
+        
         if distances_forward_ is None:
             distances_forward = la.norm(lookahead_positions, axis=1)
         else:
