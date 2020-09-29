@@ -55,7 +55,7 @@ namespace deepracing_ros
                                                "Russia", "Mexico", "Azerbaijan", "Bahrain_short", "Britan_short",
                                                "USA_short", "Japan_short"});
         }
-        static DEEPRACING_ROS_PUBLIC constexpr char* world_coordinate_name = "track";
+        static DEEPRACING_ROS_PUBLIC const std::string world_coordinate_name;
     private:
 
     };

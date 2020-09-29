@@ -199,11 +199,18 @@ int main(int argc, char** argv)
     {    
         search_dirs = deepracing_ros::FileUtils::split(f1_track_dirs_var);
     }
-    std::string thispackageprefix = ament_index_cpp::get_package_prefix("deepracing_rclcpp");
-    RCLCPP_INFO(node->get_logger(), "deepracing_rclcpp package prefix: %s.", thispackageprefix.c_str());
-    std::string prefix_search_dir = (fs::path(thispackageprefix)/fs::path("f1_tracks")).string();
-    RCLCPP_INFO(node->get_logger(), "prefix search dir: %s.", prefix_search_dir.c_str());
-    search_dirs.push_back(prefix_search_dir);
+    try
+    {
+        std::string f1_datalogger_share_dir = ament_index_cpp::get_package_share_directory("f1_datalogger");
+        RCLCPP_INFO(node->get_logger(), "f1_datalogger share directory: %s.", f1_datalogger_share_dir.c_str());
+        std::string prefix_search_dir = (fs::path(f1_datalogger_share_dir)/fs::path("f1_tracks")).string();
+        RCLCPP_INFO(node->get_logger(), "f1_datalogger share search directory: %s.", prefix_search_dir.c_str());
+        search_dirs.push_back(prefix_search_dir);
+    }
+    catch(const ament_index_cpp::PackageNotFoundError& e)
+    {   
+        RCLCPP_WARN(node->get_logger(), "f1_datalogger was built as plain cmake (not ament), cannot locate it's install directory with ament");
+    }
 //    // std::string track_dir = track_dir_param.get<std::string>();
     std::string track_name = "";
     std::array<std::string,25> track_name_array = deepracing_ros::F1MsgUtils::track_names();

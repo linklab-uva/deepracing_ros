@@ -48,6 +48,7 @@
 #include <exception>
 #include <algorithm>
 
+const std::string deepracing_ros::F1MsgUtils::world_coordinate_name("track");
 deepracing_msgs::msg::MarshalZone deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::MarshalZone& marshal_zone)
 {
   deepracing_msgs::msg::MarshalZone rtn;
