@@ -47,8 +47,6 @@
 #include <execution>
 #include <exception>
 #include <algorithm>
-#define BOOST_ENDIAN_DEPRECATED_NAMES
-#include <boost/endian/endian.hpp>
 
 deepracing_msgs::msg::MarshalZone deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::MarshalZone& marshal_zone)
 {

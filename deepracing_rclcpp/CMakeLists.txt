@@ -18,6 +18,7 @@ endif()
 # find dependencies
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)
@@ -37,20 +38,21 @@ find_package(tf2_ros REQUIRED)
 #Provides imported targets for f1_datalogger, armadillo, Boost, Eigen3, Opencv, and (on Windows) vJoy_plusplus
 find_package(f1_datalogger CONFIG REQUIRED)
 
-add_library(f1_msg_utils SHARED src/utils/f1_msg_utils.cpp)
-ament_target_dependencies(f1_msg_utils cv_bridge sensor_msgs std_msgs deepracing_msgs rclcpp rosidl_default_runtime)
-target_link_libraries(f1_msg_utils
+add_library(utils SHARED src/utils/f1_msg_utils.cpp src/utils/file_utils.cpp)
+ament_target_dependencies(utils cv_bridge sensor_msgs std_msgs deepracing_msgs rclcpp rosidl_default_runtime)
+target_link_libraries(utils
 f1_datalogger::headers
 f1_datalogger::f1_datalogger_proto
 Eigen3::Eigen
 )
+set_target_properties(utils PROPERTIES OUTPUT_NAME ${PROJECT_NAME}_utils)
 if(WIN32)
-  target_compile_definitions(f1_msg_utils 
+  target_compile_definitions(utils 
     PRIVATE "DEEPRACING_ROS_PUBLIC=__declspec(dllexport)"
     INTERFACE "DEEPRACING_ROS_PUBLIC=__declspec(dllimport)"
   )
 endif()
-target_include_directories(f1_msg_utils
+target_include_directories(utils
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
@@ -59,7 +61,7 @@ target_include_directories(f1_msg_utils
 add_executable(tf_updater src/tf_updater.cpp)
 ament_target_dependencies(tf_updater deepracing_msgs geometry_msgs rclcpp tf2 tf2_ros )
 target_link_libraries(tf_updater
- f1_msg_utils
+ utils
  Eigen3::Eigen
 )
 
@@ -67,12 +69,12 @@ add_executable(path_converter src/path_converter.cpp)
 ament_target_dependencies(path_converter rclcpp geometry_msgs nav_msgs deepracing_msgs)
 target_link_libraries(path_converter
  Eigen3::Eigen
- f1_msg_utils
+ utils
 )
 add_executable(extract_bezier_curves src/extract_bezier_curves.cpp)
 ament_target_dependencies(extract_bezier_curves rosbag2_cpp rosbag2_storage sensor_msgs std_msgs deepracing_msgs)
 target_link_libraries(extract_bezier_curves
- f1_msg_utils
+ utils
 )
 #target_include_directories(ros_rebroadcaster PRIVATE ${cv_bridge_INCLUDE_DIRS})
 
@@ -89,7 +91,7 @@ find_package(pcl_ros QUIET)
 
 if (pcl_ros_FOUND)
   add_executable(boundary_publisher src/boundary_publisher.cpp)
-  ament_target_dependencies(boundary_publisher deepracing_msgs rclcpp pcl_conversions pcl_msgs pcl_ros sensor_msgs std_msgs)
+  ament_target_dependencies(boundary_publisher ament_index_cpp deepracing_msgs rclcpp pcl_conversions pcl_msgs pcl_ros sensor_msgs std_msgs)
   target_include_directories(boundary_publisher
   PUBLIC
   ${PCL_COMMON_INCLUDE_DIRS}
@@ -104,7 +106,7 @@ if (pcl_ros_FOUND)
     ${PCL_KEYPOINTS_LIBRARIES}
     ${PCL_SURFACE_LIBRARIES}
     ${PCL_LIBRARIES}
-    f1_msg_utils
+    utils
     jsoncpp_lib
   )
   list(APPEND nodes_to_install_ boundary_publisher)
@@ -116,7 +118,7 @@ if(TARGET f1_datalogger::f1_datalogger)
   add_executable(ros_rebroadcaster src/ros_rebroadcaster.cpp)
   ament_target_dependencies(ros_rebroadcaster cv_bridge image_transport sensor_msgs std_msgs deepracing_msgs)
   target_link_libraries(ros_rebroadcaster
-  f1_msg_utils
+  utils
   f1_datalogger::f1_datalogger
   )
   list(APPEND nodes_to_install_ ros_rebroadcaster)
@@ -136,7 +138,7 @@ endif()
 install(TARGETS ${nodes_to_install_}
     DESTINATION lib/${PROJECT_NAME}
 )
-install(TARGETS f1_msg_utils
+install(TARGETS utils
     EXPORT ${PROJECT_NAME}
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib

@@ -16,6 +16,9 @@
 #include <deepracing_msgs/msg/boundary_line.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include "deepracing_ros/utils/f1_msg_utils.h"
+#include "deepracing_ros/utils/file_utils.h"
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <ament_index_cpp/get_package_prefix.hpp>
 
 Json::Value readJsonFile(std::shared_ptr<rclcpp::Node> node, std::string filepath)
 {
@@ -188,8 +191,20 @@ int main(int argc, char** argv)
     Json::Value innerDict, outerDict, racelineDict;
     geometry_msgs::msg::PoseArray innerPA, outerPA, racelinePA;
 
-    rclcpp::ParameterValue track_dir_param = node->declare_parameter("track_dir",rclcpp::ParameterValue(std::string(std::getenv("F1_TRACK_DIR"))));
-    std::string track_dir = track_dir_param.get<std::string>();
+    
+    std::vector<std::string> search_dirs;
+    const char* value = std::getenv("F1_TRACK_DIRS");
+    std::string f1_track_dirs_var = value ? std::string(value) : std::string("");
+    if (!f1_track_dirs_var.empty())
+    {    
+        search_dirs = deepracing_ros::FileUtils::split(f1_track_dirs_var);
+    }
+    std::string thispackageprefix = ament_index_cpp::get_package_prefix("deepracing_rclcpp");
+    RCLCPP_INFO(node->get_logger(), "deepracing_rclcpp package prefix: %s.", thispackageprefix.c_str());
+    std::string prefix_search_dir = (fs::path(thispackageprefix)/fs::path("f1_tracks")).string();
+    RCLCPP_INFO(node->get_logger(), "prefix search dir: %s.", prefix_search_dir.c_str());
+    search_dirs.push_back(prefix_search_dir);
+//    // std::string track_dir = track_dir_param.get<std::string>();
     std::string track_name = "";
     std::array<std::string,25> track_name_array = deepracing_ros::F1MsgUtils::track_names();
 
@@ -212,21 +227,21 @@ int main(int argc, char** argv)
             track_name = active_track;
             RCLCPP_INFO(node->get_logger(), "Detected new track  %s.", track_name.c_str());
 
-            std::string inner_filename = track_name + "_innerlimit.json";
-            RCLCPP_INFO(node->get_logger(), "Openning file %s in directory %s.", inner_filename.c_str(), track_dir.c_str());
-            innerDict = readJsonFile(node,(fs::path(track_dir) / fs::path(inner_filename)).string());
+            std::string inner_filename = deepracing_ros::FileUtils::findFile(track_name + "_innerlimit.json",search_dirs);
+            RCLCPP_INFO(node->get_logger(), "Openning file %s.", inner_filename.c_str());
+            innerDict = readJsonFile(node,inner_filename);
             unpackDictionary(node,innerDict, innercloudPCL, innerPA, -Eigen::Vector3d::UnitY());
             RCLCPP_INFO(node->get_logger(), "Got %d points for the inner boundary.", innercloudPCL.size());
 
-            std::string outer_filename = track_name + "_outerlimit.json";
-            RCLCPP_INFO(node->get_logger(), "Openning file %s in directory %s.", outer_filename.c_str(), track_dir.c_str());
-            outerDict = readJsonFile(node,(fs::path(track_dir) / fs::path(outer_filename)).string());
+            std::string outer_filename = deepracing_ros::FileUtils::findFile(track_name + "_outerlimit.json",search_dirs);
+            RCLCPP_INFO(node->get_logger(), "Openning file %s.", outer_filename.c_str());
+            outerDict = readJsonFile(node,outer_filename);
             unpackDictionary(node,outerDict,outercloudPCL,outerPA);
             RCLCPP_INFO(node->get_logger(), "Got %d points for the outer boundary.", outercloudPCL.size());
 
-            std::string raceline_filename = track_name + "_racingline.json";
-            RCLCPP_INFO(node->get_logger(), "Openning file %s in directory %s.", raceline_filename.c_str(), track_dir.c_str());
-            racelineDict = readJsonFile(node,(fs::path(track_dir) / fs::path(raceline_filename)).string());
+            std::string raceline_filename = deepracing_ros::FileUtils::findFile(track_name + "_racingline.json",search_dirs);
+            RCLCPP_INFO(node->get_logger(), "Openning file %s.", raceline_filename.c_str());
+            racelineDict = readJsonFile(node,raceline_filename);
             unpackDictionary(node,racelineDict,racelinecloudPCL,racelinePA);
             RCLCPP_INFO(node->get_logger(), "Got %d points for the optimal raceline.", racelinecloudPCL.size());
 
