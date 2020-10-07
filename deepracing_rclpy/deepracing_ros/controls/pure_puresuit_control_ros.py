@@ -212,14 +212,19 @@ class PurePursuitControllerROS(Node):
         
         lookahead_positions, v_local_forward_, distances_forward_, = self.getTrajectory()
         if lookahead_positions is None:
-            self.get_logger().error("Returning None becase lookahead_positions is None")
+            self.get_logger().error("Returning None because lookahead_positions is None")
             return None
             #return CarControl(steering=0.0, throttle=0.0, brake=0.0)
         if self.current_speed is None:
-            self.get_logger().error("Returning None becase self.current_speed is None")
+            self.get_logger().error("Returning None because self.current_speed is None")
             return None
             #return CarControl(steering=0.0, throttle=0.0, brake=0.0)
-        current_speed = deepcopy(self.current_speed)
+        if self.velocity_semaphore.acquire(timeout=1.0):
+            current_speed = deepcopy(self.current_speed)
+            self.velocity_semaphore.release()
+        else:
+            self.get_logger().error("Returning None because unable to acquire velocity semaphore")
+            return None
         
         if distances_forward_ is None:
             distances_forward = la.norm(lookahead_positions, axis=1)
@@ -246,7 +251,6 @@ class PurePursuitControllerROS(Node):
             delta = self.right_steer_factor*physical_angle + self.right_steer_offset
         self.velsetpoint = speeds[lookahead_index_vel].item()
         self.setpoint_publisher.publish(Float64(data=self.velsetpoint))
-
         if current_speed<self.velsetpoint:
             return CarControl(steering=delta, throttle=1.0, brake=0.0)
         else:
