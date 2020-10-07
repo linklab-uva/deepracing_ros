@@ -28,9 +28,10 @@ import deepracing_models.nn_models.Models
 from deepracing_msgs.msg import CarControl
 from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion, PoseArray, Twist, TwistStamped
 from sensor_msgs.msg import PointCloud2
+from rcl_interfaces.msg import ParameterDescriptor
 from scipy.spatial.transform import Rotation as Rot
 from std_msgs.msg import Float64
-import rclpy
+import rclpy, rclpy.subscription, rclpy.publisher
 from rclpy.node import Node
 from rclpy import Parameter
 from copy import deepcopy
@@ -41,7 +42,40 @@ from shapely.geometry.polygon import Polygon
 from shapely.geometry import LinearRing
 import timeit
 
+
 class PurePursuitControllerROS(Node):
+    """
+    A class used to represent a Pure Pursuit controller
+
+    ...
+
+    Attributes
+    ----------
+    pose_sub : rclpy.subscription.Subscription 
+        A subscription to listen for the current pose of the car in the global coordinate system,
+        converts received messages to a 4X4 pose matrix stored in self.current_pose_mat
+    velocity_sub : rclpy.subscription.Subscription
+        A subscription to listen for the current velocity of the car in the global coordinate system,
+        stores velocity messages in self.current_velocity and the length of the received velocity vector (speed)
+        into self.current_velocity
+    Methods
+    -------
+    poseCallback(pose_msg : PoseStamped)
+        callback method for pose_sub, do not call this directly. 
+    velocityCallback(velocity_msg : TwistStamped)
+        callback method for velocity_sub, do not call this directly. 
+    getTrajectory():
+        This is the core piece of this interface. Users should extend this class and overwrite getTrajectory to
+        return a trajectory for the car to follow given the controller's current state
+    getTrajectory():
+        This is the core piece of this interface. Users should extend this class and overwrite getTrajectory to
+        return a trajectory for the car to follow given the controller's current state
+    getControl():
+        Calls getTrajectory() and returns a deepracing_msgs/CarControl value based on that trajectory using the
+        Pure Pursuit Algorithm.  Uses bang/bang control for velocity control with a setpoint velocity set as
+        the smaller of the max_speed ros param or the largest speed possible that would not exceed the max_centripetal_acceleration
+        ros param at a point on the curve selected with the velocity_lookahead_gain ros param
+    """
     def __init__(self):
         super(PurePursuitControllerROS,self).__init__('pure_pursuit_control', allow_undeclared_parameters=False, automatically_declare_parameters_from_overrides=False)
        # self.get_logger().info("Hello Pure Pursuit!")
@@ -51,20 +85,9 @@ class PurePursuitControllerROS(Node):
         self.dt_publisher = self.create_publisher(Float64, "dt", 1)
         self.velsetpoint = 0.0
         self.throttle_out = 0.0
-        direct_vjoy_param : Parameter = self.declare_parameter("direct_vjoy", value=False)
-        self.direct_vjoy = direct_vjoy_param.get_parameter_value().bool_value
-        if self.direct_vjoy:
-            self.get_logger().info("Controlling the car directly with vjoy")
-            import py_f1_interface
-            self.controller = py_f1_interface.F1Interface(1)
-            self.controller.setControl(0.0,0.0,0.0)
-        else:
-            self.control_pub = self.create_publisher(CarControl, "/car_control", 1)
-            self.get_logger().info("publishing control commands to the %s topic" % (self.control_pub.topic,))
-       # self.control_pub = self.create_publisher(CarControl, "/car_control", 1)
 
-
-        gpu_param : Parameter = self.declare_parameter("gpu", value=0)#,Parameter("gpu", value=0))
+        gpu_param_descriptor = ParameterDescriptor(description="Which gpu to use for computation. Any negative number means use CPU")
+        gpu_param : Parameter = self.declare_parameter("gpu", value=0, descriptor=gpu_param_descriptor)
         self.gpu : int = gpu_param.get_parameter_value().integer_value
         if self.gpu>=0:
             self.device = torch.device("cuda:%d" % self.gpu)
@@ -80,39 +103,37 @@ class PurePursuitControllerROS(Node):
         self.max_centripetal_acceleration : float = max_centripetal_acceleration_param.get_parameter_value().double_value
 
         
-        L_param : Parameter = self.declare_parameter("wheelbase", value=3.5)#,Parameter("wheelbase", value=3.5))
-        self.L = float = L_param.get_parameter_value().double_value
-       # self.get_logger().info("wheelbase: " + str(L_param.get_parameter_value()))
+        L_param_descriptor = ParameterDescriptor(description="The wheelbase (distance between the axles in meters) of the vehicle being controlled")
+        L_param : Parameter = self.declare_parameter("wheelbase", value=3.5, descriptor=L_param_descriptor)
+        self.L : float = L_param.get_parameter_value().double_value
 
-        lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain",value=0.65)#, Parameter("lookahead_gain",value=0.25))
+        lookahead_gain_param_descriptor = ParameterDescriptor(description="Lookahead gain: linear factor multiplied by current speed to get the lookahead distance for selecting a lookahead point for steering control")
+        lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain",value=0.65, descriptor=lookahead_gain_param_descriptor)
         self.lookahead_gain : float = lookahead_gain_param.get_parameter_value().double_value
-       # self.get_logger().info("lookahead_gain: " + str(lookahead_gain_param.get_parameter_value()))
 
-        velocity_lookahead_gain_param : Parameter = self.declare_parameter("velocity_lookahead_gain",value=0.65)#, Parameter("velocity_lookahead_gain",value=0.25))
+        velocity_lookahead_gain_param_descriptor = ParameterDescriptor(description="Velocity Lookahead gain: linear factor multiplied by current speed to get the lookahead distance for selecting a lookahead point for velocity control")
+        velocity_lookahead_gain_param : Parameter = self.declare_parameter("velocity_lookahead_gain",value=0.65, descriptor=velocity_lookahead_gain_param_descriptor)
         self.velocity_lookahead_gain : float = velocity_lookahead_gain_param.get_parameter_value().double_value
-        #self.get_logger().info("velocity_lookahead_gain: " + str(velocity_lookahead_gain_param.get_parameter_value()))
         
-        left_steer_factor_param : Parameter = self.declare_parameter("left_steer_factor",value=3.39814)#, Parameter("left_steer_factor",value=3.39814))
+        left_steer_factor_param : Parameter = self.declare_parameter("left_steer_factor",value=3.39814)
         self.left_steer_factor : float = left_steer_factor_param.get_parameter_value().double_value
-       # print("left_steer_factor: " +  str(self.left_steer_factor))
         
-        left_steer_offset_param : Parameter = self.declare_parameter("left_steer_offset",value=0.0)#, Parameter("left_steer_offset",value=0.0))
+        left_steer_offset_param : Parameter = self.declare_parameter("left_steer_offset",value=0.0)
         self.left_steer_offset : float = left_steer_offset_param.get_parameter_value().double_value
         
-        right_steer_factor_param : Parameter = self.declare_parameter("right_steer_factor",value=3.72814)#, Parameter("right_steer_factor",value=3.72814))
+        right_steer_factor_param : Parameter = self.declare_parameter("right_steer_factor",value=3.72814)
         self.right_steer_factor : float = right_steer_factor_param.get_parameter_value().double_value
-        #print("right_steer_factor: " + str(self.right_steer_factor))
         
-        right_steer_offset_param : Parameter = self.declare_parameter("right_steer_offset",value=0.0)#, Parameter("right_steer_offset",value=0.0))
+        right_steer_offset_param : Parameter = self.declare_parameter("right_steer_offset",value=0.0)
         self.right_steer_offset : float = right_steer_offset_param.get_parameter_value().double_value
 
-        sleeptime_param : Parameter = self.declare_parameter("sleeptime", value=0.0)#, Parameter("boundary_check",value=False))
+        sleeptime_param : Parameter = self.declare_parameter("sleeptime", value=0.0)
         self.sleeptime : float = sleeptime_param.get_parameter_value().double_value
         
-        use_drs_param : Parameter = self.declare_parameter("use_drs",value=False)#, Parameter("use_drs",value=False))
+        use_drs_param : Parameter = self.declare_parameter("use_drs",value=False)
         self.use_drs : bool = use_drs_param.get_parameter_value().bool_value
 
-        boundary_check_param : Parameter = self.declare_parameter("boundary_check",value=False)#, Parameter("boundary_check",value=False))
+        boundary_check_param : Parameter = self.declare_parameter("boundary_check",value=False)
         self.boundary_check : bool = boundary_check_param.get_parameter_value().bool_value
 
         
@@ -145,33 +166,14 @@ class PurePursuitControllerROS(Node):
         self.current_pose_inv_mat = None
         self.current_velocity : TwistStamped = TwistStamped()
         self.current_speed = None
-        self.control_thread = threading.Thread(target=self.lateralControl)
         self.pose_semaphore = threading.Semaphore()
         self.velocity_semaphore = threading.Semaphore()
         self.internal_rate = self.create_rate(60.0)
 
     def initSubscriptions(self):
-        update_qos = rclpy.qos.QoSProfile(depth=4)
-        self.pose_sub = self.create_subscription(PoseStamped, '/simulator/pose', self.poseCallback, update_qos)
-        self.velocity_sub = self.create_subscription(TwistStamped,'/simulator/twist',self.velocityCallback, update_qos)
-        if self.boundary_check:
-            self.inner_boundary_sub = self.create_subscription(
-                PointCloud2,
-                '/inner_track_boundary/pcl',
-                self.innerBoundaryCB,
-                1)
-            self.outer_boundary_sub = self.create_subscription(
-                PointCloud2,
-                '/outer_track_boundary/pcl',
-                self.outerBoundaryCB,
-                1)
-
-        
-    def innerBoundaryCB(self, boundary_msg: PointCloud2 ):
-        pass
-            
-    def outerBoundaryCB(self, boundary_msg: PointCloud2 ):
-        pass
+        update_qos = rclpy.qos.QoSProfile(depth=1)
+        self.pose_sub : rclpy.subscription.Subscription = self.create_subscription(PoseStamped, 'car_pose', self.poseCallback, update_qos)
+        self.velocity_sub : rclpy.subscription.Subscription = self.create_subscription(TwistStamped,'car_velocity',self.velocityCallback, update_qos)
 
     def poseCallback(self, pose_msg : PoseStamped):
         self.get_logger().debug("Got a new pose: " + str(pose_msg))
@@ -195,33 +197,28 @@ class PurePursuitControllerROS(Node):
         self.get_logger().debug("Got a new velocity: " + str(velocity_msg))
         linearvel = velocity_msg.twist.linear
         vel = np.array( (linearvel.x, linearvel.y, linearvel.z), dtype=np.float64)
-        speed = la.norm(vel)
         if self.velocity_semaphore.acquire(timeout=1.0):
             self.current_velocity = deepcopy(velocity_msg)
-            self.current_speed =  speed
+            self.current_speed = la.norm(vel)
             self.velocity_semaphore.release()
         else:
             self.get_logger().error("Unable to acquire semaphore to setting the velocity data")
         
-        
-        
-    def start(self):
-        self.control_thread.start()
-    def stop(self):
-        self.running = False
-        time.sleep(0.5)
 
     def getTrajectory(self):
         return None, None, None
+    
     def getControl(self) -> CarControl:
         
         lookahead_positions, v_local_forward_, distances_forward_, = self.getTrajectory()
         if lookahead_positions is None:
-            self.get_logger().error("Returning all zeros becase lookahead_positions is None")
-            return CarControl(steering=0.0, throttle=0.0, brake=0.0)
+            self.get_logger().error("Returning None becase lookahead_positions is None")
+            return None
+            #return CarControl(steering=0.0, throttle=0.0, brake=0.0)
         if self.current_speed is None:
-            self.get_logger().error("Returning all zeros becase self.current_speed is None")
-            return CarControl(steering=0.0, throttle=0.0, brake=0.0)
+            self.get_logger().error("Returning None becase self.current_speed is None")
+            return None
+            #return CarControl(steering=0.0, throttle=0.0, brake=0.0)
         current_speed = deepcopy(self.current_speed)
         
         if distances_forward_ is None:
@@ -254,7 +251,3 @@ class PurePursuitControllerROS(Node):
             return CarControl(steering=delta, throttle=1.0, brake=0.0)
         else:
             return CarControl(steering=delta, throttle=0.0, brake=1.0)
-
-    def lateralControl(self):
-        while self.running:
-            self.setControl()

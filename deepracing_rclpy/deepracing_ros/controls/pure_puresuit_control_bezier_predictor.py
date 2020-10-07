@@ -155,13 +155,13 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         self.get_logger().info('Loading model file: %s' % (model_file) )
         self.net.load_state_dict(torch.load(model_file,map_location=torch.device("cpu")))
         self.get_logger().info('Loaded model file: %s' % (model_file) )
-        self.get_logger().info('Moving model params to GPU %d' % (self.gpu,))
+        self.get_logger().info('Moving model params to device %s' % (str(self.device),))
         self.net = self.net.to(self.device)
         self.net = self.net.eval()
         self.ib_viol_counter=1
         self.ob_viol_counter=1
 
-        self.get_logger().info('Moved model params to GPU %d' % (self.gpu,))
+        self.get_logger().info('Moved model params to device %s' % (str(self.device),))
         self.image_buffer = RB(self.net.context_length,dtype=(float,(3,66,200)))
         self.s_np = np.linspace(0,1,self.num_sample_points)
         self.s_torch = torch.from_numpy(self.s_np.copy()).unsqueeze(0).double().to(self.device)
@@ -171,9 +171,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         self.bezierM2ndderiv = mu.bezierM(self.s_torch,self.bezier_order-2)
         self.buffertimer = timeit.Timer(stmt=self.addToBuffer)
         if self.fix_first_point:
-            self.initial_zeros = torch.zeros(1,1,2).double()
-            if self.gpu>=0:
-                self.initial_zeros = self.initial_zeros.to(self.device) 
+            self.initial_zeros = torch.zeros(1,1,2, device=self.device, dtype=torch.float64)
         self.bezierM.requires_grad = False
       #  self.bezierMderiv.requires_grad = False
         self.bezierM2ndderiv.requires_grad = False

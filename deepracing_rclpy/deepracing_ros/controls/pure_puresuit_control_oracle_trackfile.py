@@ -84,7 +84,6 @@ class OraclePurePursuitControllerROS(PPC):
             self.raceline_dists = torch.from_numpy(racelinedistsnp).double().to(self.device)
         else:
             raise ValueError("Only .json and .csv extensions are supported")
-        self.kdtree = KDTree(racelinenp)
         self.raceline = torch.stack( [ torch.from_numpy(racelinenp[:,0]),\
                                      torch.from_numpy(racelinenp[:,1]),\
                                      torch.from_numpy(racelinenp[:,2]),\
@@ -175,7 +174,6 @@ class OraclePurePursuitControllerROS(PPC):
         raceline_local = torch.matmul(current_pose_inv,self.raceline)
         
         I1 = torch.argmin(torch.norm(raceline_local[0:3],p=2,dim=0)).item()
-        #(d, I1) = self.kdtree.query(np.array([self.current_pose.pose.position.x, self.current_pose.pose.position.y, self.current_pose.pose.position.z], dtype=np.float64))
 
         I2 = I1 + self.forward_indices
 
