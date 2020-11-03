@@ -23,7 +23,6 @@ find_package(cv_bridge REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)
 find_package(image_transport REQUIRED)
-find_package(jsoncpp CONFIG REQUIRED)
 find_package(laser_geometry REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
@@ -71,25 +70,19 @@ target_link_libraries(path_converter
  Eigen3::Eigen
  utils
 )
-add_executable(extract_bezier_curves src/extract_bezier_curves.cpp)
-ament_target_dependencies(extract_bezier_curves rosbag2_cpp rosbag2_storage sensor_msgs std_msgs deepracing_msgs)
-target_link_libraries(extract_bezier_curves
- utils
-)
-#target_include_directories(ros_rebroadcaster PRIVATE ${cv_bridge_INCLUDE_DIRS})
 
 set(nodes_to_install_
   tf_updater
   path_converter
-  extract_bezier_curves
 )
 
 
 find_package(PCL CONFIG QUIET COMPONENTS common core features geometry filters io keypoints segmentation surface)
 find_package(pcl_conversions QUIET)
 find_package(pcl_ros QUIET)
+find_package(jsoncpp CONFIG QUIET)
 
-if (pcl_ros_FOUND)
+if (pcl_ros_FOUND AND jsoncpp_FOUND)
   add_executable(boundary_publisher src/boundary_publisher.cpp)
   ament_target_dependencies(boundary_publisher ament_index_cpp deepracing_msgs rclcpp pcl_conversions pcl_msgs pcl_ros sensor_msgs std_msgs)
   target_include_directories(boundary_publisher
