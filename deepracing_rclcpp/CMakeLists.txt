@@ -45,17 +45,12 @@ f1_datalogger::f1_datalogger_proto
 Eigen3::Eigen
 )
 set_target_properties(utils PROPERTIES OUTPUT_NAME ${PROJECT_NAME}_utils)
-if(WIN32)
-  target_compile_definitions(utils 
-    PRIVATE "DEEPRACING_ROS_PUBLIC=__declspec(dllexport)"
-    INTERFACE "DEEPRACING_ROS_PUBLIC=__declspec(dllimport)"
-  )
-endif()
 target_include_directories(utils
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+target_compile_definitions(utils PRIVATE "DEEPRACING_RCLCPP_BUILDING_LIBRARY")
 
 add_executable(tf_updater src/tf_updater.cpp)
 ament_target_dependencies(tf_updater deepracing_msgs geometry_msgs rclcpp tf2 tf2_ros )
