@@ -15,7 +15,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from deepracing_msgs.msg import TimestampedPacketMotionData, CarMotionData
+from deepracing_msgs.msg import TimestampedPacketMotionData, CarMotionData, CarControl
 from geometry_msgs.msg import PoseStamped, Pose
 from geometry_msgs.msg import PointStamped, Point
 import numpy as np
@@ -28,18 +28,21 @@ from rclpy.executors import MultiThreadedExecutor
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
-    spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor(5))
+    spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor(3))
     node = OraclePurePursuitControllerROS()
+    control_pub = node.create_publisher(CarControl, "/car_control", 1)
     spinner.addNode(node)
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
-    node.start()
     spinner.spin()
-    rate : rclpy.timer.Rate = node.create_rate(1.0)
+    rate : rclpy.timer.Rate = node.create_rate(60.0)
     try:
         while rclpy.ok():
             rate.sleep()
+            control : CarControl = node.getControl()
+            if control is not None:
+                control_pub.publish(control)
     except KeyboardInterrupt:
-        node.stop()
+        pass
     spinner.shutdown()
     rclpy.shutdown()
     
