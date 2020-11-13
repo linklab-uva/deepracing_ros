@@ -22,7 +22,9 @@ from geometry_msgs.msg import PointStamped, Point
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 from deepracing_ros.controls.pilotnet_ros import PilotNetROS
-import py_f1_interface
+import rpyutils
+with rpyutils.add_dll_directories_from_env("PATH"):
+    import py_f1_interface
 class VJoyControl(Node):
     def __init__(self,):
         super(VJoyControl,self).__init__('vjoy_control')

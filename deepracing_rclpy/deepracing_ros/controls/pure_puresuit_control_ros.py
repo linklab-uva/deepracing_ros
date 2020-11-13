@@ -210,16 +210,18 @@ class PurePursuitControllerROS(Node):
     
     def getControl(self) -> CarControl:
         
-        lookahead_positions, v_local_forward_, distances_forward_, = self.getTrajectory()
+        lookahead_positions, v_local_forward, distances_forward_ = self.getTrajectory()
         if lookahead_positions is None:
             self.get_logger().error("Returning None because lookahead_positions is None")
             return None
-            #return CarControl(steering=0.0, throttle=0.0, brake=0.0)
-        if self.current_speed is None:
-            self.get_logger().error("Returning None because self.current_speed is None")
+        if v_local_forward is None:
+            self.get_logger().error("Returning None because v_local_forward is None")
             return None
-            #return CarControl(steering=0.0, throttle=0.0, brake=0.0)
         if self.velocity_semaphore.acquire(timeout=1.0):
+            if self.current_speed is None:
+                self.get_logger().error("Returning None because self.current_speed is None")
+                self.velocity_semaphore.release()
+                return None
             current_speed = deepcopy(self.current_speed)
             self.velocity_semaphore.release()
         else:
@@ -231,7 +233,7 @@ class PurePursuitControllerROS(Node):
         else:
             distances_forward = distances_forward_
 
-        speeds = torch.norm(v_local_forward_, p=2, dim=1)
+        speeds = torch.norm(v_local_forward, p=2, dim=1)
         lookahead_distance = max(self.lookahead_gain*current_speed, 5.0)
         lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
 

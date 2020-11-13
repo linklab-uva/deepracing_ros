@@ -17,7 +17,9 @@ import torch.utils.data as data_utils
 import deepracing.imutils
 import scipy
 import scipy.interpolate
-import py_f1_interface
+import rpyutils
+with rpyutils.add_dll_directories_from_env("PATH"):
+    import py_f1_interface
 import deepracing.pose_utils
 import deepracing
 import threading

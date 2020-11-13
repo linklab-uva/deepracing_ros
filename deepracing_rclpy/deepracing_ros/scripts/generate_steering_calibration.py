@@ -2,7 +2,9 @@ import rclpy
 from rclpy.node import Node
 from deepracing_msgs.msg import PacketHeader
 from deepracing_msgs.msg import TimestampedPacketMotionData, PacketMotionData, CarMotionData
-import py_f1_interface
+import rpyutils
+with rpyutils.add_dll_directories_from_env("PATH"):
+    import py_f1_interface
 import numpy as np
 import scipy, scipy.stats
 class SteeringCalibrationNode(Node):
