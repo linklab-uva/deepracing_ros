@@ -74,8 +74,9 @@ class OraclePurePursuitControllerROS(PPC):
         self.raceline = raceline.to(self.device)
         self.racelinetimes = racelinetimes.to(torch.device("cpu"))
         self.racelinedists = racelinedists.to(self.device)
-        self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(self.racelinetimes.cpu().numpy(),self.raceline[0:3].cpu().numpy().transpose(), bc_type="natural")
-        self.racelinesplineder : scipy.interpolate.BSpline = self.racelinespline.derivative()
+        self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(self.racelinetimes.numpy(),self.raceline[0:3].cpu().numpy().transpose(), bc_type="natural")
+        self.racelinesplineder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=1)
+        self.racelinespline2ndder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=2)
 
 
         plot_param : Parameter = self.declare_parameter("plot", value=False)#,Parameter("plot", value=False))
@@ -171,15 +172,18 @@ class OraclePurePursuitControllerROS(PPC):
         positions_global = torch.from_numpy(self.racelinespline(tsamp%self.racelinetimes[-1].item())).transpose(0,1).to(self.device)
         positions_global_aug = torch.cat([positions_global,torch.ones_like(positions_global[0]).unsqueeze(0)],dim=0)
         velocities_global = torch.from_numpy(self.racelinesplineder(tsamp%self.racelinetimes[-1].item())).transpose(0,1).to(self.device)
+        accelerations_global = torch.from_numpy(self.racelinespline2ndder(tsamp%self.racelinetimes[-1].item())).transpose(0,1).to(self.device)
 
         positions = torch.matmul( current_pose_inv, positions_global_aug)
         velocities = torch.matmul( current_pose_inv[0:3,0:3], velocities_global)
+        accelerations = torch.matmul( current_pose_inv[0:3,0:3], accelerations_global)
 
 
 
 
         pos = positions[0:3].transpose(0,1)
         vel = velocities.transpose(0,1)
+        accel = accelerations.transpose(0,1)
         diffs = pos[1:] - pos[:-1]
      #   print(diffs.shape)
         diffnorms = torch.norm(diffs, p=2, dim=1)
@@ -190,7 +194,7 @@ class OraclePurePursuitControllerROS(PPC):
 
         
         
-        return pos, vel, distances_forward
+        return pos, vel, accel, distances_forward
 
 
 

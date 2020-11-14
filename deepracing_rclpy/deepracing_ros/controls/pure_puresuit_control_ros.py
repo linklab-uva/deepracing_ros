@@ -213,16 +213,19 @@ class PurePursuitControllerROS(Node):
         
 
     def getTrajectory(self):
-        return None, None, None
+        return None, None, None, None
     
     def getControl(self) -> CarControl:
         
-        lookahead_positions, v_local_forward, distances_forward_ = self.getTrajectory()
+        lookahead_positions, v_local_forward, accel_local_forward, distances_forward_ = self.getTrajectory()
         if lookahead_positions is None:
             self.get_logger().error("Returning None because lookahead_positions is None")
             return None
         if v_local_forward is None:
             self.get_logger().error("Returning None because v_local_forward is None")
+            return None
+        if accel_local_forward is None:
+            self.get_logger().error("Returning None because accel_local_forward is None")
             return None
         if self.velocity_semaphore.acquire(timeout=1.0):
             if self.current_speed is None:
@@ -258,6 +261,14 @@ class PurePursuitControllerROS(Node):
             delta = self.left_steer_factor*physical_angle + self.left_steer_offset
         else:
             delta = self.right_steer_factor*physical_angle + self.right_steer_offset
+       # accelnorms = torch.norm(accel_local_forward, p=2, dim=1)
+        # throttle = torch.dot(v_local_forward[0], accel_local_forward[0]).item()
+        # #throttle = 1.0*np.sign(accelnorms[0].item())
+        # if(throttle>0.0):
+        #     return CarControl(steering=delta, throttle=1.0, brake=0.0)
+        # else:
+        #     return CarControl(steering=delta, throttle=0.0, brake=1.0)
+        
         self.velsetpoint = speeds[lookahead_index_vel].item()
         self.setpoint_publisher.publish(Float64(data=self.velsetpoint))
         if current_speed<self.velsetpoint:
