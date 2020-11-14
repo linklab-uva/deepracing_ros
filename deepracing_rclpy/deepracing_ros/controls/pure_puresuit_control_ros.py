@@ -135,6 +135,13 @@ class PurePursuitControllerROS(Node):
 
         boundary_check_param : Parameter = self.declare_parameter("boundary_check",value=False)
         self.boundary_check : bool = boundary_check_param.get_parameter_value().bool_value
+        
+        forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
+        self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
+
+        
+        lateral_dimension_param : Parameter = self.declare_parameter("lateral_dimension", value=0)
+        self.lateral_dimension : int = lateral_dimension_param.get_parameter_value().integer_value
 
         
         if self.use_drs:
@@ -245,7 +252,7 @@ class PurePursuitControllerROS(Node):
 
         D = torch.norm(lookaheadVector, p=2)
         lookaheadDirection = lookaheadVector/D
-        alpha = torch.atan2(lookaheadDirection[0],lookaheadDirection[1])
+        alpha = torch.atan2(lookaheadDirection[self.lateral_dimension],lookaheadDirection[self.forward_dimension])
         physical_angle = (torch.atan((2 * self.L*torch.sin(alpha)) / D)).item()
         if (physical_angle > 0) :
             delta = self.left_steer_factor*physical_angle + self.left_steer_offset
