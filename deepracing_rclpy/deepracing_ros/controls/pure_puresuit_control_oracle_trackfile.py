@@ -185,9 +185,7 @@ class OraclePurePursuitControllerROS(PPC):
         vel = velocities.transpose(0,1)
         accel = accelerations.transpose(0,1)
         diffs = pos[1:] - pos[:-1]
-     #   print(diffs.shape)
         diffnorms = torch.norm(diffs, p=2, dim=1)
-       # print(diffnorms.shape)
         distances_forward = torch.zeros_like(pos[:,0])
         distances_forward[1:] = torch.cumsum(diffnorms,0)
 
