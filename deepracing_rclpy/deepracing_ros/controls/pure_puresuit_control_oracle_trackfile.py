@@ -50,6 +50,7 @@ import torch
 from deepracing_msgs.srv import SetPurePursuitPath
 import deepracing_ros.convert as c
 import deepracing.raceline_utils as raceline_utils
+import pickle as pkl
 
 class OraclePurePursuitControllerROS(PPC):
     def __init__(self):
@@ -67,14 +68,18 @@ class OraclePurePursuitControllerROS(PPC):
             self.raceline_file = deepracing.searchForFile(raceline_file,envsearchdirs)
         if self.raceline_file is None:
             raise ValueError("\"raceline_file\" parameter must either be an absolute path or in a directory contained in an environment variable F1_TRACK_DIRS")
-        racelinefile_ext = os.path.splitext(os.path.basename(self.raceline_file))[1].lower()
+        racelinefile_base, racelinefile_ext = os.path.splitext(os.path.basename(self.raceline_file))
         
         racelinetimes, racelinedists, raceline = raceline_utils.loadRaceline(self.raceline_file)
+        bc_type=([(3, np.zeros(3))], [(3, np.zeros(3))])
+        #bc_type="natural"
+        #bc_type=None
 
         self.raceline = raceline.to(self.device)
         self.racelinetimes = racelinetimes.to(torch.device("cpu"))
         self.racelinedists = racelinedists.to(self.device)
-        self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(self.racelinetimes.numpy(),self.raceline[0:3].cpu().numpy().transpose(), bc_type="natural")
+        self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(self.racelinetimes.numpy(),self.raceline[0:3].cpu().numpy().transpose(), bc_type=bc_type)
+        
         self.racelinesplineder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=1)
         self.racelinespline2ndder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=2)
 
@@ -168,11 +173,12 @@ class OraclePurePursuitControllerROS(PPC):
         t1 = t0 + self.dt
 
         tsamp = np.linspace(t0,t1,self.sample_indices)
+        tmax = self.racelinetimes[-1].item()# + 0.5
 
-        positions_global = torch.from_numpy(self.racelinespline(tsamp%self.racelinetimes[-1].item())).transpose(0,1).to(self.device)
+        positions_global = torch.from_numpy(self.racelinespline(tsamp%tmax)).transpose(0,1).to(self.device)
         positions_global_aug = torch.cat([positions_global,torch.ones_like(positions_global[0]).unsqueeze(0)],dim=0)
-        velocities_global = torch.from_numpy(self.racelinesplineder(tsamp%self.racelinetimes[-1].item())).transpose(0,1).to(self.device)
-        accelerations_global = torch.from_numpy(self.racelinespline2ndder(tsamp%self.racelinetimes[-1].item())).transpose(0,1).to(self.device)
+        velocities_global = torch.from_numpy(self.racelinesplineder(tsamp%tmax)).transpose(0,1).to(self.device)
+        accelerations_global = torch.from_numpy(self.racelinespline2ndder(tsamp%tmax)).transpose(0,1).to(self.device)
 
         positions = torch.matmul( current_pose_inv, positions_global_aug)
         velocities = torch.matmul( current_pose_inv[0:3,0:3], velocities_global)
