@@ -43,7 +43,7 @@ def main(args=None):
                 control_pub.publish(cc)
             rate.sleep()
     except KeyboardInterrupt:
-        node.stop()
+        pass
     node.destroy_node()
     rclpy.shutdown()
     
