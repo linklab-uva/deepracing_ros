@@ -20,23 +20,16 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <ament_index_cpp/get_package_prefix.hpp>
 
-Json::Value readJsonFile(std::shared_ptr<rclcpp::Node> node, std::string filepath)
+Json::Value readRacelineFile(std::shared_ptr<rclcpp::Node> node, std::string filepath)
 {
     Json::Value rootval;
     std::ifstream file;
-    file.open(filepath);
-    RCLCPP_INFO(node->get_logger(), "Reading json");
-    std::string json;
-    file.seekg(0, std::ios::end);   
-    json.reserve(file.tellg());
-    file.seekg(0, std::ios::beg);
-
-    json.assign((std::istreambuf_iterator<char>(file)),std::istreambuf_iterator<char>());
-    file.close();
-
+    file.open(filepath, std::fstream::in);
     RCLCPP_INFO(node->get_logger(), "Parsing json");
     Json::Reader reader;
-    if(reader.parse(json,rootval))
+    bool parsed = reader.parse(file,rootval);
+    file.close();
+    if(parsed)
     {
         RCLCPP_INFO(node->get_logger(), "Parsed json");
     }
@@ -47,54 +40,71 @@ Json::Value readJsonFile(std::shared_ptr<rclcpp::Node> node, std::string filepat
     Json::Value xarray = rootval["x"];
     if(  xarray.isNull() )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"x\" key found in the json dictionary");
+        RCLCPP_FATAL(node->get_logger(), "no \"x\" key found in the json dictionary for a raceline file");
     }
     Json::Value yarray = rootval["y"];
     if(  yarray.isNull() )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"y\" key found in the json dictionary");
+        RCLCPP_FATAL(node->get_logger(), "no \"y\" key found in the json dictionary for a raceline file");
     }
     Json::Value zarray = rootval["z"];
     if(  zarray.isNull() )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"z\" key found in the json dictionary");
+        RCLCPP_FATAL(node->get_logger(), "no \"z\" key found in the json dictionary for a raceline file");
     }
-    Json::Value boundary_xtangent = rootval["x_tangent"];Json::Value boundary_ytangent = rootval["y_tangent"];Json::Value boundary_ztangent = rootval["z_tangent"];
-    Json::Value boundary_xnormal = rootval["x_normal"];Json::Value boundary_ynormal = rootval["y_normal"];Json::Value boundary_znormal = rootval["z_normal"];
-    Json::Value boundary_dist = rootval["dist"];
-    if(  boundary_xtangent.isNull() )
+    Json::Value tarray = rootval["t"];
+    if(  tarray.isNull() )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"x_tangent\" key found in the json dictionary");
-    }
-    if(  boundary_ytangent.isNull() )
+        RCLCPP_FATAL(node->get_logger(), "no \"t\" key found in the json dictionary for a raceline file");
+    }   
+    std::array<uint32_t,4> sizes = {(uint32_t)xarray.size(), (uint32_t)yarray.size(), (uint32_t)zarray.size(),(uint32_t)tarray.size()};
+    if ( !std::all_of(sizes.begin(), sizes.end(), [xarray](uint32_t i){return i==xarray.size();}) )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"y_tangent\" key found in the json dictionary");
+       std::stringstream ss;
+       std::for_each(sizes.begin(), sizes.end(), [&ss](uint32_t i){ss<<i<<std::endl;});
+       RCLCPP_FATAL(node->get_logger(), "All arrays are not the same size. Sizes: %s", ss.str().c_str()); 
     }
-    if(  boundary_ztangent.isNull() )
+    return rootval;
+}
+Json::Value readBoundaryFile(std::shared_ptr<rclcpp::Node> node, std::string filepath)
+{
+    Json::Value rootval;
+    std::ifstream file;
+    file.open(filepath, std::fstream::in);
+    RCLCPP_INFO(node->get_logger(), "Parsing json");
+    Json::Reader reader;
+    bool parsed = reader.parse(file,rootval);
+    file.close();
+    if(parsed)
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"z_tangent\" key found in the json dictionary");
+        RCLCPP_INFO(node->get_logger(), "Parsed json");
     }
-    if(  boundary_xnormal.isNull() )
+    else
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"x_normal\" key found in the json dictionary");
+        RCLCPP_FATAL(node->get_logger(), "Failed to parse json");
     }
-    if(  boundary_ynormal.isNull() )
+    Json::Value xarray = rootval["x"];
+    if(  xarray.isNull() )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"y_normal\" key found in the json dictionary");
+        RCLCPP_FATAL(node->get_logger(), "no \"x\" key found in the json dictionary for a boundary file");
     }
-    if(  boundary_znormal.isNull() )
+    Json::Value yarray = rootval["y"];
+    if(  yarray.isNull() )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"z_normal\" key found in the json dictionary");
+        RCLCPP_FATAL(node->get_logger(), "no \"y\" key found in the json dictionary for a boundary file");
     }
-    if(  boundary_dist.isNull() )
+    Json::Value zarray = rootval["z"];
+    if(  zarray.isNull() )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"dist\" key found in the json dictionary");
+        RCLCPP_FATAL(node->get_logger(), "no \"z\" key found in the json dictionary for a boundary file");
     }
-    
-    std::array<uint32_t,10> sizes = {(uint32_t)xarray.size(), (uint32_t)yarray.size(), (uint32_t)zarray.size(),
-                                    (uint32_t)xarray.size(), (uint32_t)yarray.size(), (uint32_t)zarray.size(),
-                                    (uint32_t)xarray.size(), (uint32_t)yarray.size(), (uint32_t)zarray.size(), (uint32_t)boundary_dist.size()};
-    if (! std::all_of(sizes.begin(), sizes.end(), [xarray](uint32_t i){return i==xarray.size();}) )
+    Json::Value rarray = rootval["r"];
+    if(  rarray.isNull() )
+    {
+        RCLCPP_FATAL(node->get_logger(), "no \"r\" key found in the json dictionary for a boundary file");
+    }   
+    std::array<uint32_t,4> sizes = {(uint32_t)xarray.size(), (uint32_t)yarray.size(), (uint32_t)zarray.size(),(uint32_t)rarray.size()};
+    if ( !std::all_of(sizes.begin(), sizes.end(), [xarray](uint32_t i){return i==xarray.size();}) )
     {
        std::stringstream ss;
        std::for_each(sizes.begin(), sizes.end(), [&ss](uint32_t i){ss<<i<<std::endl;});
@@ -103,45 +113,15 @@ Json::Value readJsonFile(std::shared_ptr<rclcpp::Node> node, std::string filepat
     return rootval;
 }
 
-void unpackDictionary(std::shared_ptr<rclcpp::Node> node, const Json::Value& boundary_dict, pcl::PointCloud<pcl::PointXYZINormal>& cloudpcl, geometry_msgs::msg::PoseArray& pose_array, Eigen::Vector3d ref = Eigen::Vector3d::UnitY() )
+void unpackDictionary(std::shared_ptr<rclcpp::Node> node, const Json::Value& boundary_dict, pcl::PointCloud<pcl::PointXYZI>& cloudpcl, std::string ikey )
 {
-    Json::Value boundary_x = boundary_dict["x"];Json::Value boundary_y = boundary_dict["y"];Json::Value boundary_z = boundary_dict["z"];
-    Json::Value boundary_xtangent = boundary_dict["x_tangent"];Json::Value boundary_ytangent = boundary_dict["y_tangent"];Json::Value boundary_ztangent = boundary_dict["z_tangent"];
-    Json::Value boundary_xnormal = boundary_dict["x_normal"];Json::Value boundary_ynormal = boundary_dict["y_normal"];Json::Value boundary_znormal = boundary_dict["z_normal"];
-    Json::Value boundary_dist = boundary_dict["dist"];
+    Json::Value x = boundary_dict["x"]; Json::Value y = boundary_dict["y"]; Json::Value z = boundary_dict["z"]; Json::Value I = boundary_dict[ikey]; 
     cloudpcl.clear();
-    pose_array.poses.clear();
-    unsigned int imax = boundary_x.size();
+    unsigned int imax = x.size();
     for (unsigned int i =0; i < imax; i++)
     {
-        double dist = boundary_dist[i].asDouble();
-        Eigen::Vector3d tangent(boundary_xtangent[i].asDouble(), boundary_ytangent[i].asDouble(), boundary_ztangent[i].asDouble());
-        tangent.normalize();
-        Eigen::Vector3d normal(boundary_xnormal[i].asDouble(), boundary_ynormal[i].asDouble(), boundary_znormal[i].asDouble());
-        normal.normalize();
-       
-        pcl::PointXYZ point(boundary_x[i].asDouble(), boundary_y[i].asDouble(), boundary_z[i].asDouble());
-        pcl::PointXYZINormal pointnormal(point.x, point.y, point.z, dist, normal.x(), normal.y(), normal.z());
-        cloudpcl.push_back(pointnormal);
-
-        Eigen::Matrix3d rotmat;
-        rotmat.col(0) = normal;
-        rotmat.col(2) = tangent;
-        Eigen::Vector3d yvec = rotmat.col(2).cross(rotmat.col(0));
-        yvec.normalize();
-        rotmat.col(1)=yvec;
-        Eigen::Quaterniond quat(rotmat);
-
-
-        geometry_msgs::msg::Pose pose;
-        pose.position.x = point.x;
-        pose.position.y = point.y;
-        pose.position.z = point.z;
-        pose.orientation.x = quat.x();
-        pose.orientation.y = quat.y();
-        pose.orientation.z = quat.z();
-        pose.orientation.w = quat.w();
-        pose_array.poses.push_back(pose);
+        pcl::PointXYZI pointI(x[i].asDouble(), y[i].asDouble(), z[i].asDouble(), I[i].asDouble());
+        cloudpcl.push_back(pointI);
     }
 }
 class NodeWrapper_
@@ -181,24 +161,13 @@ int main(int argc, char** argv)
     std::shared_ptr< rclcpp::Publisher<sensor_msgs::msg::PointCloud2> > racelinepub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/optimal_raceline/pcl",1);
 
     
-    std::shared_ptr< rclcpp::Publisher<geometry_msgs::msg::PoseArray> > innerpubpa = node->create_publisher<geometry_msgs::msg::PoseArray>("/inner_track_boundary/pose_array",1);
-    std::shared_ptr< rclcpp::Publisher<geometry_msgs::msg::PoseArray> > outerpubpa = node->create_publisher<geometry_msgs::msg::PoseArray>("/outer_track_boundary/pose_array",1);
-    std::shared_ptr< rclcpp::Publisher<geometry_msgs::msg::PoseArray> > racelinepubpa = node->create_publisher<geometry_msgs::msg::PoseArray>("/optimal_raceline/pose_array",1);
-    
     NodeWrapper_ nw(node);
-    pcl::PointCloud<pcl::PointXYZINormal> innercloudPCL, outercloudPCL, racelinecloudPCL;
+    pcl::PointCloud<pcl::PointXYZI> innercloudPCL, outercloudPCL, racelinecloudPCL;
     sensor_msgs::msg::PointCloud2 innercloudMSG, outercloudMSG, racelinecloudMSG;
     Json::Value innerDict, outerDict, racelineDict;
-    geometry_msgs::msg::PoseArray innerPA, outerPA, racelinePA;
-
     
-    std::vector<std::string> search_dirs;
-    const char* value = std::getenv("F1_TRACK_DIRS");
-    std::string f1_track_dirs_var = value ? std::string(value) : std::string("");
-    if (!f1_track_dirs_var.empty())
-    {    
-        search_dirs = deepracing_ros::FileUtils::split(f1_track_dirs_var);
-    }
+    std::vector<std::string> search_dirs = node->declare_parameter<std::vector<std::string>>("track_search_dirs", std::vector<std::string>());
+    search_dirs.insert(search_dirs.begin(),fs::current_path().string());
     try
     {
         std::string f1_datalogger_share_dir = ament_index_cpp::get_package_share_directory("f1_datalogger");
@@ -211,7 +180,13 @@ int main(int argc, char** argv)
     {   
         RCLCPP_WARN(node->get_logger(), "f1_datalogger was built as plain cmake (not ament), cannot locate it's install directory with ament");
     }
-//    // std::string track_dir = track_dir_param.get<std::string>();
+    if (search_dirs.empty())
+    {
+        RCLCPP_FATAL(node->get_logger(), "No directories specified to search for track files. Default location is the share directory of f1_datalogger or specified in the track_search_dirs ros parameter");
+    }
+    std::stringstream ss;
+    std::for_each(search_dirs.begin(), search_dirs.end(), [&ss](const std::string dir){ss<<std::endl<<dir;});
+    RCLCPP_INFO(node->get_logger(), "Searching in the following directories for track files (in order):%s", ss.str().c_str());
     std::string track_name = "";
     std::array<std::string,25> track_name_array = deepracing_ros::F1MsgUtils::track_names();
 
@@ -236,26 +211,26 @@ int main(int argc, char** argv)
 
             std::string inner_filename = deepracing_ros::FileUtils::findFile(track_name + "_innerlimit.json",search_dirs);
             RCLCPP_INFO(node->get_logger(), "Openning file %s.", inner_filename.c_str());
-            innerDict = readJsonFile(node,inner_filename);
-            unpackDictionary(node,innerDict, innercloudPCL, innerPA, -Eigen::Vector3d::UnitY());
+            innerDict = readBoundaryFile(node,inner_filename);
+            unpackDictionary(node,innerDict, innercloudPCL, "r");
             RCLCPP_INFO(node->get_logger(), "Got %d points for the inner boundary.", innercloudPCL.size());
 
             std::string outer_filename = deepracing_ros::FileUtils::findFile(track_name + "_outerlimit.json",search_dirs);
             RCLCPP_INFO(node->get_logger(), "Openning file %s.", outer_filename.c_str());
-            outerDict = readJsonFile(node,outer_filename);
-            unpackDictionary(node,outerDict,outercloudPCL,outerPA);
+            outerDict = readBoundaryFile(node,outer_filename);
+            unpackDictionary(node,outerDict,outercloudPCL, "r");
             RCLCPP_INFO(node->get_logger(), "Got %d points for the outer boundary.", outercloudPCL.size());
 
             std::string raceline_filename = deepracing_ros::FileUtils::findFile(track_name + "_racingline.json",search_dirs);
             RCLCPP_INFO(node->get_logger(), "Openning file %s.", raceline_filename.c_str());
-            racelineDict = readJsonFile(node,raceline_filename);
-            unpackDictionary(node,racelineDict,racelinecloudPCL,racelinePA);
+            racelineDict = readRacelineFile(node,raceline_filename);
+            unpackDictionary(node,racelineDict,racelinecloudPCL,"t");
             RCLCPP_INFO(node->get_logger(), "Got %d points for the optimal raceline.", racelinecloudPCL.size());
 
             pcl::PCLPointCloud2 innercloudPC2, outercloudPC2, racelinecloudPC2;
-            pcl::toPCLPointCloud2(pcl::PointCloud<pcl::PointXYZINormal>(innercloudPCL), innercloudPC2);
-            pcl::toPCLPointCloud2(pcl::PointCloud<pcl::PointXYZINormal>(outercloudPCL), outercloudPC2);
-            pcl::toPCLPointCloud2(pcl::PointCloud<pcl::PointXYZINormal>(racelinecloudPCL), racelinecloudPC2);
+            pcl::toPCLPointCloud2(pcl::PointCloud<pcl::PointXYZI>(innercloudPCL), innercloudPC2);
+            pcl::toPCLPointCloud2(pcl::PointCloud<pcl::PointXYZI>(outercloudPCL), outercloudPC2);
+            pcl::toPCLPointCloud2(pcl::PointCloud<pcl::PointXYZI>(racelinecloudPCL), racelinecloudPC2);
             pcl_conversions::moveFromPCL(innercloudPC2, innercloudMSG);
             pcl_conversions::moveFromPCL(outercloudPC2, outercloudMSG);
             pcl_conversions::moveFromPCL(racelinecloudPC2, racelinecloudMSG);
@@ -263,19 +238,11 @@ int main(int argc, char** argv)
         innercloudMSG.header.frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name; 
         outercloudMSG.set__header( innercloudMSG.header );
         racelinecloudMSG.set__header( innercloudMSG.header );
-        innerPA.set__header( innercloudMSG.header );
-        outerPA.set__header( innercloudMSG.header );
-        racelinePA.set__header( innercloudMSG.header );
 
         innerpub->publish(innercloudMSG);
         outerpub->publish(outercloudMSG);
         racelinepub->publish(racelinecloudMSG);
         
-        innerpubpa->publish(innerPA);
-        outerpubpa->publish(outerPA);
-        racelinepubpa->publish(racelinePA);
-
-
     }
 
 
