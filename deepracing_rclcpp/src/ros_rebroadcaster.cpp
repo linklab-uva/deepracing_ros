@@ -197,12 +197,14 @@ public:
 
     
     cv::Mat rgbimage;
-
     cv::Range rowrange, colrange;
     rowrange = cv::Range(top_left_row_,top_left_row_+crop_height_ - 1);
     colrange = cv::Range(top_left_col_,top_left_col_+crop_width_ - 1);
     cv::cvtColor(imin(rowrange,colrange),rgbimage,cv::COLOR_BGRA2RGB);
-    cv::resize(rgbimage,rgbimage,cv::Size(resize_width_,resize_height_),0.0,0.0,cv::INTER_AREA);
+    if( (resize_width_ >0) && (resize_height_ >0))
+    {
+      cv::resize(rgbimage,rgbimage,cv::Size(resize_width_,resize_height_),0.0,0.0,cv::INTER_AREA);
+    }
     // if(crop_height_ >0 && crop_width_ >0)
     // {
     // }
