@@ -213,11 +213,11 @@ class PurePursuitControllerROS(Node):
         
 
     def getTrajectory(self):
-        return None, None, None, None
+        return None, None, None
     
     def getControl(self) -> CarControl:
         
-        lookahead_positions, v_local_forward, accel_local_forward, distances_forward_ = self.getTrajectory()
+        lookahead_positions, v_local_forward, distances_forward_ = self.getTrajectory()
         if lookahead_positions is None:
             self.get_logger().error("Returning None because lookahead_positions is None")
             return None
