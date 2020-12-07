@@ -15,10 +15,12 @@ import time
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from deepracing_msgs.msg import TimestampedPacketMotionData, CarMotionData
+from deepracing_msgs.msg import TimestampedPacketMotionData, CarMotionData, CarControl
 from geometry_msgs.msg import PoseStamped, Pose
 from geometry_msgs.msg import PointStamped, Point
 import numpy as np
+import rclpy.executors as executors
+from deepracing_ros.utils import AsyncSpinner
 from scipy.spatial.transform import Rotation as Rot
 from deepracing_ros.controls.pure_puresuit_control_ros import PurePursuitControllerROS
 from deepracing_ros.controls.pure_puresuit_control_waypoint_predictor import AdmiralNetWaypointPredictorROS
@@ -26,13 +28,22 @@ from deepracing_ros.controls.pure_puresuit_control_waypoint_predictor import Adm
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
+    spinner = AsyncSpinner(executor=executors.MultiThreadedExecutor(3))
     node = AdmiralNetWaypointPredictorROS()
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
-    node.start()
+    control_pub = node.create_publisher(CarControl, "/car_control", 1)
+    spinner.addNode(node)
+    spinner.spin()
+    rate = node.create_rate(60.0)
+
     try:
-        rclpy.spin(node)
+        while rclpy.ok():
+            cc = node.getControl()
+            if cc is not None:
+                control_pub.publish(cc)
+            rate.sleep()
     except KeyboardInterrupt:
-        node.stop()
+        pass
     node.destroy_node()
     rclpy.shutdown()
     
