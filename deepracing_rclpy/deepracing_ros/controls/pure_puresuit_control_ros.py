@@ -242,7 +242,7 @@ class PurePursuitControllerROS(Node):
             distances_forward = distances_forward_
 
         speeds = torch.norm(v_local_forward, p=2, dim=1)
-        lookahead_distance = max(self.lookahead_gain*current_speed, 5.0)
+        lookahead_distance = max(self.lookahead_gain*current_speed, 10.0)
         lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
 
         lookahead_index = torch.argmin(torch.abs(distances_forward-lookahead_distance))
