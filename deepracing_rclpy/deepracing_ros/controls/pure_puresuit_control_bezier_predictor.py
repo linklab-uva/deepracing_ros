@@ -106,6 +106,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             config = yaml.load(f, Loader = yaml.SafeLoader)
         input_channels = config["input_channels"]
         context_length = config["context_length"]
+        use_float = config.get("use_float",False)
         bezier_order = config.get("bezier_order",None)
         sequence_length = config.get("sequence_length",None)
         use_3dconv = config.get("use_3dconv",True)
@@ -127,7 +128,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
 
         use_compressed_images_param : Parameter = self.declare_parameter("use_compressed_images", value=False)
 
-        deltaT_param : Parameter = self.declare_parameter("deltaT", value=1.54)
+        deltaT_param : Parameter = self.declare_parameter("deltaT", value=1.44)
         self.deltaT : float = deltaT_param.get_parameter_value().double_value
 
         x_scale_factor_param : Parameter = self.declare_parameter("x_scale_factor", value=1.0)
@@ -155,7 +156,12 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         
         
         self.net : NN.Module = M.AdmiralNetCurvePredictor(context_length= context_length, input_channels=input_channels, params_per_dimension=bezier_order+1-int(self.fix_first_point), use_3dconv=use_3dconv) 
-        self.net.double()
+        if use_float:
+            self.dtype = torch.float32
+            self.net = self.net.float()
+        else:
+            self.dtype = torch.float64
+            self.net.double()
         self.get_logger().info('Loading model file: %s' % (model_file) )
         self.net.load_state_dict(torch.load(model_file,map_location=torch.device("cpu")))
         self.get_logger().info('Loaded model file: %s' % (model_file) )
@@ -168,14 +174,14 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         self.get_logger().info('Moved model params to device %s' % (str(self.device),))
         self.image_buffer = RB(self.net.context_length,dtype=(float,(3,66,200)))
         self.s_np = np.linspace(0,1,self.num_sample_points)
-        self.s_torch = torch.from_numpy(self.s_np.copy()).unsqueeze(0).double().to(self.device)
+        self.s_torch = torch.from_numpy(self.s_np.copy()).unsqueeze(0).type(self.dtype).to(self.device)
         self.bezier_order = self.net.params_per_dimension-1+int(self.fix_first_point)
-        self.bezierM = mu.bezierM(self.s_torch,self.bezier_order).double().to(self.device)
+        self.bezierM = mu.bezierM(self.s_torch,self.bezier_order)#.type(dtype).to(self.device)
         self.bezierMderiv = mu.bezierM(self.s_torch,self.bezier_order-1)
         self.bezierM2ndderiv = mu.bezierM(self.s_torch,self.bezier_order-2)
         self.buffertimer = timeit.Timer(stmt=self.addToBuffer)
         if self.fix_first_point:
-            self.initial_zeros = torch.zeros(1,1,2, device=self.device, dtype=torch.float64)
+            self.initial_zeros = torch.zeros(1,1,2, device=self.device, dtype=self.dtype)
         self.bezierM.requires_grad = False
       #  self.bezierMderiv.requires_grad = False
         self.bezierM2ndderiv.requires_grad = False
@@ -217,13 +223,13 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         # if self.current_pose_mat is None):
         #     return super().getTrajectory()
         stamp = self.rosclock.now()
-        imnp = np.array(self.image_buffer).astype(np.float64).copy()
+        imnp = np.array(self.image_buffer).astype(np.float32).copy()
         with torch.no_grad():
             imtorch = torch.from_numpy(imnp.copy())
             imtorch.required_grad = False
             if ( not imtorch.shape[0] == self.net.context_length ):
                 return super().getTrajectory()
-            inputtorch : torch.Tensor = imtorch.unsqueeze(0).double().to(self.device)
+            inputtorch : torch.Tensor = imtorch.unsqueeze(0).type(self.dtype).to(self.device)
             network_predictions = self.net(inputtorch)
             if self.fix_first_point:  
                 bezier_control_points = torch.cat((self.initial_zeros,network_predictions.transpose(1,2)),dim=1)    
@@ -253,7 +259,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
               
             cross_prod_norms = torch.abs(predicted_tangents[0,:,0]*predicted_normals[:,1] - predicted_tangents[0,:,1]*predicted_normals[:,0])
             radii = torch.pow(predicted_tangent_norms[0],3) / cross_prod_norms
-            speeds = self.max_speed*(torch.ones_like(radii)).double().to(self.device)
+            speeds = self.max_speed*(torch.ones_like(radii)).type(self.dtype).to(self.device)
             centripetal_accelerations = torch.square(speeds)/radii
             max_allowable_speeds = torch.sqrt(self.max_centripetal_acceleration*radii)
             idx = centripetal_accelerations>self.max_centripetal_acceleration
