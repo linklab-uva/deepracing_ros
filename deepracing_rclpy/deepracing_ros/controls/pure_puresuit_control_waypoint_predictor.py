@@ -150,13 +150,13 @@ class AdmiralNetWaypointPredictorROS(PPC):
             return
         if imnp.shape[0]<=0 or imnp.shape[0]<=0:
             return
-        imnpdouble = tf.functional.to_tensor(deepracing.imutils.resizeImage( imnp, (66,200) ) ).double().numpy().copy()
+        imnpdouble = tf.functional.to_tensor(deepracing.imutils.resizeImage( imnp, (66,200) ) ).type(self.dtype).numpy().copy()
         self.image_buffer.append(imnpdouble)
     def imageCallback(self, img_msg : Image):
         if img_msg.height<=0 or img_msg.width<=0:
             return
         imnp = self.cvbridge.imgmsg_to_cv2(img_msg, desired_encoding="rgb8") 
-        imnpdouble = tf.functional.to_tensor(deepracing.imutils.resizeImage( imnp, (66,200) ) ).float().numpy().copy()
+        imnpdouble = tf.functional.to_tensor(deepracing.imutils.resizeImage( imnp, (66,200) ) ).type(self.dtype).numpy().copy()
         self.image_buffer.append(imnpdouble)
     def getTrajectory(self):
         # if self.current_motion_data.world_velocity.header.frame_id == "":
