@@ -133,8 +133,8 @@ class PurePursuitControllerROS(Node):
         use_drs_param : Parameter = self.declare_parameter("use_drs",value=False)
         self.use_drs : bool = use_drs_param.get_parameter_value().bool_value
 
-        boundary_check_param : Parameter = self.declare_parameter("boundary_check",value=False)
-        self.boundary_check : bool = boundary_check_param.get_parameter_value().bool_value
+        num_optim_steps_param : Parameter = self.declare_parameter("num_optim_steps",value=-1)
+        self.num_optim_steps : int = num_optim_steps_param.get_parameter_value().integer_value
         
         forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
         self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
