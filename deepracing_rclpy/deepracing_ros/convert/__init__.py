@@ -1,1 +1,1 @@
-from .msg_utils import extractPose, extractPosition, pointCloud2ToNumpy, numpyToPointCloud2
+from .msg_utils import extractPose, extractPosition, pointCloud2ToNumpy, numpyToPointCloud2, toBezierCurveMsg

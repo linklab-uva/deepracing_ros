@@ -2,12 +2,15 @@ import deepracing_msgs.msg as drmsgs # BezierCurve, TimestampedPacketMotionData,
 import geometry_msgs.msg as geo_msgs#  Point, PointStamped, Vector3, Vector3Stamped
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header
+from builtin_interfaces.msg import Time
 import numpy as np
 import numpy.linalg as la
 import scipy.spatial.transform
 import math
 import struct
 from typing import List
+from scipy.spatial.transform import Rotation as Rot
+import deepracing
 # _DATATYPES = {
 # PointField.INT8    : ('b', 1),\
 # PointField.UINT8  : ('B', 1),\
@@ -146,3 +149,6 @@ def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
    upvector = upvector/la.norm(upvector)
    rotationmat = np.column_stack((-rightvector,upvector,forwardvector))
    return ( position, scipy.spatial.transform.Rotation.from_matrix(rotationmat).as_quat() )
+def toBezierCurveMsg(control_points: np.ndarray, control_points_header: Header,  yoffset:float=0.0):
+   return drmsgs.BezierCurve(control_points_lateral=control_points[:,0].tolist(), control_points_forward=control_points[:,1].tolist(), header = control_points_header, yoffset=yoffset)
+   
