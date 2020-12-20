@@ -316,8 +316,8 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             ibpoints = boundarypoints[1].unsqueeze(0) - 1.0*ibnormals
 
             
-            paths_msg.outer_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurves[0].cpu().numpy(), Header(frame_id="car", stamp=stamp))
-            paths_msg.inner_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurves[1].cpu().numpy(), Header(frame_id="car", stamp=stamp))
+            paths_msg.outer_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurveslocal[0].cpu().numpy(), Header(frame_id="car", stamp=stamp))
+            paths_msg.inner_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurveslocal[1].cpu().numpy(), Header(frame_id="car", stamp=stamp))
 
             mask=[True for asdf in range(bezier_control_points.shape[1])]
             mask[0]=not self.fix_first_point
@@ -329,11 +329,14 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             dT2 = dT*dT
             maxacent = 9.8*3
             maxalinear = 9.8*2
-            _, l1 = self.boundary_loss(evalpoints, ibpoints, ibnormals)
-            _, l2 = self.boundary_loss(evalpoints, obpoints, obnormals)
             optimizer = SGD(bcmodel.parameters(), lr=0.45, momentum=0.1)
             i = 0
+            _, l1 = self.boundary_loss(evalpoints, ibpoints, ibnormals)
+            _, l2 = self.boundary_loss(evalpoints, obpoints, obnormals)
+            # l1 = 1.0
+            # l2 = 1.0
             while (l1>0.0 or l2>0.0) and (i<self.num_optim_steps):
+            #    print("Step %d" %(i+1,))
                 all_control_points = bcmodel.allControlPoints()
                 evalpoints = torch.matmul(self.bezierM, all_control_points)
                 # _, v_s = mu.bezierDerivative(all_control_points, M=self.bezierMderiv)
