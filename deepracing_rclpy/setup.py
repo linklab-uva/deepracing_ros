@@ -51,6 +51,7 @@ setup(
             'pure_pursuit_bezier = %s.scripts.admiralnet_bezier_script:main' % (python_pkg_name),
             'pure_pursuit_waypoint = %s.scripts.admiralnet_waypoint_script:main' % (python_pkg_name),
             'pure_pursuit_oracle = %s.scripts.oracle_pure_pursuit_script:main' % (python_pkg_name),
+            'pure_pursuit_trajopt = %s.scripts.trajopt_script:main' % (python_pkg_name),
             'pilotnet = %s.scripts.pilotnet_script:main' % (python_pkg_name),
             'cnnlstm = %s.scripts.cnnlstm_script:main' % (python_pkg_name),
             'admiralnet_e2e = %s.scripts.admiralnet_e2e_script:main' % (python_pkg_name),
