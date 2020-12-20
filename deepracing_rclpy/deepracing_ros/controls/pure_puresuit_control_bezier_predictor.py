@@ -188,9 +188,9 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
       #  self.bezierMderiv.requires_grad = False
         self.bezierM2ndderiv.requires_grad = False
         if use_compressed_images_param.get_parameter_value().bool_value:
-            self.image_sub = self.create_subscription( CompressedImage, '/f1_screencaps/cropped/compressed', self.addToBuffer, 1)
+            self.image_sub = self.create_subscription( CompressedImage, '/cropped_publisher/images/compressed', self.addToBuffer, 1)
         else:
-            self.image_sub = self.create_subscription( Image, '/f1_screencaps/cropped', self.addToBuffer, 1)
+            self.image_sub = self.create_subscription( Image, '/cropped_publisher/images', self.addToBuffer, 1)
 
         self.Mboundaryfit = mu.bezierM( torch.linspace(0.0,1.0,steps=440,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
         self.Mboundaryeval = mu.bezierM( torch.linspace(0.0,1.0,steps=5000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
