@@ -1,0 +1,5 @@
+BezierCurve[] curves
+geometry_msgs/PoseStamped ego_pose
+BezierCurve inner_boundary_curve
+BezierCurve outer_boundary_curve
+float64 optimization_time
