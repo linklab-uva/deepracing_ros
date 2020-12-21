@@ -193,8 +193,8 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             self.image_sub = self.create_subscription( Image, '/cropped_publisher/images', self.addToBuffer, 1)
 
         self.Mboundaryfit = mu.bezierM( torch.linspace(0.0,1.0,steps=440,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
-        self.Mboundaryeval = mu.bezierM( torch.linspace(0.0,1.0,steps=5000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
-        self.Mboundarytangenteval = mu.bezierM( torch.linspace(0.0,1.0,steps=5000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 6)
+        self.Mboundaryeval = mu.bezierM( torch.linspace(0.0,1.0,steps=20000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
+        self.Mboundarytangenteval = mu.bezierM( torch.linspace(0.0,1.0,steps=20000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 6)
         # self.Mboundarynormaleval = mu.bezierM( torch.linspace(0.0,1.0,steps=4000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 3)
         
         self.inner_boundary = None
@@ -205,7 +205,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         self.ob_kdtree = None
         self.ob_sub = self.create_subscription(PointCloud2, "/outer_track_boundary/pcl", self.outerBoundaryCB, 1)
 
-        self.boundary_loss = BoundaryLoss(time_reduction="max", alpha=0.5, beta=0.0).type(self.dtype).to(self.device)
+        self.boundary_loss = BoundaryLoss(time_reduction="max", relu_type="Leaky", alpha=1.0, beta=0.0).type(self.dtype).to(self.device)
 
 
 
@@ -215,14 +215,14 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         self.ib_sub = None
         self.inner_boundary = torch.from_numpy(inner_boundary.copy()).type(self.dtype).to(self.device)
         self.ib_kdtree = KDTree(inner_boundary)
-        print(self.inner_boundary)
+        print(self.ib_kdtree)
     def outerBoundaryCB(self, pc_msg: PointCloud2):
         outer_boundary = np.array(list(deepracing_ros.convert.pointCloud2ToNumpy(pc_msg, field_names=["x","y","z"])))
         self.ob_sub.destroy()
         self.ob_sub = None
         self.outer_boundary = torch.from_numpy(outer_boundary.copy()).type(self.dtype).to(self.device)
         self.ob_kdtree = KDTree(outer_boundary)
-        print(self.outer_boundary)
+        print(self.ob_kdtree)
     def addToBuffer(self, img_msg):
         try:
             if isinstance(img_msg,CompressedImage):
@@ -256,17 +256,17 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
     def getTrajectory(self):
         # print(self.current_pose_mat)
         boundary_check = self.num_optim_steps>0
-        if boundary_check and (self.current_pose_mat is None):
+        if self.current_pose_mat is None:
             return super().getTrajectory()
-        elif boundary_check:
-            if self.pose_semaphore.acquire(timeout=1.0):
-                current_pose_msg = deepcopy(self.current_pose)
-                current_pm = self.current_pose_mat.clone()
-                self.pose_semaphore.release()
-            else:
-                return super().getTrajectory()
-            current_pm = current_pm.type(self.dtype).to(self.device)
+        if self.pose_semaphore.acquire(timeout=1.0):
+            current_pose_msg = deepcopy(self.current_pose)
+            current_pm = self.current_pose_mat.clone()
+            self.pose_semaphore.release()
+        else:
+            return super().getTrajectory()
         stamp = current_pose_msg.header.stamp
+        if boundary_check:
+            current_pm = current_pm.type(self.dtype).to(self.device)
         imnp = np.array(self.image_buffer).astype(np.float32).copy()
         with torch.no_grad():
             imtorch = torch.from_numpy(imnp.copy())
@@ -284,6 +284,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(initial_guess[0].cpu().numpy(), Header(frame_id="car", stamp=stamp)))
         paths_msg.optimization_time=-1.0
         if boundary_check and (self.ib_kdtree is not None) and (self.ob_kdtree is not None):
+         #   print("Running optimization")
             tick = time.time()
             current_pos = current_pm[0:3,3].cpu().numpy()
             _, ib_closest_idx = self.ib_kdtree.query(current_pos)
@@ -309,18 +310,17 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             boundarynormals[1,:,0]*=-1.0
 
             obnormals = boundarynormals[0].unsqueeze(0)
-            obpoints = boundarypoints[0].unsqueeze(0) - 1.0*obnormals
+            obpoints = boundarypoints[0].unsqueeze(0) - 2.0*obnormals
 
             
             ibnormals = boundarynormals[1].unsqueeze(0)
-            ibpoints = boundarypoints[1].unsqueeze(0) - 1.0*ibnormals
+            ibpoints = boundarypoints[1].unsqueeze(0) - 2.0*ibnormals
 
             
             paths_msg.outer_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurveslocal[0].cpu().numpy(), Header(frame_id="car", stamp=stamp))
             paths_msg.inner_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurveslocal[1].cpu().numpy(), Header(frame_id="car", stamp=stamp))
 
-            mask=[True for asdf in range(bezier_control_points.shape[1])]
-            mask[0]=not self.fix_first_point
+            mask=[False] + [True for asdf in range(bezier_control_points.shape[1]-1)]
             evalpoints = torch.matmul(self.bezierM, initial_guess)
             initial_guess_points = evalpoints.clone()
             bcmodel = mu.BezierCurveModule(initial_guess, mask=mask)
@@ -329,7 +329,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             dT2 = dT*dT
             maxacent = 9.8*3
             maxalinear = 9.8*2
-            optimizer = SGD(bcmodel.parameters(), lr=0.45, momentum=0.1)
+            optimizer = SGD(bcmodel.parameters(), lr=2.0, momentum=0.0)
             i = 0
             _, l1 = self.boundary_loss(evalpoints, ibpoints, ibnormals)
             _, l2 = self.boundary_loss(evalpoints, obpoints, obnormals)
