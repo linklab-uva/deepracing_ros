@@ -1,10 +1,13 @@
-import cv_bridge, rclpy, rclpy.time, rclpy.duration, deepracing_ros
+import rclpy, rclpy.time, rclpy.duration, deepracing_ros
+import rpyutils
+with rpyutils.add_dll_directories_from_env("PATH"):
+    import cv_bridge
+    import rosbag2_py
 import argparse
 import typing
 from typing import List
 
 from tqdm import tqdm as tqdm
-import rosbag2_py
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
@@ -14,12 +17,12 @@ from sensor_msgs.msg import CompressedImage
 
 import torch, torchvision
 
-import deepracing, deepracing.pose_utils, deepracing_models
+import deepracing, deepracing.pose_utils, deepracing.raceline_utils, deepracing.evaluation_utils, deepracing_models
 
 import numpy as np
 import cv2
 
-import deepracing_ros.convert
+import deepracing_ros, deepracing_ros.convert
 from scipy.spatial.transform import Rotation, RotationSpline
 from scipy.interpolate import BSpline, make_interp_spline
 
@@ -43,24 +46,24 @@ import deepracing_ros.utils.rosbag_utils as rosbag_utils
 def extractPosition(vectormsg):
     return np.array( [ msg.x, msg.y, msg.z ] )
 def imgKey(msg):
-    return rclpy.time.Time.from_msg(msg.header.stamp).nanoseconds
-def bezierKey(msg):
-    return rclpy.time.Time.from_msg(msg.header.stamp).nanoseconds
-def msgKey(msg):
-    return msg.udp_packet.header.session_time
+    return rclpy.time.Time.from_msg(msg.header.stamp)
+def pathsKey(msg):
+    return rclpy.time.Time.from_msg(msg.ego_pose.header.stamp)
+def poseKey(msg):
+    return rclpy.time.Time.from_msg(msg.header.stamp)
 
 parser = argparse.ArgumentParser(description="Look for bad predictions in a run of the bezier curve predictor")
 parser.add_argument("bag_dir", type=str,  help="Bag to load")
-parser.add_argument("--trackfiledir", help="Path to the directory containing the raceline json files. Default is environment variable F1_TRACK_DIR",  type=str, default=os.environ.get("F1_TRACK_DIR",default=None))
 parser.add_argument("--save_all_figures", action="store_true",  help="Save a plot for every bezier curve. Even ones with no track violation.")
+# parser.add_argument("--trackfiledir", help="Path to the directory containing the raceline json files. Default is environment variable F1_TRACK_DIR",  type=str, default=os.environ.get("F1_TRACK_DIR",default=None))
 
 args = parser.parse_args()
 
 argdict = dict(vars(args))
 save_all_figures = argdict["save_all_figures"]
-trackfiledir = argdict["trackfiledir"]
-if trackfiledir is None:
-    raise ValueError("Must either specify --trackfiledir or set environment variable F1_TRACK_DIR")
+# trackfiledir = argdict["trackfiledir"]
+# if trackfiledir is None:
+#     raise ValueError("Must either specify --trackfiledir or set environment variable F1_TRACK_DIR")
 
 bag_dir = argdict["bag_dir"]
 if bag_dir[-2:] in {"\\\\","//"}:
@@ -77,275 +80,203 @@ idx = 0
 total_msgs = np.sum( topic_counts )
 msg_dict = {key : [] for key in topic_count_dict.keys()}
 print("Loading data from bag")
-msg_dict = {key : [] for key in topic_count_dict.keys()}
 for idx in tqdm(iterable=range(total_msgs)):
-   # print("Reading message: %d" % (idx,) )
     if(reader.has_next()):
         (topic, data, t) = reader.read_next()
         msg_type = type_map[topic]
         msg_type_full = get_message(msg_type)
         msg = deserialize_message(data, msg_type_full)
         msg_dict[topic].append(msg)
-session_packet_msgs = sorted(msg_dict["/session_data"], key=msgKey)
-motion_packet_msgs = sorted(msg_dict["/motion_data"], key=msgKey)
-image_msgs = sorted(msg_dict["/f1_screencaps/full/compressed"], key=imgKey)
-bezier_curve_msgs = sorted(msg_dict["/predicted_path"], key=bezierKey)
+session_packet_msgs = sorted(msg_dict["/cropped_publisher/session_data"], key=poseKey)
+tracknum = session_packet_msgs[-1].udp_packet.track_id
+trackname = deepracing.trackNames[tracknum]
+innerboundfile = deepracing.searchForFile(trackname+"_innerlimit.json", [os.curdir] + os.getenv("F1_TRACK_DIRS").split(os.pathsep) )
+outerboundfile = deepracing.searchForFile(trackname+"_outerlimit.json", [os.curdir] + os.getenv("F1_TRACK_DIRS").split(os.pathsep) )
+rinner, innerboundary = deepracing.raceline_utils.loadBoundary(innerboundfile)
+innerboundary_kdtree = KDTree(innerboundary[0:3].cpu().numpy().copy().transpose())
+innerboundary_poly = Polygon(shell=innerboundary[[0,2]].cpu().numpy().copy().transpose().tolist())
+assert(innerboundary_poly.is_valid)
+router, outerboundary = deepracing.raceline_utils.loadBoundary(outerboundfile)
+outerboundary_kdtree = KDTree(outerboundary[0:3].cpu().numpy().copy().transpose())
+outerboundary_poly = Polygon(shell=outerboundary[[0,2]].cpu().numpy().copy().transpose().tolist())
+assert(outerboundary_poly.is_valid)
+
+
+
+
+
+
+lapdata_msgs = sorted(msg_dict["/cropped_publisher/lap_data"], key=poseKey)
+player_car_idx = lapdata_msgs[-1].udp_packet.header.player_car_index
+lapdata_header_timestamps = [rclpy.time.Time.from_msg(msg.header.stamp) for msg in lapdata_msgs]
+lapdata_timestamps = np.array([t.nanoseconds/1E9 for t in lapdata_header_timestamps])
+lapnumbers = np.array([msg.udp_packet.lap_data[player_car_idx].current_lap_num for msg in lapdata_msgs])
+print(lapdata_msgs[0].udp_packet.lap_data[player_car_idx])
+print(lapdata_msgs[-1].udp_packet.lap_data[player_car_idx])
+idxend = np.argmax(np.diff(lapnumbers))+1
+timestampend = rclpy.time.Time.from_msg(lapdata_msgs[idxend].header.stamp)
+print(timestampend)
+
+
+pose_msgs = [p for p in sorted(msg_dict["/ego_vehicle/pose"], key=poseKey) if rclpy.time.Time.from_msg(p.header.stamp)<=timestampend]
+pose_header_timestamps = [rclpy.time.Time.from_msg(msg.header.stamp) for msg in pose_msgs]
+pose_timestamps = np.array([t.nanoseconds/1E9 for t in pose_header_timestamps])
+
+twist_msgs = [v for v in sorted(msg_dict["/ego_vehicle/velocity"], key=poseKey) if rclpy.time.Time.from_msg(v.header.stamp)<=timestampend]
+twist_header_timestamps = [rclpy.time.Time.from_msg(msg.header.stamp) for msg in twist_msgs]
+twist_timestamps = np.array([t.nanoseconds/1E9 for t in twist_header_timestamps])
+
+image_msgs = sorted(msg_dict["/full_publisher/images/compressed"], key=imgKey)
 image_header_timestamps = [rclpy.time.Time.from_msg(msg.header.stamp) for msg in image_msgs]
 image_timestamps = np.array([t.nanoseconds/1E9 for t in image_header_timestamps])
-bc_header_timestamps = [rclpy.time.Time.from_msg(msg.header.stamp) for msg in bezier_curve_msgs]
-bc_timestamps = np.array([t.nanoseconds/1E9 for t in bc_header_timestamps])
+
+predicted_path_msgs = sorted(msg_dict["/predicted_paths"], key=pathsKey)
+path_header_timestamps = [rclpy.time.Time.from_msg(msg.ego_pose.header.stamp) for msg in predicted_path_msgs]
+path_timestamps = np.array([t.nanoseconds/1E9 for t in path_header_timestamps])
 
 
-motion_timestamps = np.array([rclpy.time.Time.from_msg(msg.header.stamp).nanoseconds/1E9 for msg in motion_packet_msgs])
-motion_packet_msgs : List[PacketMotionData] = [msg.udp_packet for msg in motion_packet_msgs]
-player_motion_data : List[CarMotionData] = [msg.car_motion_data[msg.header.player_car_index] for msg in motion_packet_msgs]
 
-t0 = bc_timestamps[0]
-bc_timestamps = bc_timestamps  - t0
-motion_timestamps = motion_timestamps  - t0
+
+t0 = path_timestamps[0]
+path_timestamps = path_timestamps  - t0
 image_timestamps = image_timestamps  - t0
+pose_timestamps = pose_timestamps  - t0
+lapdata_timestamps = lapdata_timestamps  - t0
+twist_timestamps = twist_timestamps  - t0
 
-print("Extracted %d bezier curves" % ( len(bezier_curve_msgs), ) )
-print("Extracted %d motion packets" % ( len(motion_packet_msgs), ) )
-tracknum = session_packet_msgs[0].udp_packet.track_id
-trackname = deepracing.trackNames[tracknum]
-#trackname = "Australia"
-
-
-
-
-inner_boundary_json = os.path.join(trackfiledir, trackname + "_innerlimit.json")
-with open(inner_boundary_json,"r") as f:
-    inner_boundary_dict = json.load(f)
-inner_boundary  = np.column_stack((inner_boundary_dict["x"], inner_boundary_dict["y"], inner_boundary_dict["z"], np.ones_like(inner_boundary_dict["z"]))).transpose()
-inner_boundary_dist = inner_boundary_dict["dist"]
-ib_xz = inner_boundary[[0,2],:]#.transpose()
-ib_atan2 = np.arctan2(ib_xz[1,:], ib_xz[0,:]) + 2.0*np.pi
-ib_atan2[ib_atan2>=2*np.pi]-=2.0*np.pi
-ib_clocksort = np.flip(np.argsort(ib_atan2))
-#ib_poly = inner_boundary[:,ib_clocksort]
-ib_poly = inner_boundary
-#inner_boundary = inner_boundary[:,ib_clocksort]
-print("Inner boundary shape: " + str(inner_boundary.shape))
-inner_boundary_kdtree = KDTree(inner_boundary[0:3].transpose())
-#inner_boundary_polygon : Polygon = Polygon(reversed(inner_boundary[[0,2],:].transpose().tolist()))
-#inner_boundary_polygon : SPPolygon = SPPolygon([SPPoint(inner_boundary[0,i], inner_boundary[2,i]) for i in reversed(range(inner_boundary.shape[1]))])
-
-
-outer_boundary_json = os.path.join(trackfiledir, trackname + "_outerlimit.json")
-with open(outer_boundary_json,"r") as f:
-    outer_boundary_dict = json.load(f)
-outer_boundary  = np.column_stack((outer_boundary_dict["x"], outer_boundary_dict["y"], outer_boundary_dict["z"], np.ones_like(outer_boundary_dict["z"]))).transpose()
-outer_boundary_dist = outer_boundary_dict["dist"]
-#print(outer_boundary)
-ob_xz = outer_boundary[[0,2]]#.transpose()
-ob_atan2 = np.arctan2(ob_xz[1], ob_xz[0]) + 2.0*np.pi
-ob_atan2[ob_atan2>=2*np.pi]-=2.0*np.pi
-ob_clocksort = np.flip(np.argsort(ob_atan2))
-#ob_poly = outer_boundary[:,ob_clocksort]
-ob_poly = outer_boundary
-#outer_boundary = outer_boundary[:,ob_clocksort]
-
-print("Outer boundary shape: " + str(outer_boundary.shape))
-outer_boundary_kdtree = KDTree(outer_boundary[0:3].transpose())
-#outer_boundary_polygon : Polygon = Polygon(reversed(outer_boundary[[0,2],:].transpose().tolist()))
-#outer_boundary_polygon : SPPolygon = SPPolygon([SPPoint(outer_boundary[0,i], outer_boundary[2,i]) for i in reversed(range(outer_boundary.shape[1]))])
-
-ib_tuples =  LinearRing([(ib_poly[0,i], ib_poly[2,i]) for i in range(ib_poly.shape[1])])
-inner_boundary_polygon : Polygon = Polygon(ib_tuples)
-assert(inner_boundary_polygon.is_valid)
-print("Inner boundary area: %d" % (inner_boundary_polygon.area, ) )
-
-
-ob_tuples =  LinearRing([(ob_poly[0,i], ob_poly[2,i]) for i in range(ob_poly.shape[1])])
-outer_boundary_polygon : Polygon =  Polygon(ob_tuples)
-assert(outer_boundary_polygon.is_valid)
-print("Outer boundary area: %d" % (outer_boundary_polygon.area, ) )
-# ptest = ShapelyPoint(298.902, 724.09)
-# assert(not ptest.within(outer_boundary_polygon))
-
-
-optimal_raceline_json = os.path.join(trackfiledir, trackname + "_racingline.json")
-with open(optimal_raceline_json,"r") as f:
-    optimal_raceline_dict = json.load(f)
-optimal_raceline  = np.column_stack((optimal_raceline_dict["x"], optimal_raceline_dict["y"], optimal_raceline_dict["z"], np.ones_like(optimal_raceline_dict["z"]))).transpose()
-optimal_raceline_kdtree = KDTree(optimal_raceline[0:3].transpose())
-optimal_raceline_dist = optimal_raceline_dict["dist"]
-
+print("Extracted %d path comparisons" % ( len(predicted_path_msgs), ) )
+print("Extracted %d images" % ( len(image_msgs), ) )
 
 
 fig = plt.figure()
 
-ib_recon = np.array(inner_boundary_polygon.exterior.xy).transpose()
-# plt.plot(inner_boundary[0],inner_boundary[2], label="Inner Boundary of Track")
+
+ib_recon = np.array(innerboundary_poly.exterior.xy).transpose()
+ob_recon = np.array(outerboundary_poly.exterior.xy).transpose()
+all_recon = np.row_stack([ib_recon, ob_recon])
+allx = all_recon[:,0]
+allz = all_recon[:,1]
+minx = float(np.min(allx))-5.0
+maxx = float(np.max(allx))+5.0
+minz = float(np.min(allz))-5.0
+maxz = float(np.max(allz))+5.0
+
+plt.xlim(maxx,minx)
+# plt.ylim(maxz,minz)
+
 plt.plot(ib_recon[:,0],ib_recon[:,1], label="Inner Boundary of Track")
 
-ob_recon = np.array(outer_boundary_polygon.exterior.xy).transpose()
-# plt.plot(outer_boundary[0],outer_boundary[2], label="Outer Boundary of Track")
 plt.plot(ob_recon[:,0],ob_recon[:,1], label="Outer Boundary of Track")
 plt.legend()
 plt.show()
 
 
 bridge = cv_bridge.CvBridge()
-poses = [deepracing_ros.convert.extractPose(msg) for msg in motion_packet_msgs]
-
-positions = np.array( [ pose[0] for pose in poses ] )
-position_spline : BSpline = make_interp_spline(motion_timestamps, positions) 
-quats = np.array([ pose[1] for pose in poses ])
+positions = np.array( [ [p.pose.position.x, p.pose.position.y, p.pose.position.z] for p in pose_msgs ] )
+position_spline : BSpline = make_interp_spline(pose_timestamps, positions) 
+quats = np.array( [ [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w] for p in pose_msgs ] )
 rotations = Rotation.from_quat(quats)
-rotation_spline : RotationSpline = RotationSpline(motion_timestamps, rotations) 
+rotation_spline : RotationSpline = RotationSpline(pose_timestamps, rotations) 
 
-bezier_curves = np.array([ np.column_stack(  [ msg.control_points_lateral, msg.control_points_forward]  ) for msg in bezier_curve_msgs ])
-#bezier_curves = np.flip(bezier_curves, axis=1)
-with torch.no_grad():
-    bezier_curves_torch = torch.from_numpy(bezier_curves.copy()).double()
-    bezier_curves_torch = bezier_curves_torch.cuda(0)
-    Atorch = deepracing_models.math_utils.bezierM(torch.linspace(0,1,120).unsqueeze(0).double().cuda(0), bezier_curves_torch.shape[1]-1)
 
-    print(bezier_curves_torch[0])
-    print(Atorch.shape)
-    bcvals = torch.matmul(Atorch[0], bezier_curves_torch)
-print(bcvals.shape)
-Nsamp = 90
+results = deepracing.evaluation_utils.lapMetrics(positions, pose_timestamps, innerboundary_poly, outerboundary_poly)
+results["laptime"] = lapdata_msgs[-1].udp_packet.lap_data[player_car_idx].last_lap_time
+
 bag_base = os.path.basename(bag_dir)
-bag_parent = os.path.join(bag_dir, os.pardir)
+bag_parent = os.path.abspath( os.path.join(bag_dir, os.pardir) )
+
+
+with open(os.path.join(bag_parent, bag_base+"_results.json"), "w") as f:
+    json.dump(results, f, indent=2)
+
+
+
+
+
+
+
+
+
+if predicted_path_msgs[0].optimization_time<=0.0:
+    exit(0)
+
+Mpaths = deepracing_models.math_utils.bezierM(torch.linspace(0,1,250, dtype=torch.float32).unsqueeze(0), len(predicted_path_msgs[0].curves[0].control_points_lateral)-1)[0]
+Mboundaries = deepracing_models.math_utils.bezierM(torch.linspace(0,1,250, dtype=torch.float32).unsqueeze(0), len(predicted_path_msgs[0].inner_boundary_curve.control_points_lateral)-1)[0]#.repeat(2,1,1)
+Nsamp = 90
 figure_dir = os.path.join(bag_parent, bag_base+"_figures")
 if os.path.isdir(figure_dir):
     shutil.rmtree(figure_dir)
 time.sleep(1.0)
 os.makedirs(figure_dir)
-
-boundary_viz_delta = 20
 imwriter = None
 print("Analyzing bezier curves")
-imwriter = None
 try:
-    for i in tqdm(range(bcvals.shape[0])):
-        t = bc_timestamps[i]
-        bezier_curve = bezier_curves_torch[i]
+    for i, paths_msg in tqdm(enumerate(predicted_path_msgs), total=len(predicted_path_msgs)):
+        t = path_timestamps[i]
+        curves = torch.stack([deepracing_ros.convert.fromBezierCurveMsg(msg, dtype=Mpaths.dtype, device=Mpaths.device) for msg in paths_msg.curves], dim=0)
+        boundarycurves = torch.stack([deepracing_ros.convert.fromBezierCurveMsg(paths_msg.outer_boundary_curve, dtype=Mpaths.dtype, device=Mpaths.device), deepracing_ros.convert.fromBezierCurveMsg(paths_msg.inner_boundary_curve, dtype=Mpaths.dtype, device=Mpaths.device)], dim=0)    
+       # print(curves)
+        #print(curves.shape)
+        if not (torch.all(curves==curves)):
+            curves = curves[[0,-1]] 
+        with torch.no_grad():
+            curvepoints = torch.matmul(Mpaths, curves)
+            boundarypoints = torch.matmul(Mboundaries, boundarycurves)
+            ob_distance_matrix = torch.cdist(curvepoints[-1], boundarypoints[0])
+            ob_closest_point_idx = torch.argmin(ob_distance_matrix,dim=1)[-1].item()
+            
+            ib_distance_matrix = torch.cdist(curvepoints[-1], boundarypoints[1])
+            ib_closest_point_idx = torch.argmin(ib_distance_matrix,dim=1)[-1].item()
+            boundarypoints = boundarypoints[:,0:(max(ob_closest_point_idx, ib_closest_point_idx)+20)%Mboundaries.shape[0]]
+            
+        
+       # print(curvepoints.shape)
+        network_predictions = curvepoints[0].cpu().numpy().copy()
+        final_output = curvepoints[-1].cpu().numpy().copy()
+        outer_boundary = boundarypoints[0].cpu().numpy().copy()
+        inner_boundary = boundarypoints[1].cpu().numpy().copy()
         carposition : np.ndarray = position_spline(t)
         carrotation : Rotation = rotation_spline(t)
-        homogenous_transform = deepracing.pose_utils.toHomogenousTransform(carposition, carrotation.as_quat())
-        homogenous_transform_inv = np.linalg.inv(homogenous_transform)
-        bcvalsnp = bcvals[i].cpu().numpy() 
-        bcvalslocal = np.row_stack( [bcvalsnp[:,0], np.zeros_like(bcvalsnp[:,0]), bcvalsnp[:,1], np.ones_like(bcvalsnp[:,0]) ] )#.transpose()
-        #print(bcvalsaug.shape)
-        bcvalsglobal = np.matmul(homogenous_transform, bcvalslocal)#[0:3].transpose()
-        bcvalsglobal_shapely = [ShapelyPoint(bcvalsglobal[0,i], bcvalsglobal[2,i]) for i in range(bcvalsglobal.shape[1])]
+        homogenous_transform = torch.from_numpy(deepracing.pose_utils.toHomogenousTransform(carposition, carrotation.as_quat()).copy()).type(Mpaths.dtype).to(Mpaths.device)
+        homogenous_transform_inv = torch.inverse(homogenous_transform)
     
-        
-        inside = np.array([p.within(inner_boundary_polygon) for p in bcvalsglobal_shapely])
-        ibdiffs = np.array([inner_boundary_polygon.exterior.distance(bcvalsglobal_shapely[i]) for i in range(len(bcvalsglobal_shapely))])
-        ibdiffs[inside]*=-1.0
-        insideviolation = np.any(inside)
-        insidepoints = bcvalslocal[:, inside]
-
-        outside = np.array([ not p.within(outer_boundary_polygon) for p in bcvalsglobal_shapely])
-        obdiffs = np.array([outer_boundary_polygon.exterior.distance(bcvalsglobal_shapely[i]) for i in range(len(bcvalsglobal_shapely))])
-        obdiffs[~outside]*=-1.0
-        outsideviolation =  np.any(outside)
-        outsidepoints = bcvalslocal[:, outside]
-
-
-
         image_idx = bisect.bisect(image_timestamps, t)
         imnp = bridge.compressed_imgmsg_to_cv2(image_msgs[image_idx],desired_encoding="rgb8")
 
-        _, innerboundary_idx = inner_boundary_kdtree.query(carposition)
-        innerboundary_sample_idx = np.flip(np.arange(innerboundary_idx-int(round(Nsamp/4)), innerboundary_idx+4*Nsamp, step=1, dtype=np.int32)%inner_boundary.shape[1])
-        innerboundary_sample = inner_boundary[:,innerboundary_sample_idx]
-        innerboundary_sample_local = np.matmul(homogenous_transform_inv,innerboundary_sample)
-        #(ibdiffs, ibdiffidx) = inner_boundary_kdtree.query(bcvalsglobal[0:3].transpose())
+        boundaryx = boundarypoints[:,:,0]
+        boundaryz = boundarypoints[:,:,1]
+        curvex = curvepoints[:,:,0]
+        curvez = curvepoints[:,:,1]
 
+        minx = min(torch.min(curvex).item(), torch.min(boundaryx).item()) - 2.0
+        maxx = max(torch.max(curvex).item(), torch.max(boundaryx).item()) + 2.0
+        minz = min(torch.min(curvez).item(), torch.min(boundaryz).item()) - 5.0
+        maxz = max(torch.max(curvez).item(), torch.max(boundaryz).item()) + 5.0
 
-        _, outerboundary_idx = outer_boundary_kdtree.query(carposition)
-        outerboundary_sample_idx = np.flip(np.arange(outerboundary_idx-int(round(Nsamp/4)), outerboundary_idx+4*Nsamp, step=1, dtype=np.int32)%outer_boundary.shape[1])
-        outerboundary_sample = outer_boundary[:,outerboundary_sample_idx]
-        outerboundary_sample_local = np.matmul(homogenous_transform_inv,outerboundary_sample)
+        fig, (axim, axplot) = plt.subplots(nrows=1, ncols=2)#, figsize=(8,6))
+        axim.imshow(imnp)
+        axplot.set_xlim(maxx, minx)
+        axplot.set_ylim(minz, maxz)
 
-        _, optimal_raceline_idx = optimal_raceline_kdtree.query(carposition)
-        r_orl = optimal_raceline_dist[optimal_raceline_idx]
-        optimal_raceline_upperlim = bisect.bisect_left(optimal_raceline_dist, (r_orl+75.0)%optimal_raceline_dist[-1])
-        #optimal_raceline_sample_idx = np.flip(np.arange(optimal_raceline_idx, optimal_raceline_upperlim, step=1, dtype=np.int32)%optimal_raceline.shape[1])
-        if optimal_raceline_idx<optimal_raceline_upperlim:
-            optimal_raceline_sample_idx = np.flip(np.arange(optimal_raceline_idx, optimal_raceline_upperlim, step=1, dtype=np.int32))#%optimal_raceline.shape[1])
-        else:
-            optimal_raceline_sample_idx = np.flip(np.hstack([np.arange(optimal_raceline_idx, optimal_raceline.shape[1], step=1, dtype=np.int32), np.arange(0, optimal_raceline_upperlim, step=1, dtype=np.int32)]))
-        optimal_raceline_sample = optimal_raceline[:,optimal_raceline_sample_idx]
-        optimal_raceline_sample_local = np.matmul(homogenous_transform_inv,optimal_raceline_sample)
+        axplot.scatter(inner_boundary[:,0], inner_boundary[:,1], label="Track Boundaries", marker="o", s=5.0*np.ones_like(inner_boundary[:,1]), c="black")
 
-
+        axplot.plot(network_predictions[:,0], network_predictions[:,1], label="Initial Network Prediction", c="red")
+        axplot.plot(final_output[:,0], final_output[:,1], label="Optimized Output", c="blue")
+        figprefix = "figure_%d"
+        if curves.shape[0]>2:
+            figprefix = "FIGURE_%d"
+            intermediate_points = curvepoints[1:-1].cpu().numpy().copy()
+            for j in range(intermediate_points.shape[0]):
+                axplot.plot(intermediate_points[j,:,0], intermediate_points[j,:,1], '--', label="Optimization step %d" %(j+1,))
+        plt.legend()
+        axplot.scatter(outer_boundary[:,0], outer_boundary[:,1], marker="o", s=5.0*np.ones_like(outer_boundary[:,1]), c="black")
         
-        #(obdiffs, obdiffidx) = outer_boundary_kdtree.query(bcvalsglobal[0:3].transpose())
-        anyviolation = insideviolation or outsideviolation# or np.max(np.abs(ibdiffs))<0.1 or np.max(np.abs(obdiffs))<0.1
-        allxs = np.hstack([innerboundary_sample_local[0], outerboundary_sample_local[0], optimal_raceline_sample_local[0], bcvalslocal[0] ])
-        largestx = np.max(allxs)
-        smallestx = np.min(allxs)
-        if save_all_figures or anyviolation:# or True:
-            fig, (axim, axplot) = plt.subplots(1, 2)
-            if save_all_figures:
-                axim.set_title("Image Seen By Network at\nCurve %d" % (i,) )
-            else:
-                axim.set_title("Image Seen By Network.")
-            axim.imshow(imnp)
-            axplot.set_xlim(largestx+3.0, smallestx-3.0)
-            axplot.set_title("Predictions and Track Boundaries")
-            ibplot = axplot.plot(innerboundary_sample_local[0], innerboundary_sample_local[2], label="Inner Boundary", c="blue")
-            obplot = axplot.plot(outerboundary_sample_local[0], outerboundary_sample_local[2], label="Outer Boundary", c="orange")
-            rlplot = axplot.plot(optimal_raceline_sample_local[0], optimal_raceline_sample_local[2], label="Optimal Raceline", c="black")
-            predplot = axplot.plot(bcvalslocal[0], bcvalslocal[2], label="Predicted Path", c="green")
-            plots = [ibplot, obplot, rlplot, predplot]
-            if insideviolation:
-                ivplot=axplot.plot(insidepoints[0], insidepoints[2], 'r*')
-            if outsideviolation:
-                ovplot=axplot.plot(outsidepoints[0], outsidepoints[2], 'r*')
-            axplot.plot([0], [0], 'g*', label='Current Position')
-            #plt.legend()#loc='center left', bbox_to_anchor=(1, 0.5))
-            fig.legend([p[0] for p in plots],\
-                        [str(p[0].get_label()) for p in plots],\
-                        loc=[0.2,0.1])#\
-                        #loc="lower left")#
-            if anyviolation:
-                figurepath = os.path.join(figure_dir,("curve_%d" % (i,)).upper())
-            else:
-                figurepath = os.path.join(figure_dir,"curve_%d" % (i,))
-            
-            fig.savefig(figurepath+".pdf", format="pdf")
-            fig.savefig(figurepath+".png", format="png")
-            if save_all_figures:
-                figure_img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)#, sep='')
-                figure_img = figure_img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-                figure_img = cv2.cvtColor(figure_img,cv2.COLOR_RGB2BGR)
-                if imwriter is None:
-                    fourccformat = "MJPG"
-                    fourcc = cv2.VideoWriter_fourcc(*fourccformat)
-                    writershape = (figure_img.shape[1], figure_img.shape[0])
-                    imwriter = cv2.VideoWriter(os.path.join(figure_dir,"pathvideo.avi"), fourcc, 2, writershape, True)
-                imwriter.write(figure_img)
-            # else:
-            #     axim.set_title("Image Seen By Network")
-            plt.close(fig=fig)
-            figure_metadata_path = figurepath+"_details.json"
-            figure_metadata_dict = {"inside_violation" : int(insideviolation), "outside_violation": int(outsideviolation)}
-            if insideviolation:
-                figure_metadata_dict["distance_to_boundary"] = np.max(ibdiffs[inside])
-            elif outsideviolation:
-                figure_metadata_dict["distance_to_boundary"] = np.max(obdiffs[outside])
-            else:
-                figure_metadata_dict["distance_to_boundary"] = "none"
-            
-            
-            with open(figure_metadata_path, "w") as f:
-                json.dump(figure_metadata_dict, f, indent=2, skipkeys=False)
-            # if anyviolation:
-            #     print()
-            #     print("insideviolation: " + str(insideviolation))
-            #     print("outsideviolation: " + str(outsideviolation))
-            #     print(bcvalsglobal_shapely)
-            #     plt.show()
-            # else:
-            #     plt.close(fig=fig)
+        plt.savefig(os.path.join(figure_dir,(figprefix%(i+1,))+".svg"))
+        plt.savefig(os.path.join(figure_dir,(figprefix%(i+1,))+".pdf"))
+        plt.savefig(os.path.join(figure_dir,(figprefix%(i+1,))+".png"))
+        plt.close()
+       # plt.show()
+        
 
         # plt.savefig(os.path.join(figure_dir,"curve_%d.svg" % (i,)), format="svg")
 except KeyboardInterrupt as e:
