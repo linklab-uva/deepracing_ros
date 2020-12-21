@@ -11,6 +11,7 @@ import struct
 from typing import List
 from scipy.spatial.transform import Rotation as Rot
 import deepracing
+import torch
 # _DATATYPES = {
 # PointField.INT8    : ('b', 1),\
 # PointField.UINT8  : ('B', 1),\
@@ -151,4 +152,10 @@ def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
    return ( position, scipy.spatial.transform.Rotation.from_matrix(rotationmat).as_quat() )
 def toBezierCurveMsg(control_points: np.ndarray, control_points_header: Header,  yoffset:float=0.0):
    return drmsgs.BezierCurve(control_points_lateral=control_points[:,0].tolist(), control_points_forward=control_points[:,1].tolist(), header = control_points_header, yoffset=yoffset)
+def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, device=torch.device("cpu")):
+   numpoints = len(curve_msg.control_points_forward)
+   rtn = torch.empty(numpoints, 2, dtype=dtype, device=device, requires_grad=False)
+   rtn[:,0] = torch.from_numpy(np.array(curve_msg.control_points_lateral).copy()).type(dtype).to(device)
+   rtn[:,1] = torch.from_numpy(np.array(curve_msg.control_points_forward).copy()).type(dtype).to(device)
+   return rtn
    
