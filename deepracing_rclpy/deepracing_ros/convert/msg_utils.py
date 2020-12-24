@@ -1,5 +1,6 @@
 import deepracing_msgs.msg as drmsgs # BezierCurve, TimestampedPacketMotionData, PacketMotionData, CarMotionData, PacketHeader
 import geometry_msgs.msg as geo_msgs#  Point, PointStamped, Vector3, Vector3Stamped
+import tf2_msgs.msg as tf2_msgs
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header
 from builtin_interfaces.msg import Time
@@ -150,12 +151,22 @@ def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
    upvector = upvector/la.norm(upvector)
    rotationmat = np.column_stack((-rightvector,upvector,forwardvector))
    return ( position, scipy.spatial.transform.Rotation.from_matrix(rotationmat).as_quat() )
-def toBezierCurveMsg(control_points: np.ndarray, control_points_header: Header,  yoffset:float=0.0):
-   return drmsgs.BezierCurve(control_points_lateral=control_points[:,0].tolist(), control_points_forward=control_points[:,1].tolist(), header = control_points_header, yoffset=yoffset)
-def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, device=torch.device("cpu")):
+def toBezierCurveMsg(control_points, control_points_header: Header,  yoffset:float=0.0, index={"lateral": 0, "forward": 1}):
+   control_points_np = control_points.detach().cpu().numpy()
+   return drmsgs.BezierCurve(control_points_lateral=control_points_np[:,index["lateral"]].tolist(), control_points_forward=control_points_np[:,index["forward"]].tolist(), header = control_points_header, yoffset=yoffset)
+def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, device=torch.device("cpu"), index={"lateral": 0, "forward": 1}):
    numpoints = len(curve_msg.control_points_forward)
    rtn = torch.empty(numpoints, 2, dtype=dtype, device=device, requires_grad=False)
-   rtn[:,0] = torch.from_numpy(np.array(curve_msg.control_points_lateral).copy()).type(dtype).to(device)
-   rtn[:,1] = torch.from_numpy(np.array(curve_msg.control_points_forward).copy()).type(dtype).to(device)
+   rtn[:,index["lateral"]] = torch.from_numpy(np.array(curve_msg.control_points_lateral).copy()).type(dtype).to(device)
+   rtn[:,index["forward"]] = torch.from_numpy(np.array(curve_msg.control_points_forward).copy()).type(dtype).to(device)
    return rtn
-   
+def transformMsgToTorch(transform_msg: geo_msgs.Transform, dtype=torch.float64, device=torch.device("cpu")):
+   rtn = torch.eye(4, dtype=dtype, device=device, requires_grad=False)
+   rtn[0:3,0:3] = torch.from_numpy(Rot.from_quat(np.array([transform_msg.rotation.x, transform_msg.rotation.y, transform_msg.rotation.z, transform_msg.rotation.w], copy=False)).as_matrix().copy()).type(dtype).to(device)
+   rtn[0:3,3] = torch.tensor([transform_msg.translation.x, transform_msg.translation.y, transform_msg.translation.z], dtype=dtype, device=device)
+   return rtn
+def poseMsgToTorch(pose_msg: geo_msgs.Pose, dtype=torch.float64, device=torch.device("cpu")):
+   rtn = torch.eye(4, dtype=dtype, device=device, requires_grad=False)
+   rtn[0:3,0:3] = torch.from_numpy(Rot.from_quat(np.array([pose_msg.orientation.x, pose_msg.orientation.y, pose_msg.orientation.z, pose_msg.orientation.w], copy=False)).as_matrix().copy()).type(dtype).to(device)
+   rtn[0:3,3] = torch.tensor([pose_msg.position.x, pose_msg.position.y, pose_msg.position.z], dtype=dtype, device=device)
+   return rtn
