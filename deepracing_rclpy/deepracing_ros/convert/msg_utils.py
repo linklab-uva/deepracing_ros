@@ -155,7 +155,7 @@ def toBezierCurveMsg(control_points, header: Header):
    ptsnp = control_points.detach().cpu().numpy()
    ptsmsg = drmsgs.BezierCurve(header=header)
    for i in range(ptsnp.shape[0]):
-      ptsmsg.control_points.append(geo_msgs.Point(x=float(ptsnp[i,0]), y=float(ptsnp[i,0]), z=float(ptsnp[i,2])))
+      ptsmsg.control_points.append(geo_msgs.Point(x=float(ptsnp[i,0]), y=float(ptsnp[i,1]), z=float(ptsnp[i,2])))
    return ptsmsg
 def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, device=torch.device("cpu")):
    ptsnp = np.array([[p.x, p.y, p.z ] for p in curve_msg.control_points ])
