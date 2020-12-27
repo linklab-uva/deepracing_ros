@@ -59,6 +59,8 @@ setup(
             'point_cloud_display = %s.scripts.point_cloud_display:main' % (python_pkg_name),
             'velocity_publisher = %s.scripts.velocity_publisher:main' % (python_pkg_name),
             'vjoy_control_node = %s.scripts.vjoy_control_node:main' % (python_pkg_name),
+            'tf2_test = %s.scripts.tf2_test:main' % (python_pkg_name),
+            
             
         ],
     },
