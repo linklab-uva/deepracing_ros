@@ -153,10 +153,7 @@ def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
    return ( position, scipy.spatial.transform.Rotation.from_matrix(rotationmat).as_quat() )
 def toBezierCurveMsg(control_points, header: Header):
    ptsnp = control_points.detach().cpu().numpy()
-   ptsmsg = drmsgs.BezierCurve(header=header)
-   for i in range(ptsnp.shape[0]):
-      ptsmsg.control_points.append(geo_msgs.Point(x=float(ptsnp[i,0]), y=float(ptsnp[i,1]), z=float(ptsnp[i,2])))
-   return ptsmsg
+   return drmsgs.BezierCurve(header=header, control_points=[geo_msgs.Point(x=float(ptsnp[i,0]), y=float(ptsnp[i,1]), z=float(ptsnp[i,2])) for i in range(ptsnp.shape[0])])
 def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, device=torch.device("cpu")):
    ptsnp = np.array([[p.x, p.y, p.z ] for p in curve_msg.control_points ])
    return torch.as_tensor(ptsnp.copy(), device=device, dtype=dtype)
