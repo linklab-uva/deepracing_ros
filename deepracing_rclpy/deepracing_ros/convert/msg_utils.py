@@ -155,18 +155,18 @@ def toBezierCurveMsg(control_points, header: Header):
    ptsnp = control_points.detach().cpu().numpy()
    ptsmsg = drmsgs.BezierCurve(header=header)
    for i in range(ptsnp.shape[0]):
-      ptsmsg.control_points.append(geo_msgs.Point(x=ptsnp[i,0], y=ptsnp[i,0], z=ptsnp[i,2]))
+      ptsmsg.control_points.append(geo_msgs.Point(x=float(ptsnp[i,0]), y=float(ptsnp[i,0]), z=float(ptsnp[i,2])))
    return ptsmsg
 def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, device=torch.device("cpu")):
    ptsnp = np.array([[p.x, p.y, p.z ] for p in curve_msg.control_points ])
    return torch.as_tensor(ptsnp.copy(), device=device, dtype=dtype)
-def transformMsgToTorch(transform_msg: geo_msgs.Transform, dtype=torch.float64, device=torch.device("cpu")):
+def transformMsgToTorch(transform_msg: geo_msgs.Transform, dtype=torch.float32, device=torch.device("cpu")):
    rtn = torch.eye(4, dtype=dtype, device=device, requires_grad=False)
-   rtn[0:3,0:3] = torch.from_numpy(Rot.from_quat(np.array([transform_msg.rotation.x, transform_msg.rotation.y, transform_msg.rotation.z, transform_msg.rotation.w], copy=False)).as_matrix().copy()).type(dtype).to(device)
-   rtn[0:3,3] = torch.tensor([transform_msg.translation.x, transform_msg.translation.y, transform_msg.translation.z], dtype=dtype, device=device)
+   rtn[0:3,0:3] = torch.as_tensor(Rot.from_quat(np.array([transform_msg.rotation.x, transform_msg.rotation.y, transform_msg.rotation.z, transform_msg.rotation.w], copy=False)).as_matrix().copy(), dtype=dtype, device=device)
+   rtn[0:3,3] = torch.as_tensor(np.array([transform_msg.translation.x, transform_msg.translation.y, transform_msg.translation.z]), dtype=dtype, device=device)
    return rtn
-def poseMsgToTorch(pose_msg: geo_msgs.Pose, dtype=torch.float64, device=torch.device("cpu")):
+def poseMsgToTorch(pose_msg: geo_msgs.Pose, dtype=torch.float32, device=torch.device("cpu")):
    rtn = torch.eye(4, dtype=dtype, device=device, requires_grad=False)
-   rtn[0:3,0:3] = torch.from_numpy(Rot.from_quat(np.array([pose_msg.orientation.x, pose_msg.orientation.y, pose_msg.orientation.z, pose_msg.orientation.w], copy=False)).as_matrix().copy()).type(dtype).to(device)
-   rtn[0:3,3] = torch.tensor([pose_msg.position.x, pose_msg.position.y, pose_msg.position.z], dtype=dtype, device=device)
+   rtn[0:3,0:3] = torch.as_tensor(Rot.from_quat(np.array([pose_msg.orientation.x, pose_msg.orientation.y, pose_msg.orientation.z, pose_msg.orientation.w], copy=False)).as_matrix().copy(), dtype=dtype, device=device)
+   rtn[0:3,3] = torch.as_tensor(np.array([pose_msg.position.x, pose_msg.position.y, pose_msg.position.z]), dtype=dtype, device=device)
    return rtn
