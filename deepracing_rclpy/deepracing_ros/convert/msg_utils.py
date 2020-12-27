@@ -151,15 +151,15 @@ def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
    upvector = upvector/la.norm(upvector)
    rotationmat = np.column_stack((-rightvector,upvector,forwardvector))
    return ( position, scipy.spatial.transform.Rotation.from_matrix(rotationmat).as_quat() )
-def toBezierCurveMsg(control_points, control_points_header: Header,  yoffset:float=0.0, index={"lateral": 0, "forward": 1}):
-   control_points_np = control_points.detach().cpu().numpy()
-   return drmsgs.BezierCurve(control_points_lateral=control_points_np[:,index["lateral"]].tolist(), control_points_forward=control_points_np[:,index["forward"]].tolist(), header = control_points_header, yoffset=yoffset)
-def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, device=torch.device("cpu"), index={"lateral": 0, "forward": 1}):
-   numpoints = len(curve_msg.control_points_forward)
-   rtn = torch.empty(numpoints, 2, dtype=dtype, device=device, requires_grad=False)
-   rtn[:,index["lateral"]] = torch.from_numpy(np.array(curve_msg.control_points_lateral).copy()).type(dtype).to(device)
-   rtn[:,index["forward"]] = torch.from_numpy(np.array(curve_msg.control_points_forward).copy()).type(dtype).to(device)
-   return rtn
+def toBezierCurveMsg(control_points, header: Header):
+   ptsnp = control_points.detach().cpu().numpy()
+   ptsmsg = drmsgs.BezierCurve(header=header)
+   for i in range(ptsnp.shape[0]):
+      ptsmsg.control_points.append(geo_msgs.Point(x=ptsnp[i,0], y=ptsnp[i,0], z=ptsnp[i,2]))
+   return ptsmsg
+def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, device=torch.device("cpu")):
+   ptsnp = np.array([[p.x, p.y, p.z ] for p in curve_msg.control_points ])
+   return torch.as_tensor(ptsnp.copy(), device=device, dtype=dtype)
 def transformMsgToTorch(transform_msg: geo_msgs.Transform, dtype=torch.float64, device=torch.device("cpu")):
    rtn = torch.eye(4, dtype=dtype, device=device, requires_grad=False)
    rtn[0:3,0:3] = torch.from_numpy(Rot.from_quat(np.array([transform_msg.rotation.x, transform_msg.rotation.y, transform_msg.rotation.z, transform_msg.rotation.w], copy=False)).as_matrix().copy()).type(dtype).to(device)

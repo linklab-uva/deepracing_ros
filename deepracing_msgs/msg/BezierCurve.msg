@@ -1,4 +1,2 @@
-float64[] control_points_lateral
-float64[] control_points_forward
-float64 yoffset
+geometry_msgs/Point[] control_points
 std_msgs/Header header
