@@ -211,6 +211,9 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
 
     def innerBoundaryCB(self, pc_msg: PointCloud2):
         inner_boundary = np.array(list(deepracing_ros.convert.pointCloud2ToNumpy(pc_msg, field_names=["x","y","z"])))
+        print(inner_boundary)
+        if inner_boundary.shape[0]==0:
+            return
         self.ib_sub.destroy()
         self.ib_sub = None
         self.inner_boundary = torch.from_numpy(inner_boundary.copy()).type(self.dtype).to(self.device)
@@ -218,6 +221,9 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         print(self.ib_kdtree)
     def outerBoundaryCB(self, pc_msg: PointCloud2):
         outer_boundary = np.array(list(deepracing_ros.convert.pointCloud2ToNumpy(pc_msg, field_names=["x","y","z"])))
+        print(outer_boundary)
+        if outer_boundary.shape[0]==0:
+            return
         self.ob_sub.destroy()
         self.ob_sub = None
         self.outer_boundary = torch.from_numpy(outer_boundary.copy()).type(self.dtype).to(self.device)
@@ -280,8 +286,10 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             else:
                 bezier_control_points = network_predictions.transpose(1,2)
         paths_msg : TrajComparison = TrajComparison(ego_pose=current_pose_msg)
-        initial_guess = bezier_control_points.detach().clone()
-        paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(initial_guess[0].cpu().numpy(), Header(frame_id="car", stamp=stamp)))
+        initial_guess = bezier_control_points[0].detach().clone()
+        igcpu = initial_guess.cpu()
+        igcpu = torch.stack([ igcpu[:,0], torch.zeros_like(igcpu[:,0]), igcpu[:,1] ], dim=1)
+        paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(igcpu, Header(frame_id="car", stamp=stamp)))
         paths_msg.optimization_time=-1.0
         if boundary_check and (self.ib_kdtree is not None) and (self.ob_kdtree is not None):
          #   print("Running optimization")
@@ -301,7 +309,9 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
 
             _, boundarycurves = mu.bezierLsqfit(boundaries, 7, M=self.Mboundaryfit)
             boundarycurvesaug = torch.cat([boundarycurves,  torch.ones_like(boundarycurves[:,:,0]).unsqueeze(2)], dim=2).transpose(1,2)
-            boundarycurveslocal = torch.matmul(torch.inverse(current_pm.to(self.device)), boundarycurvesaug)[:,0:3].transpose(1,2)[:,:,[0,2]]
+            boundarycurveslocal = torch.matmul(torch.inverse(current_pm.to(self.device)), boundarycurvesaug)[:,0:3].transpose(1,2)
+            boundarycurvesformsg = boundarycurveslocal.cpu()
+            boundarycurveslocal = boundarycurveslocal[:,:,[0,2]]
             
             boundarypoints = torch.matmul(self.Mboundaryeval, boundarycurveslocal)
             _, boundarytangents = mu.bezierDerivative(boundarycurveslocal, M=self.Mboundarytangenteval)
@@ -316,12 +326,11 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             ibnormals = boundarynormals[1].unsqueeze(0)
             ibpoints = boundarypoints[1].unsqueeze(0) - 2.0*ibnormals
 
-            
-            paths_msg.outer_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurveslocal[0].cpu().numpy(), Header(frame_id="car", stamp=stamp))
-            paths_msg.inner_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurveslocal[1].cpu().numpy(), Header(frame_id="car", stamp=stamp))
+            paths_msg.outer_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[0], Header(frame_id="car", stamp=stamp))
+            paths_msg.inner_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[1], Header(frame_id="car", stamp=stamp))
 
             mask=[False] + [True for asdf in range(bezier_control_points.shape[1]-1)]
-            evalpoints = torch.matmul(self.bezierM, initial_guess)
+            evalpoints = torch.matmul(self.bezierM, initial_guess.unsqueeze(0))
             initial_guess_points = evalpoints.clone()
             bcmodel = mu.BezierCurveModule(initial_guess, mask=mask)
           #  bcmodel.train()
@@ -329,7 +338,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             dT2 = dT*dT
             maxacent = 9.8*3
             maxalinear = 9.8*2
-            optimizer = SGD(bcmodel.parameters(), lr=2.0, momentum=0.0)
+            optimizer = SGD(bcmodel.parameters(), lr=self.optim_step_size, momentum=0.0)
             i = 0
             _, l1 = self.boundary_loss(evalpoints, ibpoints, ibnormals)
             _, l2 = self.boundary_loss(evalpoints, obpoints, obnormals)
@@ -362,15 +371,23 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
                 loss.backward()
                 optimizer.step()
                 i+=1
-                paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(all_control_points[0].detach().cpu().numpy(), Header(frame_id="car", stamp=stamp)))
+                currentcurvecpu = all_control_points[0].detach().cpu()
+                currentcurvecpu = torch.stack([ currentcurvecpu[:,0], torch.zeros_like(currentcurvecpu[:,0]), currentcurvecpu[:,1] ], dim=1)
+                paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(currentcurvecpu, Header(frame_id="car", stamp=stamp)))
             output = bcmodel.allControlPoints().detach()
             diffs = evalpoints - initial_guess_points
             diffnorms = torch.norm(diffs, p=2, dim=2)[0]
             if torch.all(output==output) and torch.all(diffs==diffs) and torch.max(diffnorms)<10.0:
                 bezier_control_points = output
+                paths_msg.optimization_succeeded = True
+            else:
+                paths_msg.optimization_succeeded = False
             tock = time.time()
             paths_msg.optimization_time = float(tock-tick)
-        paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(bezier_control_points[0].cpu().numpy(), Header(frame_id="car", stamp=stamp)))
+        
+        finalcurvecpu = bezier_control_points[0].cpu()
+        finalcurvecpu = torch.stack([ finalcurvecpu[:,0], torch.zeros_like(finalcurvecpu[:,0]), finalcurvecpu[:,1] ], dim=1)
+        paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(finalcurvecpu, Header(frame_id="car", stamp=stamp)))
         self.path_publisher.publish(paths_msg)
             
  

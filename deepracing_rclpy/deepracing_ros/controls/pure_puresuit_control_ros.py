@@ -135,6 +135,9 @@ class PurePursuitControllerROS(Node):
 
         num_optim_steps_param : Parameter = self.declare_parameter("num_optim_steps",value=10)
         self.num_optim_steps : int = num_optim_steps_param.get_parameter_value().integer_value
+
+        optim_step_size_param : Parameter = self.declare_parameter("optim_step_size",value=0.1)
+        self.optim_step_size : float = optim_step_size_param.get_parameter_value().double_value
         
         forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=1)
         self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
@@ -149,17 +152,6 @@ class PurePursuitControllerROS(Node):
         else:
             print("Not using DRS")
 
-        self.inner_boundary = None
-        self.inner_boundary_inv = None
-        self.inner_boundary_kdtree = None
-        # self.inner_boundary_normals = None
-
-        self.outer_boundary = None
-        self.outer_boundary_inv = None
-        self.outer_boundary_kdtree = None
-        # self.outer_boundary_tangents = None
-        # self.outer_boundary_normals = None
-        self.track_distance = 5303.0
 
         self.velocity_control_sub = None
         self.status_data_sub = None
@@ -242,7 +234,7 @@ class PurePursuitControllerROS(Node):
             distances_forward = distances_forward_
 
         speeds = torch.norm(v_local_forward, p=2, dim=1)
-        lookahead_distance = max(self.lookahead_gain*current_speed, 10.0)
+        lookahead_distance = max(self.lookahead_gain*current_speed, 5.0)
         lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
 
         lookahead_index = torch.argmin(torch.abs(distances_forward-lookahead_distance))
