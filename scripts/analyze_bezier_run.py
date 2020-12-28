@@ -120,7 +120,7 @@ print(timestampend)
 
 pose_msgs = [p for p in sorted(msg_dict["/ego_vehicle/pose"], key=poseKey) if rclpy.time.Time.from_msg(p.header.stamp)<=timestampend]
 pose_header_timestamps = [rclpy.time.Time.from_msg(msg.header.stamp) for msg in pose_msgs]
-pose_timestamps = np.array([t.nanoseconds/1E9 for t in pose_header_timestamps])
+pose_timestamps_fit = np.array([t.nanoseconds/1E9 for t in pose_header_timestamps])
 
 twist_msgs = [v for v in sorted(msg_dict["/ego_vehicle/velocity"], key=poseKey) if rclpy.time.Time.from_msg(v.header.stamp)<=timestampend]
 twist_header_timestamps = [rclpy.time.Time.from_msg(msg.header.stamp) for msg in twist_msgs]
@@ -140,15 +140,13 @@ path_timestamps = np.array([t.nanoseconds/1E9 for t in path_header_timestamps])
 t0 = path_timestamps[0]
 path_timestamps = path_timestamps  - t0
 image_timestamps = image_timestamps  - t0
-pose_timestamps = pose_timestamps  - t0
+pose_timestamps_fit = pose_timestamps_fit  - t0
 lapdata_timestamps = lapdata_timestamps  - t0
 twist_timestamps = twist_timestamps  - t0
 
 print("Extracted %d path comparisons" % ( len(predicted_path_msgs), ) )
 print("Extracted %d images" % ( len(image_msgs), ) )
 
-
-fig = plt.figure()
 
 
 ib_recon = np.array(innerboundary_poly.exterior.xy).transpose()
@@ -161,26 +159,36 @@ maxx = float(np.max(allx))+5.0
 minz = float(np.min(allz))-5.0
 maxz = float(np.max(allz))+5.0
 
-plt.xlim(maxx,minx)
-# plt.ylim(maxz,minz)
 
-plt.plot(ib_recon[:,0],ib_recon[:,1], label="Inner Boundary of Track")
+positionsfit = np.array( [ [p.pose.position.x, p.pose.position.y, p.pose.position.z] for p in pose_msgs ] )
+position_spline : BSpline = make_interp_spline(pose_timestamps_fit, positionsfit, k=5) 
 
-plt.plot(ob_recon[:,0],ob_recon[:,1], label="Outer Boundary of Track")
-plt.legend()
-plt.show()
+# pose_timestamps = pose_timestamps_fit.copy()
+# positions = positionsfit.copy()
+
+pose_timestamps = np.linspace(pose_timestamps_fit[0], pose_timestamps_fit[-1], num=int(pose_timestamps_fit.shape[0]*3))
+positions = position_spline(pose_timestamps)
 
 
-bridge = cv_bridge.CvBridge()
-positions = np.array( [ [p.pose.position.x, p.pose.position.y, p.pose.position.z] for p in pose_msgs ] )
-position_spline : BSpline = make_interp_spline(pose_timestamps, positions) 
+velocities = np.array( [ [t.twist.linear.x, t.twist.linear.y, t.twist.linear.z] for t in twist_msgs ] )
+speeds = np.linalg.norm(velocities, ord=2, axis=1)
+
+
+
+
+
+
 quats = np.array( [ [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w] for p in pose_msgs ] )
 rotations = Rotation.from_quat(quats)
-rotation_spline : RotationSpline = RotationSpline(pose_timestamps, rotations) 
+rotation_spline : RotationSpline = RotationSpline(pose_timestamps_fit, rotations) 
 
 
-results = deepracing.evaluation_utils.lapMetrics(positions, pose_timestamps, innerboundary_poly, outerboundary_poly)
+all_violation_regions, results = deepracing.evaluation_utils.lapMetrics(positions, pose_timestamps, innerboundary_poly, outerboundary_poly)
+violating_points = np.row_stack([positions[all_violation_regions[i,0]:all_violation_regions[i,1]] for i in range(all_violation_regions.shape[0])])
 results["laptime"] = lapdata_msgs[-1].udp_packet.lap_data[player_car_idx].last_lap_time
+results["average_speed"] = np.mean(speeds)
+results["lapdistance"] = lapdata_msgs[idxend-1].udp_packet.lap_data[player_car_idx].lap_distance
+print(results)
 
 bag_base = os.path.basename(bag_dir)
 bag_parent = os.path.abspath( os.path.join(bag_dir, os.pardir) )
@@ -189,6 +197,19 @@ bag_parent = os.path.abspath( os.path.join(bag_dir, os.pardir) )
 with open(os.path.join(bag_parent, bag_base+"_results.json"), "w") as f:
     json.dump(results, f, indent=2)
 
+
+fig1 = plt.figure()
+plt.xlim(maxx,minx)
+plt.plot(positions[:,0],positions[:,2], "--", label="Ego Agent Path", c="b")
+plt.plot(ib_recon[:,0],ib_recon[:,1], label="Inner Boundary of Track", c="#006633")
+plt.plot(ob_recon[:,0],ob_recon[:,1], label="Outer Boundary of Track", c="#000033")
+plt.scatter(violating_points[:,0],violating_points[:,2], marker="x",color="r", label="Boundary-Violating Points")
+plt.legend()
+fig2 = plt.figure()
+
+plt.plot(twist_timestamps,speeds)
+
+plt.show()
 
 
 
@@ -209,6 +230,8 @@ if os.path.isdir(figure_dir):
 time.sleep(1.0)
 os.makedirs(figure_dir)
 imwriter = None
+
+bridge = cv_bridge.CvBridge()
 print("Analyzing bezier curves")
 try:
     for i, paths_msg in tqdm(enumerate(predicted_path_msgs), total=len(predicted_path_msgs)):
