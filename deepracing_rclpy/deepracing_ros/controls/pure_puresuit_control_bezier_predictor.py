@@ -192,7 +192,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         else:
             self.image_sub = self.create_subscription( Image, '/cropped_publisher/images', self.addToBuffer, 1)
 
-        self.Mboundaryfit = mu.bezierM( torch.linspace(0.0,1.0,steps=440,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
+        self.Mboundaryfit = mu.bezierM( torch.linspace(0.0,1.0,steps=400,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
         self.Mboundaryeval = mu.bezierM( torch.linspace(0.0,1.0,steps=20000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
         self.Mboundarytangenteval = mu.bezierM( torch.linspace(0.0,1.0,steps=20000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 6)
         # self.Mboundarynormaleval = mu.bezierM( torch.linspace(0.0,1.0,steps=4000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 3)
@@ -205,30 +205,30 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         self.ob_kdtree = None
         self.ob_sub = self.create_subscription(PointCloud2, "/outer_track_boundary/pcl", self.outerBoundaryCB, 1)
 
-        self.boundary_loss = BoundaryLoss(time_reduction="max", relu_type="Leaky", alpha=1.0, beta=0.0).type(self.dtype).to(self.device)
+        self.boundary_loss = BoundaryLoss(time_reduction="all", batch_reduction="all", relu_type="Leaky", alpha=5.0, beta=0.1).type(self.dtype).to(self.device)
 
 
 
     def innerBoundaryCB(self, pc_msg: PointCloud2):
         inner_boundary = np.array(list(deepracing_ros.convert.pointCloud2ToNumpy(pc_msg, field_names=["x","y","z"])))
-        print(inner_boundary)
+       # print(inner_boundary)
         if inner_boundary.shape[0]==0:
             return
         self.ib_sub.destroy()
         self.ib_sub = None
-        self.inner_boundary = torch.from_numpy(inner_boundary.copy()).type(self.dtype).to(self.device)
+        self.inner_boundary = torch.cat([torch.from_numpy(inner_boundary.copy()).type(self.dtype).to(self.device), torch.ones(inner_boundary.shape[0], 1, dtype=self.dtype, device=self.device)], dim=1)
         self.ib_kdtree = KDTree(inner_boundary)
-        print(self.ib_kdtree)
+        print(self.inner_boundary)
     def outerBoundaryCB(self, pc_msg: PointCloud2):
         outer_boundary = np.array(list(deepracing_ros.convert.pointCloud2ToNumpy(pc_msg, field_names=["x","y","z"])))
-        print(outer_boundary)
+      #  print(outer_boundary)
         if outer_boundary.shape[0]==0:
             return
         self.ob_sub.destroy()
         self.ob_sub = None
-        self.outer_boundary = torch.from_numpy(outer_boundary.copy()).type(self.dtype).to(self.device)
+        self.outer_boundary = torch.cat([torch.from_numpy(outer_boundary.copy()).type(self.dtype).to(self.device), torch.ones(outer_boundary.shape[0], 1, dtype=self.dtype, device=self.device)], dim=1)
         self.ob_kdtree = KDTree(outer_boundary)
-        print(self.ob_kdtree)
+        print(self.outer_boundary)
     def addToBuffer(self, img_msg):
         try:
             if isinstance(img_msg,CompressedImage):
@@ -262,17 +262,17 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
     def getTrajectory(self):
         # print(self.current_pose_mat)
         boundary_check = self.num_optim_steps>0
-        if self.current_pose_mat is None:
-            return super().getTrajectory()
         if self.pose_semaphore.acquire(timeout=1.0):
+            if self.current_pose is None:
+                self.pose_semaphore.release()
+                return super().getTrajectory()
             current_pose_msg = deepcopy(self.current_pose)
-            current_pm = self.current_pose_mat.clone()
             self.pose_semaphore.release()
         else:
             return super().getTrajectory()
+        current_pm = deepracing_ros.convert.poseMsgToTorch(current_pose_msg.pose, dtype=self.dtype, device=self.device)
+        current_pm_inv = torch.inverse(current_pm)
         stamp = current_pose_msg.header.stamp
-        if boundary_check:
-            current_pm = current_pm.type(self.dtype).to(self.device)
         imnp = np.array(self.image_buffer).astype(np.float32).copy()
         with torch.no_grad():
             imtorch = torch.from_numpy(imnp.copy())
@@ -292,26 +292,56 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(igcpu, Header(frame_id="car", stamp=stamp)))
         paths_msg.optimization_time=-1.0
         if boundary_check and (self.ib_kdtree is not None) and (self.ob_kdtree is not None):
-         #   print("Running optimization")
+            #print("Running optimization")
             tick = time.time()
-            current_pos = current_pm[0:3,3].cpu().numpy()
-            _, ib_closest_idx = self.ib_kdtree.query(current_pos)
-            ibstart, ibend = ib_closest_idx - 40, ib_closest_idx+400
+            current_pos = current_pm[0:3,3]#.cpu().numpy()
+            current_pos_np = current_pos.cpu().numpy()
+
+           # ib_closest_delta, ib_closest_idx = torch.min(torch.norm(self.inner_boundary[:,0:3] - current_pos, p=2, dim=1), dim=0)
+            ib_closest_delta, ib_closest_idx = self.ib_kdtree.query(current_pos_np)
+            # iblocal = torch.matmul(self.inner_boundary, current_pm_inv.t())[:,0:3]
+            # ibdeltanorms = torch.norm(iblocal, p=2, dim=1)
+            # ibsmallestdelta, ib_closest_idx = torch.min(ibdeltanorms,dim=0)
+            # ib_closest_idx = ib_closest_idx.item()
+            # ib_search_idx = torch.arange(ib_closest_idx-150,ib_closest_idx+150, step=1, dtype=torch.int64)%self.inner_boundary.shape[0]
+            # ib_search = torch.matmul(self.inner_boundary[ib_search_idx], current_pm_inv.t())[:,2]
+            # ibzmin, ibsearchstart = torch.min(torch.abs(ib_search), dim=0)
+            # ibstart = ib_search_idx[ibsearchstart.item()].item()
+            ibstart = ib_closest_idx - 40
+            ibend = ib_closest_idx + 360
             ibidx = torch.arange(ibstart,ibend, step=1, dtype=torch.int64)%self.inner_boundary.shape[0]
-            ibsamp = self.inner_boundary[ibidx]#[:,[0,2]]
+            ibsamp = torch.matmul(self.inner_boundary[ibidx], current_pm_inv.t())[:,[0,2]]
             
-            _, ob_closest_idx = self.ob_kdtree.query(current_pos)
-            obstart, obend = ob_closest_idx - 40, ob_closest_idx+400
+            #ob_closest_delta, ob_closest_idx = torch.min(torch.norm(self.outer_boundary[:,0:3] - current_pos, p=2, dim=1), dim=0)
+            ob_closest_delta, ob_closest_idx = self.ob_kdtree.query(current_pos_np)
+            # oblocal = torch.matmul(self.outer_boundary, current_pm_inv.t())[:,0:3]
+            # obdeltanorms = torch.norm(oblocal, p=2, dim=1)
+            # obsmallestdelta, ob_closest_idx = torch.min(obdeltanorms,dim=0)
+            # ob_closest_idx = ob_closest_idx.item()
+            # ob_search_idx = torch.arange(ob_closest_idx-150,ob_closest_idx+150, step=1, dtype=torch.int64)%self.outer_boundary.shape[0]
+            # ob_search = torch.matmul(self.outer_boundary[ob_search_idx], current_pm_inv.t())[:,2]
+            # obzmin, obsearchstart = torch.min(torch.abs(ob_search), dim=0)
+            # obstart = ob_search_idx[obsearchstart.item()].item()
+            obstart = ob_closest_idx - 40
+            obend = ob_closest_idx + 360
             obidx = torch.arange(obstart,obend, step=1, dtype=torch.int64)%self.outer_boundary.shape[0]
-            obsamp = self.outer_boundary[obidx]#[:,[0,2]]
+            obsamp = torch.matmul(self.outer_boundary[obidx], current_pm_inv.t())[:,[0,2]]
 
             boundaries = torch.stack([obsamp, ibsamp], dim=0)
 
-            _, boundarycurves = mu.bezierLsqfit(boundaries, 7, M=self.Mboundaryfit)
-            boundarycurvesaug = torch.cat([boundarycurves,  torch.ones_like(boundarycurves[:,:,0]).unsqueeze(2)], dim=2).transpose(1,2)
-            boundarycurveslocal = torch.matmul(torch.inverse(current_pm.to(self.device)), boundarycurvesaug)[:,0:3].transpose(1,2)
-            boundarycurvesformsg = boundarycurveslocal.cpu()
-            boundarycurveslocal = boundarycurveslocal[:,:,[0,2]]
+            _, boundarycurveslocal = mu.bezierLsqfit(boundaries, 7, M=self.Mboundaryfit)
+
+            #boundarycurveslocal = boundarycurves
+            # boundarycurvesaug = torch.cat([boundarycurves,  torch.ones_like(boundarycurves[:,:,0]).unsqueeze(2)], dim=2).transpose(1,2)
+            # boundarycurveslocal = torch.matmul(torch.inverse(current_pm), boundarycurvesaug)[:,0:3].transpose(1,2)
+
+            if boundarycurveslocal.device==torch.device("cpu"):
+                boundarycurvesformsg = boundarycurveslocal.clone()
+            else:
+                boundarycurvesformsg = boundarycurveslocal.cpu()
+            boundarycurvesformsg = torch.stack([boundarycurvesformsg[:,:,0], current_pos_np[1]*torch.ones_like(boundarycurvesformsg[:,:,0]), boundarycurvesformsg[:,:,1]], dim=2)
+
+            #boundarycurveslocal = boundarycurveslocal[:,:,[0,2]]
             
             boundarypoints = torch.matmul(self.Mboundaryeval, boundarycurveslocal)
             _, boundarytangents = mu.bezierDerivative(boundarycurveslocal, M=self.Mboundarytangenteval)
@@ -320,11 +350,11 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             boundarynormals[1,:,0]*=-1.0
 
             obnormals = boundarynormals[0].unsqueeze(0)
-            obpoints = boundarypoints[0].unsqueeze(0) - 2.0*obnormals
+            obpoints = boundarypoints[0].unsqueeze(0) - 1.5*obnormals
 
             
             ibnormals = boundarynormals[1].unsqueeze(0)
-            ibpoints = boundarypoints[1].unsqueeze(0) - 2.0*ibnormals
+            ibpoints = boundarypoints[1].unsqueeze(0) - 1.5*ibnormals
 
             paths_msg.outer_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[0], Header(frame_id="car", stamp=stamp))
             paths_msg.inner_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[1], Header(frame_id="car", stamp=stamp))
@@ -340,34 +370,23 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             maxalinear = 9.8*2
             optimizer = SGD(bcmodel.parameters(), lr=self.optim_step_size, momentum=0.0)
             i = 0
-            _, l1 = self.boundary_loss(evalpoints, ibpoints, ibnormals)
-            _, l2 = self.boundary_loss(evalpoints, obpoints, obnormals)
-            # l1 = 1.0
-            # l2 = 1.0
-            while (l1>0.0 or l2>0.0) and (i<self.num_optim_steps):
+            # _, l1 = self.boundary_loss(evalpoints, ibpoints, ibnormals)
+            # _, l2 = self.boundary_loss(evalpoints, obpoints, obnormals)
+            maxloss = 1.0
+            while maxloss>0.0 and (i<self.num_optim_steps):
             #    print("Step %d" %(i+1,))
                 all_control_points = bcmodel.allControlPoints()
                 evalpoints = torch.matmul(self.bezierM, all_control_points)
-                # _, v_s = mu.bezierDerivative(all_control_points, M=self.bezierMderiv)
-                # v_t = v_s/dT
-                # speeds = torch.norm(v_t, p=2, dim=2)
-                # curvetangents = v_t/speeds[:,:,None]
-                # speedsquares = torch.square(speeds)
-                # speedcubes = speedsquares*speeds
-                # _, a_s =  mu.bezierDerivative(all_control_points, M=self.bezierM2ndderiv, order=2)
-                # a_t = a_s/dT2
-                # accels = torch.norm(a_t, p=2, dim=2)
-                # v_text = torch.cat([v_t, torch.zeros_like(v_t[:,:,0]).unsqueeze(2)], dim=2)
-                # a_text = torch.cat([a_t, torch.zeros_like(a_t[:,:,0]).unsqueeze(2)], dim=2)
-                # radii = (speedcubes/(torch.norm(torch.cross(v_text,a_text, dim=2), p=2, dim=2) + 1E-3))# + 1.0
-                # angvels = speeds/radii
-                # centriptelaccels = speedsquares/radii
-                stepfactor = float(np.sqrt((self.num_optim_steps-i)/self.num_optim_steps))
+                
+                stepfactor = 1.0
                 _, l1 = self.boundary_loss(evalpoints, ibpoints, ibnormals)
                 _, l2 = self.boundary_loss(evalpoints, obpoints, obnormals)
+                l = torch.cat([l1,l2],dim=0)
+                lmax, idxmax = torch.max(l,dim=0)
+                maxloss = torch.max(lmax)
                # print(stepfactor)
                 optimizer.zero_grad()
-                loss = stepfactor*(l1+l2)# - 0.5*stepfactor*torch.mean(speeds) + 0.1*stepfactor*torch.max(torch.nn.functional.relu(accels-maxalinear))
+                loss = stepfactor*maxloss
                 loss.backward()
                 optimizer.step()
                 i+=1

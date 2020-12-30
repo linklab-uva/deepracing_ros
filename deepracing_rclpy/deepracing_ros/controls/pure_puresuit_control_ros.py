@@ -41,6 +41,7 @@ from shapely.geometry import Point as ShapelyPoint, MultiPoint#, Point2d as Shap
 from shapely.geometry.polygon import Polygon
 from shapely.geometry import LinearRing
 import timeit
+import deepracing_ros, deepracing_ros.convert
 
 
 class PurePursuitControllerROS(Node):
@@ -160,10 +161,8 @@ class PurePursuitControllerROS(Node):
 
         
 
-        self.current_pose : PoseStamped = PoseStamped()
-        self.current_pose_mat = None
-        self.current_pose_inv_mat = None
-        self.current_velocity : TwistStamped = TwistStamped()
+        self.current_pose : PoseStamped = None
+        self.current_velocity : TwistStamped = None
         self.current_speed = None
         self.pose_semaphore = threading.Semaphore()
         self.velocity_semaphore = threading.Semaphore()
@@ -176,18 +175,8 @@ class PurePursuitControllerROS(Node):
 
     def poseCallback(self, pose_msg : PoseStamped):
         self.get_logger().debug("Got a new pose: " + str(pose_msg))
-        
-        R = torch.from_numpy(Rot.from_quat( np.array([pose_msg.pose.orientation.x, pose_msg.pose.orientation.y, pose_msg.pose.orientation.z, pose_msg.pose.orientation.w], dtype=np.float64) ).as_matrix()).double()
-        v = torch.from_numpy(np.array([pose_msg.pose.position.x, pose_msg.pose.position.y, pose_msg.pose.position.z], dtype=np.float64 ) )
-        p, pinv = torch.eye(4,dtype=torch.float64), torch.eye(4,dtype=torch.float64)
-        p[0:3,0:3] = R
-        p[0:3,3] = v
-        pinv[0:3,0:3] = p[0:3,0:3].transpose(0,1)
-        pinv[0:3,3] = torch.matmul(pinv[0:3,0:3], -p[0:3,3])
         if self.pose_semaphore.acquire(timeout=1.0):
             self.current_pose = pose_msg
-            self.current_pose_inv_mat = pinv
-            self.current_pose_mat = p
             self.pose_semaphore.release()
         else:
             self.get_logger().error("Unable to acquire semaphore to setting the pose data")
