@@ -139,7 +139,6 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
         z_offset_param : Parameter = self.declare_parameter("z_offset", value=self.L/2.0)
         self.z_offset : float = z_offset_param.get_parameter_value().double_value
 
-
         velocity_scale_param : Parameter = self.declare_parameter("velocity_scale_factor", value=1.0)
         self.velocity_scale_factor : float = velocity_scale_param.get_parameter_value().double_value
         
@@ -336,10 +335,10 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             # boundarycurveslocal = torch.matmul(torch.inverse(current_pm), boundarycurvesaug)[:,0:3].transpose(1,2)
 
             if boundarycurveslocal.device==torch.device("cpu"):
-                boundarycurvesformsg = boundarycurveslocal.clone()
+                bcxz = boundarycurveslocal.clone()
             else:
-                boundarycurvesformsg = boundarycurveslocal.cpu()
-            boundarycurvesformsg = torch.stack([boundarycurvesformsg[:,:,0], current_pos_np[1]*torch.ones_like(boundarycurvesformsg[:,:,0]), boundarycurvesformsg[:,:,1]], dim=2)
+                bcxz = boundarycurveslocal.cpu()
+            boundarycurvesformsg = torch.stack([bcxz[:,:,0], current_pos_np[1]*torch.ones_like(bcxz[:,:,0]), bcxz[:,:,1]], dim=2)
 
             #boundarycurveslocal = boundarycurveslocal[:,:,[0,2]]
             
@@ -415,10 +414,7 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             x_samp = evalpoints[0]
             x_samp[:,0]*=self.xscale_factor
             x_samp[:,1]-=self.z_offset
-            #x_samp_t = x_samp.transpose(0,1)
 
-
-            
 
             _, predicted_tangents = mu.bezierDerivative(bezier_control_points, M = self.bezierMderiv, order=1)
             #predicted_tangents = predicted_tangents
@@ -444,6 +440,5 @@ class AdmiralNetBezierPurePursuitControllerROS(PPC):
             vels = v_t
             #distances_forward = torch.cat((torch.zeros(1, dtype=x_samp.dtype, device=x_samp.device), torch.cumsum(torch.norm(x_samp[1:]-x_samp[:-1],p=2,dim=1), 0)), dim=0)
         
-        x_samp[:,1]-=self.z_offset
         return x_samp, vels, distances_forward
         
