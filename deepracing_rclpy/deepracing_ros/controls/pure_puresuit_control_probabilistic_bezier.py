@@ -315,21 +315,35 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
             paths_msg.outer_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[0], Header(frame_id="car", stamp=stamp))
             paths_msg.inner_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[1], Header(frame_id="car", stamp=stamp))
 
-            mask=[False] + [True for asdf in range(bezier_control_points.shape[1]-1)]
             evalpoints = torch.matmul(self.bezierM, initial_guess.unsqueeze(0))
             initial_guess_points = evalpoints.clone()
-            bcmodel = mu.BezierCurveModule(initial_guess, mask=mask)
           #  bcmodel.train()
+            # _, l1 = self.boundary_loss(evalpoints, ibpoints, ibnormals)
+            # _, l2 = self.boundary_loss(evalpoints, obpoints, obnormals)
+            # curvedist = dist.MultivariateNormal(initial_guess, scale_tril=scale_trils, validate_args=False)
+            # curvesamples = curvedist.sample((100,))
+            # _, signed_distances_ib = self.boundary_loss(curvesamples, ibpoints.expand(curvesamples.shape[0],-1,-1), ibnormals.expand(curvesamples.shape[0],-1,-1))
+            # ibmins, _ = torch.min(signed_distances_ib, dim=1)
+            # iboverallmin, ibminidx = torch.min(ibmins, dim=0)
+
+            # _, signed_distances_ob = self.boundary_loss(curvesamples, obpoints.expand(curvesamples.shape[0],-1,-1), obnormals.expand(curvesamples.shape[0],-1,-1))
+            # obmins, _ = torch.min(signed_distances_ob, dim=1)
+            # oboverallmin, obminidx = torch.min(obmins, dim=0)
+            # if iboverallmin>oboverallmin:
+            #     initial_guess = curvesamples[ibminidx]
+            # else:
+            #     initial_guess = curvesamples[obminidx]
+
+
+
+            mask=[False] + [True for asdf in range(bezier_control_points.shape[1]-1)]
+            bcmodel = mu.BezierCurveModule(initial_guess, mask=mask)
             dT = self.deltaT
             dT2 = dT*dT
             maxacent = 9.8*3
             maxalinear = 9.8*2
             optimizer = SGD(bcmodel.parameters(), lr=self.optim_step_size, momentum=0.0)
             i = 0
-            # _, l1 = self.boundary_loss(evalpoints, ibpoints, ibnormals)
-            # _, l2 = self.boundary_loss(evalpoints, obpoints, obnormals)
-            curvedist = dist.MultivariateNormal(initial_guess, scale_tril=scale_trils, validate_args=False)
-            curvesamples = curvedist.sample((500,))
             maxloss = 1.0
             while maxloss>0.0 and (i<self.num_optim_steps):
             #    print("Step %d" %(i+1,))
@@ -338,7 +352,8 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
                 # print(all_control_points.shape)
                 evalpoints = torch.matmul(self.bezierM, all_control_points)
                 
-                stepfactor = 1.0
+                stepfactor = np.sqrt((self.num_optim_steps-i)/self.num_optim_steps)
+                # stepfactor = 1.0
                 _, l1 = self.boundary_loss(evalpoints, ibpoints, ibnormals)
                 _, l2 = self.boundary_loss(evalpoints, obpoints, obnormals)
                 l = torch.cat([l1,l2],dim=0)
