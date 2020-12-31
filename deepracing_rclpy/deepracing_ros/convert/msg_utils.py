@@ -151,12 +151,29 @@ def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
    upvector = upvector/la.norm(upvector)
    rotationmat = np.column_stack((-rightvector,upvector,forwardvector))
    return ( position, scipy.spatial.transform.Rotation.from_matrix(rotationmat).as_quat() )
-def toBezierCurveMsg(control_points, header: Header):
+def toBezierCurveMsg(control_points, header: Header, covars = None):
    ptsnp = control_points.detach().cpu().numpy()
-   return drmsgs.BezierCurve(header=header, control_points=[geo_msgs.Point(x=float(ptsnp[i,0]), y=float(ptsnp[i,1]), z=float(ptsnp[i,2])) for i in range(ptsnp.shape[0])])
+   if covars is not None:
+      assert(ptsnp.shape[0]==covars.shape[0])
+      covarmatsnp = covars.view(covars.shape[0],9).detach().cpu().numpy()
+   rtn : drmsgs.BezierCurve = drmsgs.BezierCurve(header=header)
+   for i in range(ptsnp.shape[0]):
+      rtn.control_points.append(geo_msgs.Point(x=float(ptsnp[i,0]), y=float(ptsnp[i,1]), z=float(ptsnp[i,2])))
+      if covars is not None: 
+         covar : drmsgs.CovariancePoint = drmsgs.CovariancePoint()
+         covar.covariance = covarmatsnp[i].tolist()
+         rtn.control_point_covariances.append(covar)
+   return rtn
 def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, device=torch.device("cpu")):
    ptsnp = np.array([[p.x, p.y, p.z ] for p in curve_msg.control_points ], copy=False)
-   return torch.as_tensor(ptsnp.copy(), device=device, dtype=dtype)
+   covarslength = len(curve_msg.control_point_covariances)
+   if covarslength>0:
+      if not (covarslength==ptsnp.shape[0]):
+         raise ValueError("Tried to unpack a bezier curve with %d control points, but with %d covariance matrices. A BezierCurve message must either have 0 covariances or the the same as the number of control points." % (ptsnp.shape[0], covarslength))
+      covariances = torch.stack([torch.as_tensor(curve_msg.control_point_covariances[i].covariance, dtype=dtype, device=device) for i in range(covarslength)], dim=0).view(covarslength,3,3)
+   else:
+      covariances = None
+   return torch.as_tensor(ptsnp.copy(), device=device, dtype=dtype), covariances
 def transformMsgToTorch(transform_msg: geo_msgs.Transform, dtype=torch.float32, device=torch.device("cpu")):
    rtn = torch.eye(4, dtype=dtype, device=device, requires_grad=False)
    rtn[0:3,0:3] = torch.as_tensor(Rot.from_quat(np.array([transform_msg.rotation.x, transform_msg.rotation.y, transform_msg.rotation.z, transform_msg.rotation.w], copy=False)).as_matrix().copy(), dtype=dtype, device=device)
