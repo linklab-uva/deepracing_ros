@@ -104,7 +104,14 @@ def pointCloud2ToNumpy(cloud: PointCloud2, field_names=None, skip_nans=False, uv
                   yield unpack_from(data, offset)
                   offset += point_step
 
-def numpyToPointCloud2(points : np.ndarray, field_names : List[str], header : Header, is_bigendian = False):
+def arrayToPointCloud2(pointsarray : [torch.Tensor, np.ndarray], field_names : List[str], header : Header, is_bigendian = False):
+   if isinstance(pointsarray, torch.Tensor):
+      points = pointsarray.detach().cpu().numpy()
+   elif isinstance(pointsarray, np.ndarray):
+      points = pointsarray
+   else:
+      raise TypeError("arrayToPointCloud2 only supports torch.Tensor and np.ndarray as input. Got unknown type: %s" %(str(type(pointsarray)),))
+
    numfields = len(field_names)
    assert(numfields==points.shape[1])
    pc2out = PointCloud2(header=header, is_bigendian = is_bigendian, is_dense = True, width = points.shape[0], height = 1)
