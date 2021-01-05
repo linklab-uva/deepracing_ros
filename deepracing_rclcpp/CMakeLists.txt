@@ -6,9 +6,17 @@ if(NOT CMAKE_C_STANDARD)
   set(CMAKE_C_STANDARD 99)
 endif()
 
-# Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles("#include <filesystem>
+                            int main(int argc, char** argv) { std::filesystem::path p; return 0; }" HAS_STDCXXFS)
+
+# Default to C++14 if the filesystem library isn't available
+if(NOT HAS_STDCXXFS)
   set(CMAKE_CXX_STANDARD 14)
+  find_package(Boost REQUIRED COMPONENTS filesystem)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -37,6 +45,8 @@ find_package(tf2_ros REQUIRED)
 #Provides imported targets for f1_datalogger, armadillo, Boost, Eigen3, Opencv, and (on Windows) vJoy_plusplus
 find_package(f1_datalogger CONFIG REQUIRED)
 
+
+
 add_library(utils SHARED src/utils/f1_msg_utils.cpp src/utils/file_utils.cpp)
 ament_target_dependencies(utils cv_bridge sensor_msgs std_msgs deepracing_msgs rclcpp rosidl_default_runtime)
 target_link_libraries(utils
@@ -51,6 +61,11 @@ target_include_directories(utils
     $<INSTALL_INTERFACE:include>
 )
 target_compile_definitions(utils PRIVATE "DEEPRACING_RCLCPP_BUILDING_LIBRARY")
+if(NOT HAS_STDCXXFS)
+  target_compile_definitions(utils PUBLIC "DEEPRACING_RCLCPP_USE_BOOST_FILESYSTEM")
+  target_link_libraries(utils PUBLIC Boost::filesystem)
+  ament_export_dependencies(Boost)
+endif()
 
 add_executable(tf_updater src/tf_updater.cpp)
 ament_target_dependencies(tf_updater deepracing_msgs geometry_msgs rclcpp tf2 tf2_ros )
