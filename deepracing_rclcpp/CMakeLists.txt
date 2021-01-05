@@ -48,7 +48,7 @@ find_package(f1_datalogger CONFIG REQUIRED)
 
 
 add_library(utils SHARED src/utils/f1_msg_utils.cpp src/utils/file_utils.cpp)
-ament_target_dependencies(utils cv_bridge sensor_msgs std_msgs deepracing_msgs rclcpp rosidl_default_runtime)
+ament_target_dependencies(utils PUBLIC cv_bridge sensor_msgs std_msgs deepracing_msgs rclcpp rosidl_default_runtime)
 target_link_libraries(utils
 f1_datalogger::headers
 f1_datalogger::f1_datalogger_proto
