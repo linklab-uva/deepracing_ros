@@ -90,7 +90,7 @@ class OraclePurePursuitControllerROS(PPC):
         sample_indices_param : Parameter = self.declare_parameter("sample_indices", value=60)
         self.sample_indices : int = sample_indices_param.get_parameter_value().integer_value
 
-        self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer()
+        self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(node=self)
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
         base_link_param : Parameter = self.declare_parameter("base_link", value="base_link")
