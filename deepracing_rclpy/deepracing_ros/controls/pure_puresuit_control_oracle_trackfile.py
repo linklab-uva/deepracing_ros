@@ -104,14 +104,14 @@ class OraclePurePursuitControllerROS(PPC):
         
     def getTrajectory(self):
         if (self.current_pose is None):
-            return super().getTrajectory()
-            
+            return None, None, None
+
         if self.pose_semaphore.acquire(timeout=1.0):
             current_pose_msg = deepcopy(self.current_pose)
             self.pose_semaphore.release()
         else:
             self.get_logger().error("Unable to acquire semaphore for reading pose data")
-            return super().getTrajectory()
+            return None, None, None
         
         base_link_to_measurement_link = C.transformMsgToTorch(self.tf2_buffer.lookup_transform(self.base_link, self.measurement_link, Time(), timeout=Duration(seconds=1)).transform, device=self.device, dtype=self.raceline.dtype)
         measurement_link_to_world = torch.inverse(C.poseMsgToTorch(current_pose_msg.pose, device=self.device, dtype=self.raceline.dtype))
