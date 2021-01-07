@@ -37,7 +37,7 @@ from std_msgs.msg import Float64, Header
 import rclpy
 from rclpy import Parameter
 from rclpy.node import Node
-from rclpy.time import Time
+from rclpy.time import Time, Duration
 from rclpy.clock import Clock, ROSClock
 import deepracing_models.nn_models.Models as M
 from scipy.spatial.transform import Rotation as Rot
@@ -48,16 +48,15 @@ from copy import deepcopy
 import json
 import torch
 from deepracing_msgs.srv import SetPurePursuitPath
-import deepracing_ros.convert as c
+import deepracing_ros.convert as C
 import deepracing.raceline_utils as raceline_utils
 import pickle as pkl
+import tf2_ros
 
 class OraclePurePursuitControllerROS(PPC):
     def __init__(self):
         super(OraclePurePursuitControllerROS, self).__init__()
         raceline_file_param : Parameter = self.declare_parameter("raceline_file")
-        shift_distance_param : Parameter = self.declare_parameter("shift_distance", value=0.0)
-        shift_distance = shift_distance_param.get_parameter_value().double_value
         if raceline_file_param.type_==Parameter.Type.NOT_SET:
             raise ValueError("\"raceline_file\" parameter not set")
         raceline_file = raceline_file_param.get_parameter_value().string_value
@@ -76,38 +75,21 @@ class OraclePurePursuitControllerROS(PPC):
         #bc_type=None
 
         self.raceline = raceline.to(self.device)
-        self.racelinetimes = racelinetimes.to(torch.device("cpu"))
         self.racelinedists = racelinedists.to(self.device)
+        self.racelinetimes = racelinetimes.to(torch.device("cpu"))
         self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(self.racelinetimes.numpy(),self.raceline[0:3].cpu().numpy().transpose(), bc_type=bc_type)
-        
         self.racelinesplineder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=1)
         self.racelinespline2ndder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=2)
 
-
-        plot_param : Parameter = self.declare_parameter("plot", value=False)#,Parameter("plot", value=False))
+        plot_param : Parameter = self.declare_parameter("plot", value=False)
         self.plot : bool = plot_param.get_parameter_value().bool_value
 
-        dt_param : Parameter = self.declare_parameter("dt", value=2.75)#,Parameter("plot", value=False))
+        dt_param : Parameter = self.declare_parameter("dt", value=2.75)
         self.dt : float = dt_param.get_parameter_value().double_value
 
-        # forward_indices_param : Parameter = self.declare_parameter("forward_indices", value=200)#,Parameter("forward_indices", value=120))
-        # self.forward_indices : int = forward_indices_param.get_parameter_value().integer_value
-
-        sample_indices_param : Parameter = self.declare_parameter("sample_indices", value=60)#,Parameter("sample_indices", value=120))
+        sample_indices_param : Parameter = self.declare_parameter("sample_indices", value=60)
         self.sample_indices : int = sample_indices_param.get_parameter_value().integer_value
-
-        # bezier_order_param : Parameter = self.declare_parameter("bezier_order", value=5)#,Parameter("bezier_order", value=7))
-        # self.bezier_order : int = bezier_order_param.get_parameter_value().integer_value
-
-        # self.s_torch_lstsq = torch.linspace(0,1,self.forward_indices, dtype=torch.float64, device=self.device).unsqueeze(0)
-        # self.bezierMlstsq = mu.bezierM(self.s_torch_lstsq, self.bezier_order)
-        
-        # self.s_torch_sample = torch.linspace(0,1,self.sample_indices, dtype=torch.float64, device=self.device).unsqueeze(0)
-        # self.bezierM = mu.bezierM(self.s_torch_sample, self.bezier_order)
-        # # self.bezierMdot = mu.bezierM(self.s_torch_sample, self.bezier_order-1)
-        # self.bezierMdotdot = mu.bezierM(self.s_torch_sample, self.bezier_order-2)
-
-        
+       
         additional_translation_param : Parameter = self.declare_parameter("additional_translation", value=[0.0,0.0,-self.L/2])
         additional_translation : np.ndarray = np.array(additional_translation_param.get_parameter_value().double_array_value)
         
@@ -118,36 +100,18 @@ class OraclePurePursuitControllerROS(PPC):
         self.additional_transform[0:3,0:3] = torch.from_numpy(additional_rotation.as_matrix()).double().to(self.device)
         self.additional_transform[0:3,3] = torch.from_numpy(additional_translation).double().to(self.device)
 
-
-       # self.setPathService = self.create_service(SetPurePursuitPath, "/pure_pursuit/set_path", self.setPathCB)
-
+        self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer()
+        self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
         
+        base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
+        self.base_link : str = base_link_param.get_parameter_value().string_value
 
-    # def setPathCB(self, request : SetPurePursuitPath.Request, response : SetPurePursuitPath.Response):
-    #     self.get_logger().info("Got a request to update pure pursuit raceline")
-    #     response.return_code = SetPurePursuitPath.Response.UNKNOWN_ERROR
-    #     try:
-    #         pathnp = np.array(list(c.pointCloud2ToNumpy(request.new_path, field_names=["x","y","z"])))
-    #     except Exception as e:
-    #         response.return_code=SetPurePursuitPath.Response.INVALID_POINT_CLOUD
-    #         response.message = str(e.with_traceback())
-    #         return response
-    #     try:
-    #         pathtorch = torch.ones(4, pathnp.shape[0], dtype=torch.float64, device=self.device)
-    #         pathtorch[0:3,:] = torch.from_numpy(pathnp.transpose().copy()).double().to(self.device)
-    #         pathdiffs = pathnp[1:] - pathnp[0:-1]
-    #         pathdiffnorms = np.linalg.norm(pathdiffs, ord=2, axis=1)
-    #         pathdists = np.hstack([np.array([0.0]), np.cumsum(pathdiffnorms) ])
-    #     except Exception as e:
-    #         response.return_code=SetPurePursuitPath.Response.UNKNOWN_ERROR
-    #         response.message = str(e.with_traceback())
-    #         return response
-    #     response.return_code=SetPurePursuitPath.Response.SUCCESS
-    #     response.message=""
-    #     self.raceline_dists, self.raceline = torch.from_numpy(pathdists).double().to(self.device), pathtorch 
-    #     self.get_logger().info("Updated pure pursuit raceline")
-    #     return response
+        measurement_link_param : Parameter = self.declare_parameter("measurement_link", value="center_of_gravity")
+        self.measurement_link : str = measurement_link_param.get_parameter_value().string_value
+
+
+       
         
     def getTrajectory(self):
         if (self.current_pose_mat is None):
@@ -157,43 +121,35 @@ class OraclePurePursuitControllerROS(PPC):
         # else:
     #     current_pose_mat = self.current_pose_mat.to(self.device)
         if self.pose_semaphore.acquire(timeout=1.0):
-            current_pose_mat = self.current_pose_mat.to(self.device)
+            current_pose_msg = deepcopy(self.current_pose)
             self.pose_semaphore.release()
         else:
             self.get_logger().error("Unable to acquire semaphore for reading pose data")
             return super().getTrajectory()
-        current_pose_mat = torch.matmul(current_pose_mat, self.additional_transform)
-        #print("Current pose mat after transform: "+ str(current_pose_mat))
-        current_pose_inv = torch.inverse(current_pose_mat)
-        raceline_local = torch.matmul(current_pose_inv,self.raceline)
         
-        I1 = torch.argmin(torch.norm(raceline_local[0:3],p=2,dim=0)).item()
+        base_link_to_measurement_link = C.transformMsgToTorch(self.tf2_buffer.lookup_transform(self.base_link, self.measurement_link, Time(), timeout=Duration(seconds=1)).transform)
+        measurement_link_to_world = torch.inverse(C.poseMsgToTorch(current_pose_msg.pose))
+        T = torch.matmul(base_link_to_measurement_link, measurement_link_to_world)
+
+        raceline_base_link = torch.matmul(T, self.raceline)
+        
+        I1 = torch.argmin(torch.norm(raceline_base_link[0:3],p=2,dim=0)).item()
 
         t0 = self.racelinetimes[I1].item()
         t1 = t0 + self.dt
 
-        tsamp = np.linspace(t0,t1,self.sample_indices)
-        tmax = self.racelinetimes[-1].item()# + 0.5
+        tsamp = np.linspace(t0,t1,self.sample_indices)%self.racelinetimes[-1].item()
 
-        positions_global = torch.from_numpy(self.racelinespline(tsamp%tmax)).transpose(0,1).to(self.device)
-        positions_global_aug = torch.cat([positions_global,torch.ones_like(positions_global[0]).unsqueeze(0)],dim=0)
-        velocities_global = torch.from_numpy(self.racelinesplineder(tsamp%tmax)).transpose(0,1).to(self.device)
+        positions_global_aug = torch.cat([ torch.as_tensor(self.racelinespline(tsamp)).transpose(0,1),\
+                                           torch.ones(tsamp.shape[0]).unsqueeze(0) ], dim=0)       
+        velocities_global = torch.from_numpy(self.racelinesplineder(tsamp)).transpose(0,1).to(self.device)
 
-        positions = torch.matmul( current_pose_inv, positions_global_aug)
-        velocities = torch.matmul( current_pose_inv[0:3,0:3], velocities_global)
-
-
-
-
-        pos = positions[0:3].transpose(0,1)
-        vel = velocities.transpose(0,1)
+        pos = torch.matmul( T, positions_global_aug)[0:3].transpose(0,1)
+        vel = torch.matmul( T[0:3,0:3], velocities_global).transpose(0,1)
         diffs = pos[1:] - pos[:-1]
         diffnorms = torch.norm(diffs, p=2, dim=1)
         distances_forward = torch.zeros_like(pos[:,0])
         distances_forward[1:] = torch.cumsum(diffnorms,0)
-
-
-        
         
         return pos, vel, distances_forward
 
