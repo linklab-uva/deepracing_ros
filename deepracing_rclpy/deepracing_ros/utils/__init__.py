@@ -6,7 +6,7 @@ class AsyncSpinner():
         self.thread : threading.Thread = threading.Thread(target=self.executor.spin, daemon=True)
     def spin(self):
         self.thread.start()
-    def addNode(self, node):
+    def add_node(self, node):
         self.executor.add_node(node)
     def shutdown(self, timeout_sec=0.0):
         self.executor.shutdown(timeout_sec = timeout_sec)
