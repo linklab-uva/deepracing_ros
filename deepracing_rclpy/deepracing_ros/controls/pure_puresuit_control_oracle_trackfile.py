@@ -77,7 +77,7 @@ class OraclePurePursuitControllerROS(PPC):
         self.raceline = raceline.to(self.device)
         self.racelinedists = racelinedists.to(self.device)
         self.racelinetimes = racelinetimes.to(torch.device("cpu"))
-        self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(self.racelinetimes.numpy(),self.raceline[0:3].cpu().numpy().transpose(), bc_type=bc_type)
+        self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(self.racelinetimes.numpy().copy(),self.raceline[0:3].cpu().numpy().copy().transpose(), bc_type=bc_type)
         self.racelinesplineder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=1)
         self.racelinespline2ndder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=2)
 
@@ -89,21 +89,10 @@ class OraclePurePursuitControllerROS(PPC):
 
         sample_indices_param : Parameter = self.declare_parameter("sample_indices", value=60)
         self.sample_indices : int = sample_indices_param.get_parameter_value().integer_value
-       
-        additional_translation_param : Parameter = self.declare_parameter("additional_translation", value=[0.0,0.0,-self.L/2])
-        additional_translation : np.ndarray = np.array(additional_translation_param.get_parameter_value().double_array_value)
-        
-        additional_rotation_param : Parameter = self.declare_parameter("additional_rotation", value=[0.0,0.0,0.0,1.0])
-        additional_rotation : Rot = Rot.from_quat(np.array(additional_rotation_param.get_parameter_value().double_array_value))
-
-        self.additional_transform = torch.eye(4, device=self.device, dtype=torch.float64)
-        self.additional_transform[0:3,0:3] = torch.from_numpy(additional_rotation.as_matrix()).double().to(self.device)
-        self.additional_transform[0:3,3] = torch.from_numpy(additional_translation).double().to(self.device)
 
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer()
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
-        
         base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
         self.base_link : str = base_link_param.get_parameter_value().string_value
 
@@ -127,8 +116,8 @@ class OraclePurePursuitControllerROS(PPC):
             self.get_logger().error("Unable to acquire semaphore for reading pose data")
             return super().getTrajectory()
         
-        base_link_to_measurement_link = C.transformMsgToTorch(self.tf2_buffer.lookup_transform(self.base_link, self.measurement_link, Time(), timeout=Duration(seconds=1)).transform)
-        measurement_link_to_world = torch.inverse(C.poseMsgToTorch(current_pose_msg.pose))
+        base_link_to_measurement_link = C.transformMsgToTorch(self.tf2_buffer.lookup_transform(self.base_link, self.measurement_link, Time(), timeout=Duration(seconds=1)).transform, device=self.device, dtype=self.raceline.dtype)
+        measurement_link_to_world = torch.inverse(C.poseMsgToTorch(current_pose_msg.pose, device=self.device, dtype=self.raceline.dtype))
         T = torch.matmul(base_link_to_measurement_link, measurement_link_to_world)
 
         raceline_base_link = torch.matmul(T, self.raceline)
@@ -140,9 +129,9 @@ class OraclePurePursuitControllerROS(PPC):
 
         tsamp = np.linspace(t0,t1,self.sample_indices)%self.racelinetimes[-1].item()
 
-        positions_global_aug = torch.cat([ torch.as_tensor(self.racelinespline(tsamp)).transpose(0,1),\
-                                           torch.ones(tsamp.shape[0]).unsqueeze(0) ], dim=0)       
-        velocities_global = torch.from_numpy(self.racelinesplineder(tsamp)).transpose(0,1).to(self.device)
+        positions_global_aug = torch.cat([ torch.as_tensor(self.racelinespline(tsamp), device=T.device, dtype=T.dtype).transpose(0,1),\
+                                           torch.ones(tsamp.shape[0], device=T.device, dtype=T.dtype).unsqueeze(0) ], dim=0)       
+        velocities_global = torch.as_tensor(self.racelinesplineder(tsamp)).transpose(0,1)
 
         pos = torch.matmul( T, positions_global_aug)[0:3].transpose(0,1)
         vel = torch.matmul( T[0:3,0:3], velocities_global).transpose(0,1)
