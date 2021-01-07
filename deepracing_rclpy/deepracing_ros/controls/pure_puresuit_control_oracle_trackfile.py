@@ -131,7 +131,7 @@ class OraclePurePursuitControllerROS(PPC):
 
         positions_global_aug = torch.cat([ torch.as_tensor(self.racelinespline(tsamp), device=T.device, dtype=T.dtype).transpose(0,1),\
                                            torch.ones(tsamp.shape[0], device=T.device, dtype=T.dtype).unsqueeze(0) ], dim=0)       
-        velocities_global = torch.as_tensor(self.racelinesplineder(tsamp)).transpose(0,1)
+        velocities_global = torch.as_tensor(self.racelinesplineder(tsamp), device=T.device, dtype=T.dtype).transpose(0,1)
 
         pos = torch.matmul( T, positions_global_aug)[0:3].transpose(0,1)
         vel = torch.matmul( T[0:3,0:3], velocities_global).transpose(0,1)
