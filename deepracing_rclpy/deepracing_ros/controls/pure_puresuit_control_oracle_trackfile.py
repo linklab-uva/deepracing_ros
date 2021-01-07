@@ -103,12 +103,9 @@ class OraclePurePursuitControllerROS(PPC):
        
         
     def getTrajectory(self):
-        if (self.current_pose_mat is None):
+        if (self.current_pose is None):
             return super().getTrajectory()
-        # if self.device == torch.device("cpu"):
-        #     current_pose_mat = self.current_pose_mat.clone()
-        # else:
-    #     current_pose_mat = self.current_pose_mat.to(self.device)
+            
         if self.pose_semaphore.acquire(timeout=1.0):
             current_pose_msg = deepcopy(self.current_pose)
             self.pose_semaphore.release()
