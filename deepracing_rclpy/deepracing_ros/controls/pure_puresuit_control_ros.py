@@ -97,13 +97,7 @@ class PurePursuitControllerROS(Node):
             self.device = torch.device("cpu")
             self.get_logger().info("Running on the cpu" )
 
-        max_speed_param : Parameter = self.declare_parameter("max_speed",value=200.0)#, Parameter("max_speed",value=200.0))
-        self.max_speed : float = max_speed_param.get_parameter_value().double_value
-        
-        max_centripetal_acceleration_param : Parameter = self.declare_parameter("max_centripetal_acceleration")#, Parameter("max_centripetal_acceleration",value=20.0))
-        self.max_centripetal_acceleration : float = max_centripetal_acceleration_param.get_parameter_value().double_value
-
-        
+       
         L_param_descriptor = ParameterDescriptor(description="The wheelbase (distance between the axles in meters) of the vehicle being controlled")
         L_param : Parameter = self.declare_parameter("wheelbase", value=3.5, descriptor=L_param_descriptor)
         self.L : float = L_param.get_parameter_value().double_value
@@ -127,23 +121,13 @@ class PurePursuitControllerROS(Node):
         
         right_steer_offset_param : Parameter = self.declare_parameter("right_steer_offset",value=0.0)
         self.right_steer_offset : float = right_steer_offset_param.get_parameter_value().double_value
-
-        sleeptime_param : Parameter = self.declare_parameter("sleeptime", value=0.0)
-        self.sleeptime : float = sleeptime_param.get_parameter_value().double_value
         
         use_drs_param : Parameter = self.declare_parameter("use_drs",value=False)
         self.use_drs : bool = use_drs_param.get_parameter_value().bool_value
-
-        num_optim_steps_param : Parameter = self.declare_parameter("num_optim_steps",value=10)
-        self.num_optim_steps : int = num_optim_steps_param.get_parameter_value().integer_value
-
-        optim_step_size_param : Parameter = self.declare_parameter("optim_step_size",value=0.1)
-        self.optim_step_size : float = optim_step_size_param.get_parameter_value().double_value
         
         forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=1)
         self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
 
-        
         lateral_dimension_param : Parameter = self.declare_parameter("lateral_dimension", value=0)
         self.lateral_dimension : int = lateral_dimension_param.get_parameter_value().integer_value
 
