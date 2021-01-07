@@ -34,6 +34,7 @@ from std_msgs.msg import Float64
 import rclpy, rclpy.subscription, rclpy.publisher
 from rclpy.node import Node
 from rclpy import Parameter
+from rclpy.timer import Timer, Rate
 from copy import deepcopy
 import sensor_msgs
 from scipy.spatial.kdtree import KDTree
@@ -80,12 +81,8 @@ class PurePursuitControllerROS(Node):
     def __init__(self):
         super(PurePursuitControllerROS,self).__init__('pure_pursuit_control', allow_undeclared_parameters=False, automatically_declare_parameters_from_overrides=False)
        # self.get_logger().info("Hello Pure Pursuit!")
-        self.packet_queue = queue.Queue()
-        self.running = True
         self.setpoint_publisher = self.create_publisher(Float64, "vel_setpoint", 1)
-        self.dt_publisher = self.create_publisher(Float64, "dt", 1)
         self.velsetpoint = 0.0
-        self.throttle_out = 0.0
 
         gpu_param_descriptor = ParameterDescriptor(description="Which gpu to use for computation. Any negative number means use CPU")
         gpu_param : Parameter = self.declare_parameter("gpu", value=0, descriptor=gpu_param_descriptor)
@@ -125,12 +122,11 @@ class PurePursuitControllerROS(Node):
         use_drs_param : Parameter = self.declare_parameter("use_drs",value=False)
         self.use_drs : bool = use_drs_param.get_parameter_value().bool_value
         
-        forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=1)
-        self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
-
         lateral_dimension_param : Parameter = self.declare_parameter("lateral_dimension", value=0)
         self.lateral_dimension : int = lateral_dimension_param.get_parameter_value().integer_value
 
+        forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
+        self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
         
         if self.use_drs:
             print("Using DRS")
@@ -138,19 +134,14 @@ class PurePursuitControllerROS(Node):
             print("Not using DRS")
 
 
-        self.velocity_control_sub = None
-        self.status_data_sub = None
-        self.telemetry_data_sub = None
-        self.initSubscriptions()
-
-        
 
         self.current_pose : PoseStamped = None
         self.current_velocity : TwistStamped = None
-        self.current_speed = None
-        self.pose_semaphore = threading.Semaphore()
-        self.velocity_semaphore = threading.Semaphore()
-        self.internal_rate = self.create_rate(60.0)
+        self.pose_semaphore : threading.Semaphore = threading.Semaphore()
+        self.velocity_semaphore : threading.Semaphore = threading.Semaphore()
+        self.internal_rate : Rate = self.create_rate(60.0)
+
+        self.initSubscriptions()
 
     def initSubscriptions(self):
         update_qos = rclpy.qos.QoSProfile(depth=1)
@@ -175,7 +166,7 @@ class PurePursuitControllerROS(Node):
         
 
     def getTrajectory(self):
-        return None, None, None
+        raise NotImplementedError("Subclasses of PurePursuitControllerROS must override getTrajectory")
     
     def getControl(self) -> CarControl:
         
