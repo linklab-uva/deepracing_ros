@@ -167,11 +167,8 @@ class PurePursuitControllerROS(Node):
 
     def velocityCallback(self, velocity_msg : TwistStamped):
         self.get_logger().debug("Got a new velocity: " + str(velocity_msg))
-        linearvel = velocity_msg.twist.linear
-        vel = np.array( (linearvel.x, linearvel.y, linearvel.z), dtype=np.float64)
         if self.velocity_semaphore.acquire(timeout=1.0):
-            self.current_velocity = deepcopy(velocity_msg)
-            self.current_speed = la.norm(vel)
+            self.current_velocity = velocity_msg
             self.velocity_semaphore.release()
         else:
             self.get_logger().error("Unable to acquire semaphore to setting the velocity data")
@@ -191,15 +188,13 @@ class PurePursuitControllerROS(Node):
             return None
        
         if self.velocity_semaphore.acquire(timeout=1.0):
-            if self.current_speed is None:
-                self.get_logger().error("Returning None because self.current_speed is None")
-                self.velocity_semaphore.release()
-                return None
-            current_speed = deepcopy(self.current_speed)
+            current_velocity = deepcopy(self.current_velocity)
             self.velocity_semaphore.release()
         else:
             self.get_logger().error("Returning None because unable to acquire velocity semaphore")
             return None
+        current_velocity_np = np.array([current_velocity.twist.linear.x, current_velocity.twist.linear.y, current_velocity.twist.linear.z])
+        current_speed = np.linalg.norm(current_velocity_np)
         
         if distances_forward_ is None:
             distances_forward = la.norm(lookahead_positions, axis=1)
