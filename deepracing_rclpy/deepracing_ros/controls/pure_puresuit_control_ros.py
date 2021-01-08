@@ -26,6 +26,7 @@ import torch.nn as NN
 import torch.utils.data as data_utils
 import deepracing_models.nn_models.Models
 from deepracing_msgs.msg import CarControl
+from nav_msgs.msg import Path
 from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion, PoseArray, Twist, TwistStamped
 from sensor_msgs.msg import PointCloud2
 from rcl_interfaces.msg import ParameterDescriptor
@@ -34,6 +35,7 @@ from std_msgs.msg import Float64
 import rclpy, rclpy.subscription, rclpy.publisher
 from rclpy.node import Node
 from rclpy import Parameter
+from rclpy.publisher import Publisher
 from rclpy.timer import Timer, Rate
 from copy import deepcopy
 import sensor_msgs
@@ -128,6 +130,12 @@ class PurePursuitControllerROS(Node):
         forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
         self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
         
+        base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
+        self.base_link : str = base_link_param.get_parameter_value().string_value
+
+        self.path_pub : Publisher = self.create_publisher("reference_path", Path, 1)
+        
+        
         if self.use_drs:
             print("Using DRS")
         else:
@@ -184,6 +192,8 @@ class PurePursuitControllerROS(Node):
         else:
             self.get_logger().error("Returning None because unable to acquire velocity semaphore")
             return None
+        pathheader = Header(stamp = self.get_clock().now(), frame_id=self.base_link)
+        self.path_pub.publish(Path(header=pathheader, poses=[PoseStamped(header=pathheader, pose=Pose(position=Point(x=lookahead_positions[i,0].item(),y=lookahead_positions[i,1].item(),z=lookahead_positions[i,2].item()))) for i in range(lookahead_positions.shape[0])]))
         current_velocity_np = np.array([current_velocity.twist.linear.x, current_velocity.twist.linear.y, current_velocity.twist.linear.z])
         current_speed = np.linalg.norm(current_velocity_np)
         
@@ -191,6 +201,7 @@ class PurePursuitControllerROS(Node):
             distances_forward = la.norm(lookahead_positions, axis=1)
         else:
             distances_forward = distances_forward_
+
 
         speeds = torch.norm(v_local_forward, p=2, dim=1)
         lookahead_distance = max(self.lookahead_gain*current_speed, 5.0)
