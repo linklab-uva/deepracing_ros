@@ -37,6 +37,7 @@ from rclpy.node import Node
 from rclpy import Parameter
 from rclpy.publisher import Publisher
 from rclpy.timer import Timer, Rate
+from rclpy.time import Time
 from copy import deepcopy
 import sensor_msgs
 from scipy.spatial.kdtree import KDTree
@@ -196,7 +197,7 @@ class PurePursuitControllerROS(Node):
         else:
             self.get_logger().error("Returning None because unable to acquire velocity semaphore")
             return None
-        pathheader = Header(stamp = self.get_clock().now(), frame_id=self.base_link)
+        pathheader = Header(stamp = self.get_clock().now().to_msg(), frame_id=self.base_link)
         self.path_pub.publish(Path(header=pathheader, poses=[PoseStamped(header=pathheader, pose=Pose(position=Point(x=lookahead_positions[i,0].item(),y=lookahead_positions[i,1].item(),z=lookahead_positions[i,2].item()))) for i in range(lookahead_positions.shape[0])]))
         current_velocity_np = np.array([current_velocity.twist.linear.x, current_velocity.twist.linear.y, current_velocity.twist.linear.z])
         current_speed = np.linalg.norm(current_velocity_np)
