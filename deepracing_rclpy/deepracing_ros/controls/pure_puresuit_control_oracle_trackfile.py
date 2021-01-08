@@ -92,10 +92,7 @@ class OraclePurePursuitControllerROS(PPC):
 
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(node=self)
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
-
-        base_link_param : Parameter = self.declare_parameter("base_link", value="base_link")
-        self.base_link : str = base_link_param.get_parameter_value().string_value
-
+        
         measurement_link_param : Parameter = self.declare_parameter("measurement_link", value="chassis_centroid")
         self.measurement_link : str = measurement_link_param.get_parameter_value().string_value
 
