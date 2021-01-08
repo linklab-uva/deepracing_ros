@@ -133,7 +133,7 @@ class PurePursuitControllerROS(Node):
         base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
         self.base_link : str = base_link_param.get_parameter_value().string_value
 
-        self.path_pub : Publisher = self.create_publisher("reference_path", Path, 1)
+        self.path_pub : Publisher = self.create_publisher(Path, "reference_path", 1)
         
         
         if self.use_drs:
