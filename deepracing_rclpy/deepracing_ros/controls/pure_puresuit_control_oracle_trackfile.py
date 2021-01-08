@@ -56,10 +56,12 @@ import tf2_ros
 class OraclePurePursuitControllerROS(PPC):
     def __init__(self):
         super(OraclePurePursuitControllerROS, self).__init__()
+        self.get_logger().info("Hello Pure Pursuit!")
         raceline_file_param : Parameter = self.declare_parameter("raceline_file")
         if raceline_file_param.type_==Parameter.Type.NOT_SET:
             raise ValueError("\"raceline_file\" parameter not set")
         raceline_file = raceline_file_param.get_parameter_value().string_value
+        self.get_logger().info("Loading raceline: %s" %(raceline_file,))
         if  os.path.isabs(raceline_file):
             self.raceline_file = raceline_file
         else:
@@ -77,9 +79,15 @@ class OraclePurePursuitControllerROS(PPC):
         self.raceline = raceline.to(self.device)
         self.racelinedists = racelinedists.to(self.device)
         self.racelinetimes = racelinetimes.to(torch.device("cpu"))
-        self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(self.racelinetimes.numpy().copy(),self.raceline[0:3].cpu().numpy().copy().transpose(), bc_type=bc_type)
+        print(self.raceline)
+        print(self.racelinedists)
+        print(self.racelinetimes)
+        self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(self.racelinetimes.cpu().numpy().copy(),self.raceline[0:3].cpu().numpy().copy().transpose(), bc_type=bc_type)
         self.racelinesplineder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=1)
         self.racelinespline2ndder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=2)
+        print(self.racelinespline)
+        print(self.racelinesplineder)
+        print(self.racelinespline2ndder)
 
         plot_param : Parameter = self.declare_parameter("plot", value=False)
         self.plot : bool = plot_param.get_parameter_value().bool_value
@@ -117,6 +125,7 @@ class OraclePurePursuitControllerROS(PPC):
         raceline_base_link = torch.matmul(T, self.raceline)
         
         I1 = torch.argmin(torch.norm(raceline_base_link[0:3],p=2,dim=0)).item()
+        print("Starting from: %d" % (I1,))
 
         t0 = self.racelinetimes[I1].item()
         t1 = t0 + self.dt

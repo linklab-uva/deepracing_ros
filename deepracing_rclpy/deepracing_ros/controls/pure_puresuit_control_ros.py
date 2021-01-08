@@ -131,11 +131,7 @@ class PurePursuitControllerROS(Node):
         forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
         self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
         
-        if self.has_parameter("base_link"):
-            base_link_param : Parameter = self.get_parameter("base_link")
-        else:
-            base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
-
+        base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
         self.base_link : str = base_link_param.get_parameter_value().string_value
 
         self.path_pub : Publisher = self.create_publisher(Path, "reference_path", 1)
@@ -147,12 +143,13 @@ class PurePursuitControllerROS(Node):
             print("Not using DRS")
 
 
-
+        self.get_logger().info("Creating semaphores")
         self.current_pose : PoseStamped = None
         self.current_velocity : TwistStamped = None
         self.pose_semaphore : threading.Semaphore = threading.Semaphore()
         self.velocity_semaphore : threading.Semaphore = threading.Semaphore()
         self.internal_rate : Rate = self.create_rate(60.0)
+        self.get_logger().info("Created semaphores")
 
         self.initSubscriptions()
 
