@@ -130,7 +130,11 @@ class PurePursuitControllerROS(Node):
         forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
         self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
         
-        base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
+        if self.has_parameter("base_link"):
+            base_link_param : Parameter = self.get_parameter("base_link")
+        else:
+            base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
+
         self.base_link : str = base_link_param.get_parameter_value().string_value
 
         self.path_pub : Publisher = self.create_publisher(Path, "reference_path", 1)
