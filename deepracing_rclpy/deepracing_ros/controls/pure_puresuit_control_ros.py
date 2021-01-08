@@ -31,7 +31,7 @@ from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, Pose
 from sensor_msgs.msg import PointCloud2
 from rcl_interfaces.msg import ParameterDescriptor
 from scipy.spatial.transform import Rotation as Rot
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Header
 import rclpy, rclpy.subscription, rclpy.publisher
 from rclpy.node import Node
 from rclpy import Parameter
