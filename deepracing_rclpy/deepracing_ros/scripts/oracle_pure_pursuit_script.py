@@ -38,7 +38,7 @@ def main(args=None):
     try:
         while rclpy.ok():
             rate.sleep()
-            control : CarControl = node.getControl()
+            control : CarControl = node.getControl()["control"]
             if control is not None:
                 control_pub.publish(control)
     except KeyboardInterrupt:

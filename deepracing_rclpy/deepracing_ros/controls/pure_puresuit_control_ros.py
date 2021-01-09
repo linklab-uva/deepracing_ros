@@ -172,17 +172,17 @@ class PurePursuitControllerROS(Node):
         lookahead_positions, v_local_forward, distances_forward_ = self.getTrajectory()
         if lookahead_positions is None:
       #      self.get_logger().error("Returning None because lookahead_positions is None")
-            return None
+            return {"lookahead_positions": lookahead_positions, "control": None}
         if v_local_forward is None:
             self.get_logger().error("Returning None because v_local_forward is None")
-            return None
+            return {"lookahead_positions": lookahead_positions, "control": None}
        
         if self.velocity_semaphore.acquire(timeout=1.0):
             current_velocity = deepcopy(self.current_velocity)
             self.velocity_semaphore.release()
         else:
             self.get_logger().error("Returning None because unable to acquire velocity semaphore")
-            return None
+            return {"lookahead_positions": lookahead_positions, "control": None}
         pathheader = Header(stamp = self.get_clock().now().to_msg(), frame_id=self.base_link)
         self.path_pub.publish(Path(header=pathheader, poses=[PoseStamped(header=pathheader, pose=Pose(position=Point(x=lookahead_positions[i,0].item(),y=lookahead_positions[i,1].item(),z=lookahead_positions[i,2].item()))) for i in range(lookahead_positions.shape[0])]))
         current_velocity_np = np.array([current_velocity.twist.linear.x, current_velocity.twist.linear.y, current_velocity.twist.linear.z])
@@ -216,6 +216,6 @@ class PurePursuitControllerROS(Node):
         self.velsetpoint = speeds[lookahead_index_vel].item()
         self.setpoint_publisher.publish(Float64(data=self.velsetpoint))
         if current_speed<self.velsetpoint:
-            return CarControl(steering=delta, throttle=1.0, brake=0.0)
+            return {"lookahead_positions": lookahead_positions, "control": CarControl(steering=delta, throttle=1.0, brake=0.0)}
         else:
-            return CarControl(steering=delta, throttle=0.0, brake=1.0)
+            return {"lookahead_positions": lookahead_positions, "control": CarControl(steering=delta, throttle=0.0, brake=1.0)}
