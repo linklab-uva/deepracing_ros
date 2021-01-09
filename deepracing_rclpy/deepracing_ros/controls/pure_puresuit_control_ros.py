@@ -86,17 +86,6 @@ class PurePursuitControllerROS(Node):
        # self.get_logger().info("Hello Pure Pursuit!")
         self.setpoint_publisher = self.create_publisher(Float64, "vel_setpoint", 1)
         self.velsetpoint = 0.0
-
-        gpu_param_descriptor = ParameterDescriptor(description="Which gpu to use for computation. Any negative number means use CPU")
-        gpu_param : Parameter = self.declare_parameter("gpu", value=0, descriptor=gpu_param_descriptor)
-        self.gpu : int = gpu_param.get_parameter_value().integer_value
-        if self.gpu>=0:
-            self.device = torch.device("cuda:%d" % self.gpu)
-            self.get_logger().info("Running on gpu %d" % (self.gpu,))
-        else:
-            self.device = torch.device("cpu")
-            self.get_logger().info("Running on the cpu" )
-
        
         L_param_descriptor = ParameterDescriptor(description="The wheelbase (distance between the axles in meters) of the vehicle being controlled")
         L_param : Parameter = self.declare_parameter("wheelbase", value=3.5, descriptor=L_param_descriptor)
