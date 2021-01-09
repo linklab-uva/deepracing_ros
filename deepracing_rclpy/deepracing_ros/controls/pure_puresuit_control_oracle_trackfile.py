@@ -56,19 +56,30 @@ import tf2_ros
 class OraclePurePursuitControllerROS(PPC):
     def __init__(self):
         super(OraclePurePursuitControllerROS, self).__init__()
+        #Say hello to all of the wonderful people
         self.get_logger().info("Hello Pure Pursuit!")
+
+        #Set a parameter for grabbing the raceline from file. This file must either be a .json contain
+        # a dictionary with keys "x","y","z","r","t" or a .csv file with the top row containing header information
+        # and the remaining rows being of the form "x,y,z"
         raceline_file_param : Parameter = self.declare_parameter("raceline_file")
         if raceline_file_param.type_==Parameter.Type.NOT_SET:
             raise ValueError("\"raceline_file\" parameter not set")
         raceline_file = raceline_file_param.get_parameter_value().string_value
         self.get_logger().info("Loading raceline: %s" %(raceline_file,))
+
+        #If the passed in parameter is an absolute filepath, make sure it's a file and then load it.
         if  os.path.isabs(raceline_file):
+            if not os.path.isfile(raceline_file):
+                raise ValueError("Absolute \"raceline_file\" parameter: %s is not a file" %(raceline_file,))
             self.raceline_file = raceline_file
+        #If the passed in parameter is a relative path, look for it on a list of directories in the "F1_TRACK_DIRS" variable.
         else:
             envsearchdirs = [s for s in str.split(os.getenv("F1_TRACK_DIRS",""), os.pathsep) if s!=""]
             self.raceline_file = deepracing.searchForFile(raceline_file,envsearchdirs)
         if self.raceline_file is None:
             raise ValueError("\"raceline_file\" parameter must either be an absolute path or in a directory contained in an environment variable F1_TRACK_DIRS")
+
         racelinefile_base, racelinefile_ext = os.path.splitext(os.path.basename(self.raceline_file))
         
         racelinetimes, racelinedists, raceline = raceline_utils.loadRaceline(self.raceline_file)
