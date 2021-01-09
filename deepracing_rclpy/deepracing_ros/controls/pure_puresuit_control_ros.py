@@ -200,7 +200,7 @@ class PurePursuitControllerROS(Node):
         current_speed = np.linalg.norm(current_velocity_np)
         
         if distances_forward_ is None:
-            distances_forward = la.norm(lookahead_positions, axis=1)
+            distances_forward = torch.norm(lookahead_positions, p=2, dim=1)
         else:
             distances_forward = distances_forward_
 

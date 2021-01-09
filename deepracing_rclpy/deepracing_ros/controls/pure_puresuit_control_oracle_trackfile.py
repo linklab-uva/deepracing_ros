@@ -143,7 +143,8 @@ class OraclePurePursuitControllerROS(PPC):
         distances_forward = torch.zeros_like(pos[:,0])
         distances_forward[1:] = torch.cumsum(diffnorms,0)
         
-        return pos, vel, distances_forward
+        return pos, vel, None
+       # return pos, vel, distances_forward
 
 
 
