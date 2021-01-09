@@ -87,6 +87,16 @@ class OraclePurePursuitControllerROS(PPC):
         #bc_type="natural"
         #bc_type=None
 
+        gpu_param_descriptor = ParameterDescriptor(description="Which gpu to use for computation. Any negative number means use CPU")
+        gpu_param : Parameter = self.declare_parameter("gpu", value=-1, descriptor=gpu_param_descriptor)
+        self.gpu : int = gpu_param.get_parameter_value().integer_value
+        if self.gpu>=0:
+            self.device = torch.device("cuda:%d" % self.gpu)
+            self.get_logger().info("Running on gpu %d" % (self.gpu,))
+        else:
+            self.device = torch.device("cpu")
+            self.get_logger().info("Running on the cpu" )
+
         self.raceline = raceline.to(self.device)
         self.racelinedists = racelinedists.to(self.device)
         self.racelinetimes = racelinetimes.to(torch.device("cpu"))
