@@ -56,13 +56,13 @@ from scipy.spatial.kdtree import KDTree
 from copy import deepcopy
 from scipy.interpolate import BSpline, make_interp_spline
 import torch.distributions as dist
+import rclpy.qos
 
 
 
 class ProbabilisticBezierPurePursuitControllerROS(PPC):
     def __init__(self):
         super(ProbabilisticBezierPurePursuitControllerROS, self).__init__()
-
         self.path_publisher = self.create_publisher(TrajComparison, "/predicted_paths", 1)
         model_file_param = self.declare_parameter("model_file", value=None)
         if (model_file_param.type_==Parameter.Type.NOT_SET):
@@ -122,6 +122,15 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
 
 
        
+        gpu_param_descriptor = ParameterDescriptor(description="Which gpu to use for computation. Any negative number means use CPU")
+        gpu_param : Parameter = self.declare_parameter("gpu", value=0, descriptor=gpu_param_descriptor)
+        self.gpu : int = gpu_param.get_parameter_value().integer_value
+        if self.gpu>=0:
+            self.device = torch.device("cuda:%d" % self.gpu)
+            self.get_logger().info("Running on gpu %d" % (self.gpu,))
+        else:
+            self.device = torch.device("cpu")
+            self.get_logger().info("Running on the cpu" )
         
         
         self.net : VM.VariationalCurvePredictor = VM.VariationalCurvePredictor(fix_first_point=fix_first_point, bezier_order=bezier_order, input_channels=3, hidden_dim=hidden_dim)
@@ -173,7 +182,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
        # print(inner_boundary)
         if inner_boundary.shape[0]==0:
             return
-        self.ib_sub.destroy()
+        self.destroy_subscription(self.ib_sub)
         self.ib_sub = None
         self.inner_boundary = torch.cat([torch.from_numpy(inner_boundary.copy()).type(self.dtype).to(self.device), torch.ones(inner_boundary.shape[0], 1, dtype=self.dtype, device=self.device)], dim=1)
         self.ib_kdtree = KDTree(inner_boundary)
@@ -183,7 +192,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
       #  print(outer_boundary)
         if outer_boundary.shape[0]==0:
             return
-        self.ob_sub.destroy()
+        self.destroy_subscription(self.ob_sub)
         self.ob_sub = None
         self.outer_boundary = torch.cat([torch.from_numpy(outer_boundary.copy()).type(self.dtype).to(self.device), torch.ones(outer_boundary.shape[0], 1, dtype=self.dtype, device=self.device)], dim=1)
         self.ob_kdtree = KDTree(outer_boundary)
