@@ -121,7 +121,7 @@ class CNNLSTMROS(Node):
         steering_filtered = lfilter(self.z,self.p,np.array(self.steer_buffer))
         accel_filtered = np.array(self.accel_buffer)
         #accel_filtered = lfilter(self.z,self.p,np.array(self.accel_buffer))
-        steering = 1.5*steering_filtered[-1]
+        steering = 2.5*steering_filtered[-1]
         differential = 10.0*accel_filtered[-1]
         if differential>0:
             return CarControl(steering=-steering, throttle=1.0, brake=0.0)

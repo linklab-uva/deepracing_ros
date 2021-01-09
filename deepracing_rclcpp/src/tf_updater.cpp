@@ -92,9 +92,9 @@ class NodeWrapperTfUpdater_
       transformMsg.transform.rotation.w = rotationEigen.w();
 
       const geometry_msgs::msg::PointStamped& positionROS = motion_data.world_position;
-      transformMsg.transform.translation.x = positionROS.point.x;
-      transformMsg.transform.translation.y = positionROS.point.y;
-      transformMsg.transform.translation.z = positionROS.point.z;
+      transformMsg.transform.translation.set__x(positionROS.point.x);
+      transformMsg.transform.translation.set__y(positionROS.point.y);
+      transformMsg.transform.translation.set__z(positionROS.point.z);
       this->tfbroadcaster->sendTransform(transformMsg);
       this->statictfbroadcaster->sendTransform(worldToTrack);
 

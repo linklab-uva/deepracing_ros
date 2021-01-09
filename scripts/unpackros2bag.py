@@ -84,7 +84,6 @@ total_msgs = np.sum( topic_counts )
 print("Loading data from bag")
 msg_dict = {key : [] for key in topic_count_dict.keys()}
 for idx in tqdm(iterable=range(total_msgs)):
-   # print("Reading message: %d" % (idx,) )
     if(reader.has_next()):
         (topic, data, t) = reader.read_next()
         msg_type = type_map[topic]

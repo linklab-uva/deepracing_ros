@@ -52,7 +52,7 @@ class PathPublisher(Node):
     def __init__(self):
         super().__init__('bezier_curve_rviz_feeder')
 
-        num_sample_points_param  : Parameter = self.declare_parameter("num_sample_points", value=10)
+        num_sample_points_param  : Parameter = self.declare_parameter("num_sample_points", value=100)
         self.num_sample_points : int = num_sample_points_param.get_parameter_value().integer_value
        # print("Number of sample points: %d" %(self.num_sample_points,))
 
@@ -82,7 +82,7 @@ class PathPublisher(Node):
         # unitvelsaug = velsaug/torch.norm(velsaug,p=2,dim=0)[None,:]
         header = deepcopy(msg.header)
         header.stamp = self.get_clock().now().to_msg()
-        pathout = Path(header = header, poses = [PoseStamped(header=header, pose=Pose(position=Point(x=pointsaug[0,i].item(), y=pointsaug[1,i].item(), z=pointsaug[2,i].item()), orientation=Quaternion(x=0.0,y=0.0,z=0.0,w=1.0))) for i in range(pointsaug.shape[1])])
+        pathout = Path(header = header, poses = [PoseStamped(header=header, pose=Pose(position=Point(x=pointsaug[0,i].item(), y=pointsaug[1,i].item(), z=pointsaug[2,i].item()), orientation=Quaternion())) for i in range(pointsaug.shape[1])])
         self.pathpub.publish(pathout)
 
             
