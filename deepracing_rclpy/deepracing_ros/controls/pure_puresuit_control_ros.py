@@ -177,7 +177,7 @@ class PurePursuitControllerROS(Node):
         
         lookahead_positions, v_local_forward, distances_forward_ = self.getTrajectory()
         if lookahead_positions is None:
-      #      self.get_logger().error("Returning None because lookahead_positions is None")
+            self.get_logger().error("Returning None because lookahead_positions is None")
             return {"lookahead_positions": lookahead_positions, "control": None}
         if v_local_forward is None:
             self.get_logger().error("Returning None because v_local_forward is None")
