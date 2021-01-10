@@ -125,6 +125,11 @@ class PurePursuitControllerROS(Node):
 
         full_lock_right_param : Parameter = self.declare_parameter("full_lock_right", value=-np.pi/4)
         self.full_lock_right : float = full_lock_right_param.get_parameter_value().double_value
+
+        max_steer_delta_param : Parameter = self.declare_parameter("max_steer_delta",value=2.0*np.pi)
+        self.max_steer_delta : float = max_steer_delta_param.get_parameter_value().double_value
+
+        self.prev_angle : float = 0.0
         
         base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
         self.base_link : str = base_link_param.get_parameter_value().string_value
@@ -214,14 +219,16 @@ class PurePursuitControllerROS(Node):
         lookaheadDirection = lookaheadVector/D
         alpha = torch.atan2(lookaheadDirection[self.lateral_dimension],lookaheadDirection[self.forward_dimension])
         physical_angle = np.clip((torch.atan((2 * self.L*torch.sin(alpha)) / D)).item(), self.full_lock_right, self.full_lock_left)
+        self.prev_angle = np.clip(physical_angle, self.prev_angle - self.max_steer_delta, self.prev_angle + self.max_steer_delta)
         if (physical_angle > 0) :
-            delta = self.left_steer_factor*physical_angle + self.left_steer_offset
+            delta = self.left_steer_factor*self.prev_angle + self.left_steer_offset
         else:
-            delta = self.right_steer_factor*physical_angle + self.right_steer_offset
+            delta = self.right_steer_factor*self.prev_angle + self.right_steer_offset
         
         self.velsetpoint = speeds[lookahead_index_vel].item()
         self.setpoint_publisher.publish(Float64(data=self.velsetpoint))
         if current_speed<self.velsetpoint:
             return {"lookahead_positions": lookahead_positions, "control": CarControl(steering=delta, throttle=1.0, brake=0.0)}
         else:
-            return {"lookahead_positions": lookahead_positions, "control": CarControl(steering=delta, throttle=0.0, brake=1.0)}
+            
+            return {"lookahead_positions": lookahead_positions, "control": CarControl(steering=delta, throttle=1.0, brake=0.0)}
