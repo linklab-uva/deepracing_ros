@@ -213,7 +213,7 @@ class PurePursuitControllerROS(Node):
         D = torch.norm(lookaheadVector, p=2)
         lookaheadDirection = lookaheadVector/D
         alpha = torch.atan2(lookaheadDirection[self.lateral_dimension],lookaheadDirection[self.forward_dimension])
-        physical_angle = np.clamp((torch.atan((2 * self.L*torch.sin(alpha)) / D)).item(), self.full_lock_right, self.full_lock_left)
+        physical_angle = np.clip((torch.atan((2 * self.L*torch.sin(alpha)) / D)).item(), self.full_lock_right, self.full_lock_left)
         if (physical_angle > 0) :
             delta = self.left_steer_factor*physical_angle + self.left_steer_offset
         else:
