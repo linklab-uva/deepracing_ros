@@ -31,14 +31,14 @@ def main(args=None):
     spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor(3))
     node = OraclePurePursuitControllerROS()
     control_pub = node.create_publisher(CarControl, "/car_control", 1)
-    spinner.addNode(node)
+    spinner.add_node(node)
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     spinner.spin()
     rate : rclpy.timer.Rate = node.create_rate(60.0)
     try:
         while rclpy.ok():
             rate.sleep()
-            control : CarControl = node.getControl()["control"]
+            control, _ = node.getControl()
             if control is not None:
                 control_pub.publish(control)
     except KeyboardInterrupt:

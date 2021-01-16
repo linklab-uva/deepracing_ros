@@ -40,9 +40,9 @@ def main(args=None):
 
     try:
         while rclpy.ok():
-            cc = node.getControl()["control"]
-            if cc is not None:
-                control_pub.publish(cc)
+            control, lookahead_positions = node.getControl()
+            if control is not None:
+                control_pub.publish(control)
             rate.sleep()
     except KeyboardInterrupt:
         pass
