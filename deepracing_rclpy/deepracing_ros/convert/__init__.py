@@ -1,1 +1,1 @@
-from .msg_utils import extractPose, extractPosition, pointCloud2ToNumpy, arrayToPointCloud2, toBezierCurveMsg, fromBezierCurveMsg, transformMsgToTorch, poseMsgToTorch
+from .msg_utils import extractPose, extractPosition, pointCloud2ToNumpy, arrayToPointCloud2, toBezierCurveMsg, fromBezierCurveMsg, transformMsgToTorch, poseMsgToTorch, pointMsgToTorch

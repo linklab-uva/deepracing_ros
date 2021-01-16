@@ -191,3 +191,5 @@ def poseMsgToTorch(pose_msg: geo_msgs.Pose, dtype=torch.float32, device=torch.de
    rtn[0:3,0:3] = torch.as_tensor(Rot.from_quat(np.array([pose_msg.orientation.x, pose_msg.orientation.y, pose_msg.orientation.z, pose_msg.orientation.w], copy=False)).as_matrix().copy(), dtype=dtype, device=device)
    rtn[0:3,3] = torch.as_tensor(np.array([pose_msg.position.x, pose_msg.position.y, pose_msg.position.z]), dtype=dtype, device=device)
    return rtn
+def pointMsgToTorch(point_msg: geo_msgs.Point, dtype=torch.float32, device=torch.device("cpu")):
+   return torch.as_tensor([point_msg.x, point_msg.y, point_msg.z], dtype=dtype, device=device)
