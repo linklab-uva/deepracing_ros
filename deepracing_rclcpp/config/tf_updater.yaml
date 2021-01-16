@@ -1,0 +1,4 @@
+f1_tf_updater:
+    ros__parameters:
+        car_to_base_translation: [0.0,0.0,0.0]
+        car_to_base_quaternion: [0.0,0.0,0.0,1.0]

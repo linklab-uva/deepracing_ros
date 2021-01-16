@@ -54,6 +54,7 @@ namespace deepracing_ros
                                                "USA_short", "Japan_short"});
         }
         static DEEPRACING_RCLCPP_PUBLIC const std::string world_coordinate_name;
+        static DEEPRACING_RCLCPP_PUBLIC const std::string car_coordinate_name;
     private:
 
     };
