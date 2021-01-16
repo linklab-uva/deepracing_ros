@@ -33,6 +33,7 @@ from deepracing_ros.controls.pure_puresuit_control_ros import PurePursuitControl
 from torch.optim import SGD
 import deepracing_models.math_utils as mu
 from deepracing_models.nn_models.LossFunctions import BoundaryLoss
+import deepracing_ros
 import deepracing_ros.convert
 import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image, CompressedImage, PointCloud2
@@ -255,7 +256,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
         initial_guess = bezier_control_points[0].detach().clone()
         igcpu = initial_guess.cpu()
         igcpu = torch.stack([ igcpu[:,0], torch.zeros_like(igcpu[:,0]), igcpu[:,1] ], dim=1)
-        paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(igcpu, Header(frame_id="car", stamp=stamp), covars=covarsmsg))
+        paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(igcpu, Header(frame_id=deepracing_ros.car_coordinate_name, stamp=stamp), covars=covarsmsg))
         paths_msg.optimization_time=-1.0
 
         if self.num_optim_steps>0 and (self.ib_kdtree is not None) and (self.ob_kdtree is not None):
@@ -305,8 +306,8 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
             ibnormals = boundarynormals[1].unsqueeze(0)
             ibpoints = boundarypoints[1].unsqueeze(0) - 1.5*ibnormals
 
-            paths_msg.outer_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[0], Header(frame_id="car", stamp=stamp))
-            paths_msg.inner_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[1], Header(frame_id="car", stamp=stamp))
+            paths_msg.outer_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[0], Header(frame_id=deepracing_ros.car_coordinate_name, stamp=stamp))
+            paths_msg.inner_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[1], Header(frame_id=deepracing_ros.car_coordinate_name, stamp=stamp))
 
             evalpoints = torch.matmul(self.bezierM, initial_guess.unsqueeze(0))
             initial_guess_points = evalpoints.clone()
@@ -342,7 +343,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
                 i+=1
                 currentcurvecpu = all_control_points[0].detach().cpu()
                 currentcurvecpu = torch.stack([ currentcurvecpu[:,0], torch.zeros_like(currentcurvecpu[:,0]), currentcurvecpu[:,1] ], dim=1)
-                paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(currentcurvecpu, Header(frame_id="car", stamp=stamp), covars=covarsmsg))
+                paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(currentcurvecpu, Header(frame_id=deepracing_ros.car_coordinate_name, stamp=stamp), covars=covarsmsg))
             output = bcmodel.allControlPoints().detach()
             diffs = evalpoints - initial_guess_points
             diffnorms = torch.norm(diffs, p=2, dim=2)[0]
@@ -356,7 +357,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
        # print(bezier_control_points.shape)
         finalcurvecpu = bezier_control_points[0].cpu()
         finalcurvecpu = torch.stack([ finalcurvecpu[:,0], torch.zeros_like(finalcurvecpu[:,0]), finalcurvecpu[:,1] ], dim=1)
-        paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(finalcurvecpu, Header(frame_id="car", stamp=stamp), covars=covarsmsg))
+        paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(finalcurvecpu, Header(frame_id=deepracing_ros.car_coordinate_name, stamp=stamp), covars=covarsmsg))
         self.path_publisher.publish(paths_msg)
             
  
