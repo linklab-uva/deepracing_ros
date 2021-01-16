@@ -18,6 +18,7 @@ import deepracing.imutils
 import scipy
 import scipy.interpolate
 import rpyutils
+import tf2_ros
 with rpyutils.add_dll_directories_from_env("PATH"):
     import py_f1_interface
     import cv_bridge
@@ -45,7 +46,7 @@ import rclpy
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.parameter import Parameter
 from rclpy.node import Node
-from rclpy.time import Time
+from rclpy.time import Time, Duration
 from rclpy.clock import Clock, ROSClock
 import deepracing_models.nn_models.Models as M
 import deepracing_models.nn_models.VariationalModels as VM
@@ -92,10 +93,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
         #self.rosclock._set_ros_time_is_active(True)
 
 
-
-        plot_param : Parameter = self.declare_parameter("plot", value=False)
-        self.plot : bool = plot_param.get_parameter_value().bool_value
-        if(self.plot):
+        if(self.publish_paths):
             print("Publishing predicted bezier curves")
         else:
             print("Not publishing predicted bezier curves")
@@ -160,8 +158,8 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
             self.image_sub = self.create_subscription( Image, '/cropped_publisher/images', self.addToBuffer, 1)
 
         self.Mboundaryfit = mu.bezierM( torch.linspace(0.0,1.0,steps=400,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
-        self.Mboundaryeval = mu.bezierM( torch.linspace(0.0,1.0,steps=20000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
-        self.Mboundarytangenteval = mu.bezierM( torch.linspace(0.0,1.0,steps=20000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 6)
+        self.Mboundaryeval = mu.bezierM( torch.linspace(0.0,1.0,steps=10000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
+        self.Mboundarytangenteval = mu.bezierM( torch.linspace(0.0,1.0,steps=self.Mboundaryeval.shape[1],dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), self.Mboundaryeval.shape[2]-2)
         # self.Mboundarynormaleval = mu.bezierM( torch.linspace(0.0,1.0,steps=4000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 3)
         
         self.inner_boundary = None
@@ -173,13 +171,19 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
         self.ob_sub = self.create_subscription(PointCloud2, "/outer_track_boundary/pcl", self.outerBoundaryCB, 1)
 
         self.boundary_loss = BoundaryLoss(time_reduction="all", batch_reduction="all", relu_type="Leaky", alpha=5.0, beta=0.1).type(self.dtype).to(self.device)
-
-        
+   
         num_optim_steps_param : Parameter = self.declare_parameter("num_optim_steps", value=-1)
         self.num_optim_steps = num_optim_steps_param.get_parameter_value().integer_value
 
         optim_step_size_param : Parameter = self.declare_parameter("optim_step_size", value=-1.0)
         self.optim_step_size = optim_step_size_param.get_parameter_value().double_value
+  
+        publish_curve_comparisons_param : Parameter = self.declare_parameter("publish_curve_comparisons", value=True)
+        self.publish_curve_comparisons = publish_curve_comparisons_param.get_parameter_value().bool_value
+
+        
+        self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(node=self)
+        self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
 
 
@@ -254,6 +258,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
          #   print(covarsmsg)
         paths_msg : TrajComparison = TrajComparison(ego_pose=current_pose_msg)
         initial_guess = bezier_control_points[0].detach().clone()
+        initial_guess[:,0]*=self.xscale_factor
         igcpu = initial_guess.cpu()
         igcpu = torch.stack([ igcpu[:,0], torch.zeros_like(igcpu[:,0]), igcpu[:,1] ], dim=1)
         paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(igcpu, Header(frame_id=deepracing_ros.car_coordinate_name, stamp=stamp), covars=covarsmsg))
@@ -281,17 +286,12 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
 
             _, boundarycurveslocal = mu.bezierLsqfit(boundaries, 7, M=self.Mboundaryfit)
 
-            #boundarycurveslocal = boundarycurves
-            # boundarycurvesaug = torch.cat([boundarycurves,  torch.ones_like(boundarycurves[:,:,0]).unsqueeze(2)], dim=2).transpose(1,2)
-            # boundarycurveslocal = torch.matmul(torch.inverse(current_pm), boundarycurvesaug)[:,0:3].transpose(1,2)
-
             if boundarycurveslocal.device==torch.device("cpu"):
                 bcxz = boundarycurveslocal.clone()
             else:
                 bcxz = boundarycurveslocal.cpu()
             boundarycurvesformsg = torch.stack([bcxz[:,:,0], current_pos_np[1]*torch.ones_like(bcxz[:,:,0]), bcxz[:,:,1]], dim=2)
 
-            #boundarycurveslocal = boundarycurveslocal[:,:,[0,2]]
             
             boundarypoints = torch.matmul(self.Mboundaryeval, boundarycurveslocal)
             _, boundarytangents = mu.bezierDerivative(boundarycurveslocal, M=self.Mboundarytangenteval)
@@ -358,42 +358,20 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
         finalcurvecpu = bezier_control_points[0].cpu()
         finalcurvecpu = torch.stack([ finalcurvecpu[:,0], torch.zeros_like(finalcurvecpu[:,0]), finalcurvecpu[:,1] ], dim=1)
         paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(finalcurvecpu, Header(frame_id=deepracing_ros.car_coordinate_name, stamp=stamp), covars=covarsmsg))
-        self.path_publisher.publish(paths_msg)
+        if self.publish_curve_comparisons:
+            self.path_publisher.publish(paths_msg)
             
- 
         with torch.no_grad():
             evalpoints = torch.matmul(self.bezierM, bezier_control_points)
             x_samp = evalpoints[0]
-            x_samp[:,0]*=self.xscale_factor
             x_samp[:,1]-=self.z_offset
-
-
             _, predicted_tangents = mu.bezierDerivative(bezier_control_points, M = self.bezierMderiv, order=1)
-            #predicted_tangents = predicted_tangents
             predicted_tangent_norms = torch.norm(predicted_tangents, p=2, dim=2)
             v_t = self.velocity_scale_factor*(1.0/self.deltaT)*predicted_tangents[0]
             distances_forward = mu.integrate.cumtrapz(predicted_tangent_norms, self.s_torch, initial=torch.zeros(1,1,dtype=v_t.dtype,device=v_t.device))[0]
-        
-
-
-            # _, predicted_normals = mu.bezierDerivative(bezier_control_points, M = self.bezierM2ndderiv, order=2)
-            # predicted_normals = predicted_normals[0]
-            # predicted_normal_norms = torch.norm(predicted_normals, p=2, dim=1)
-                           
-              
-            # cross_prod_norms = torch.abs(predicted_tangents[0,:,0]*predicted_normals[:,1] - predicted_tangents[0,:,1]*predicted_normals[:,0])
-            # radii = torch.pow(predicted_tangent_norms[0],3) / cross_prod_norms
-            # speeds = self.max_speed*(torch.ones_like(radii)).type(self.dtype).to(self.device)
-            # centripetal_accelerations = torch.square(speeds)/radii
-            # max_allowable_speeds = torch.sqrt(self.max_centripetal_acceleration*radii)
-            # idx = centripetal_accelerations>self.max_centripetal_acceleration
-            # speeds[idx] = max_allowable_speeds[idx]
-          #  vels = speeds[:,None]*(predicted_tangents[0]/predicted_tangent_norms[0,:,None])
             vels = v_t
-            #distances_forward = torch.cat((torch.zeros(1, dtype=x_samp.dtype, device=x_samp.device), torch.cumsum(torch.norm(x_samp[1:]-x_samp[:-1],p=2,dim=1), 0)), dim=0)
-        # positions = torch.stack([x_samp[:,0], torch.zeros_like(x_samp[:,0]), x_samp[:,1]], dim=1)
-        # velocities = torch.stack([vels[:,0], torch.zeros_like(vels[:,0]), vels[:,1]], dim=1)
-        positions = x_samp
-        velocities = vels
+        zeros = torch.zeros_like(x_samp[:,0])
+        positions = torch.stack([x_samp[:,0], zeros, x_samp[:,1]], dim=1)
+        velocities = torch.stack([vels[:,0], zeros, vels[:,1]], dim=1)
         return positions, velocities, None
         
