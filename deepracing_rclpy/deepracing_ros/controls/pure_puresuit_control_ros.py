@@ -85,7 +85,6 @@ class PurePursuitControllerROS(Node):
         super(PurePursuitControllerROS,self).__init__('pure_pursuit_control', allow_undeclared_parameters=False, automatically_declare_parameters_from_overrides=False)
        # self.get_logger().info("Hello Pure Pursuit!")
         self.setpoint_publisher = self.create_publisher(Float64, "vel_setpoint", 1)
-        self.velsetpoint = 0.0
        
         L_param_descriptor = ParameterDescriptor(description="The wheelbase (distance between the axles in meters) of the vehicle being controlled")
         L_param : Parameter = self.declare_parameter("wheelbase", value=3.5, descriptor=L_param_descriptor)
@@ -120,19 +119,17 @@ class PurePursuitControllerROS(Node):
         forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
         self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
 
-        full_lock_left_param : Parameter = self.declare_parameter("full_lock_left", value=np.pi/4)
+        full_lock_left_param : Parameter = self.declare_parameter("full_lock_left", value=np.pi/2)
         self.full_lock_left : float = full_lock_left_param.get_parameter_value().double_value
 
-        full_lock_right_param : Parameter = self.declare_parameter("full_lock_right", value=-np.pi/4)
+        full_lock_right_param : Parameter = self.declare_parameter("full_lock_right", value=-np.pi/2)
         self.full_lock_right : float = full_lock_right_param.get_parameter_value().double_value
-
-        max_steer_delta_param : Parameter = self.declare_parameter("max_steer_delta",value=2.0*np.pi)
-        self.max_steer_delta : float = max_steer_delta_param.get_parameter_value().double_value
-
-        self.prev_angle : float = 0.0
         
         base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
         self.base_link : str = base_link_param.get_parameter_value().string_value
+
+        publish_paths_param : Parameter = self.declare_parameter("publish_paths", value=False)
+        self.publish_paths = publish_paths_param.get_parameter_value().bool_value
 
         self.path_pub : Publisher = self.create_publisher(Path, "reference_path", 1)
         
@@ -183,19 +180,19 @@ class PurePursuitControllerROS(Node):
         lookahead_positions, v_local_forward, distances_forward_ = self.getTrajectory()
         if lookahead_positions is None:
             self.get_logger().error("Returning None because lookahead_positions is None")
-            return {"lookahead_positions": lookahead_positions, "control": None}
+            return None, None
         if v_local_forward is None:
             self.get_logger().error("Returning None because v_local_forward is None")
-            return {"lookahead_positions": lookahead_positions, "control": None}
-       
+            return None, lookahead_positions
         if self.velocity_semaphore.acquire(timeout=1.0):
             current_velocity = deepcopy(self.current_velocity)
             self.velocity_semaphore.release()
         else:
             self.get_logger().error("Returning None because unable to acquire velocity semaphore")
-            return {"lookahead_positions": lookahead_positions, "control": None}
-        pathheader = Header(stamp = self.get_clock().now().to_msg(), frame_id=self.base_link)
-        self.path_pub.publish(Path(header=pathheader, poses=[PoseStamped(header=pathheader, pose=Pose(position=Point(x=lookahead_positions[i,0].item(),y=lookahead_positions[i,1].item(),z=lookahead_positions[i,2].item()))) for i in range(lookahead_positions.shape[0])]))
+            return None, lookahead_positions
+        if self.publish_paths:
+            pathheader = Header(stamp = self.get_clock().now().to_msg(), frame_id=self.base_link)
+            self.path_pub.publish(Path(header=pathheader, poses=[PoseStamped(header=pathheader, pose=Pose(position=Point(x=lookahead_positions[i,0].item(),y=lookahead_positions[i,1].item(),z=lookahead_positions[i,2].item()))) for i in range(lookahead_positions.shape[0])]))
         current_velocity_np = np.array([current_velocity.twist.linear.x, current_velocity.twist.linear.y, current_velocity.twist.linear.z])
         current_speed = np.linalg.norm(current_velocity_np)
         
@@ -219,16 +216,14 @@ class PurePursuitControllerROS(Node):
         lookaheadDirection = lookaheadVector/D
         alpha = torch.atan2(lookaheadDirection[self.lateral_dimension],lookaheadDirection[self.forward_dimension])
         physical_angle = np.clip((torch.atan((2 * self.L*torch.sin(alpha)) / D)).item(), self.full_lock_right, self.full_lock_left)
-        self.prev_angle = np.clip(physical_angle, self.prev_angle - self.max_steer_delta, self.prev_angle + self.max_steer_delta)
         if (physical_angle > 0) :
-            delta = self.left_steer_factor*self.prev_angle + self.left_steer_offset
+            delta = self.left_steer_factor*physical_angle
         else:
-            delta = self.right_steer_factor*self.prev_angle + self.right_steer_offset
+            delta = self.right_steer_factor*physical_angle
         
-        self.velsetpoint = speeds[lookahead_index_vel].item()
-        self.setpoint_publisher.publish(Float64(data=self.velsetpoint))
-        if current_speed<self.velsetpoint:
-            return {"lookahead_positions": lookahead_positions, "control": CarControl(steering=delta, throttle=1.0, brake=0.0)}
+        velsetpoint = speeds[lookahead_index_vel].item()
+        self.setpoint_publisher.publish(Float64(data=velsetpoint))
+        if current_speed<velsetpoint:
+            return CarControl(steering=delta, throttle=1.0, brake=0.0), lookahead_positions
         else:
-            
-            return {"lookahead_positions": lookahead_positions, "control": CarControl(steering=delta, throttle=1.0, brake=0.0)}
+            return CarControl(steering=delta, throttle=0.0, brake=1.0), lookahead_positions
