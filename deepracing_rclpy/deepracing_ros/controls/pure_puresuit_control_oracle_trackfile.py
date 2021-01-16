@@ -35,7 +35,8 @@ from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, Pose
 from nav_msgs.msg import Path
 from std_msgs.msg import Float64, Header
 import rclpy
-from rclpy import Parameter
+from rcl_interfaces.msg import ParameterDescriptor
+from rclpy.parameter import Parameter
 from rclpy.node import Node
 from rclpy.time import Time, Duration
 from rclpy.clock import Clock, ROSClock
@@ -122,7 +123,7 @@ class OraclePurePursuitControllerROS(PPC):
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(node=self)
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
         
-        measurement_link_param : Parameter = self.declare_parameter("measurement_link", value="chassis_centroid")
+        measurement_link_param : Parameter = self.declare_parameter("measurement_link", value="car")
         self.measurement_link : str = measurement_link_param.get_parameter_value().string_value
 
 
@@ -164,8 +165,8 @@ class OraclePurePursuitControllerROS(PPC):
         distances_forward = torch.zeros_like(pos[:,0])
         distances_forward[1:] = torch.cumsum(diffnorms,0)
         
-        return pos, vel, None
-       # return pos, vel, distances_forward
+        # return pos, vel, None
+        return pos, vel, distances_forward
 
 
 
