@@ -83,33 +83,7 @@ class PurePursuitControllerROS(Node):
     """
     def __init__(self):
         super(PurePursuitControllerROS,self).__init__('pure_pursuit_control', allow_undeclared_parameters=False, automatically_declare_parameters_from_overrides=False)
-       # self.get_logger().info("Hello Pure Pursuit!")
-        self.setpoint_publisher = self.create_publisher(Float64, "vel_setpoint", 1)
-       
-        L_param_descriptor = ParameterDescriptor(description="The wheelbase (distance between the axles in meters) of the vehicle being controlled")
-        L_param : Parameter = self.declare_parameter("wheelbase", value=3.5, descriptor=L_param_descriptor)
-        self.L : float = L_param.get_parameter_value().double_value
-
-        lookahead_gain_param_descriptor = ParameterDescriptor(description="Lookahead gain: linear factor multiplied by current speed to get the lookahead distance for selecting a lookahead point for steering control")
-        lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain",value=0.65, descriptor=lookahead_gain_param_descriptor)
-        self.lookahead_gain : float = lookahead_gain_param.get_parameter_value().double_value
-
-        velocity_lookahead_gain_param_descriptor = ParameterDescriptor(description="Velocity Lookahead gain: linear factor multiplied by current speed to get the lookahead distance for selecting a lookahead point for velocity control")
-        velocity_lookahead_gain_param : Parameter = self.declare_parameter("velocity_lookahead_gain",value=0.65, descriptor=velocity_lookahead_gain_param_descriptor)
-        self.velocity_lookahead_gain : float = velocity_lookahead_gain_param.get_parameter_value().double_value
-        
-        left_steer_factor_param : Parameter = self.declare_parameter("left_steer_factor",value=3.39814)
-        self.left_steer_factor : float = left_steer_factor_param.get_parameter_value().double_value
-        
-        left_steer_offset_param : Parameter = self.declare_parameter("left_steer_offset",value=0.0)
-        self.left_steer_offset : float = left_steer_offset_param.get_parameter_value().double_value
-        
-        right_steer_factor_param : Parameter = self.declare_parameter("right_steer_factor",value=3.72814)
-        self.right_steer_factor : float = right_steer_factor_param.get_parameter_value().double_value
-        
-        right_steer_offset_param : Parameter = self.declare_parameter("right_steer_offset",value=0.0)
-        self.right_steer_offset : float = right_steer_offset_param.get_parameter_value().double_value
-        
+          
         use_drs_param : Parameter = self.declare_parameter("use_drs",value=False)
         self.use_drs : bool = use_drs_param.get_parameter_value().bool_value
         
@@ -119,12 +93,6 @@ class PurePursuitControllerROS(Node):
         forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
         self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
 
-        full_lock_left_param : Parameter = self.declare_parameter("full_lock_left", value=np.pi/2)
-        self.full_lock_left : float = full_lock_left_param.get_parameter_value().double_value
-
-        full_lock_right_param : Parameter = self.declare_parameter("full_lock_right", value=-np.pi/2)
-        self.full_lock_right : float = full_lock_right_param.get_parameter_value().double_value
-        
         base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
         self.base_link : str = base_link_param.get_parameter_value().string_value
 
@@ -132,23 +100,42 @@ class PurePursuitControllerROS(Node):
         self.publish_paths = publish_paths_param.get_parameter_value().bool_value
 
         self.path_pub : Publisher = self.create_publisher(Path, "reference_path", 1)
-        
-        
-        if self.use_drs:
-            print("Using DRS")
-        else:
-            print("Not using DRS")
 
+        L_param_descriptor = ParameterDescriptor(description="The wheelbase (distance between the axles in meters) of the vehicle being controlled")
+        self.declare_parameter("wheelbase", value=3.5, descriptor=L_param_descriptor)
+        #self.L : float = L_param.get_parameter_value().double_value
 
-        self.get_logger().info("Creating semaphores")
+        lookahead_gain_param_descriptor = ParameterDescriptor(description="Lookahead gain: linear factor multiplied by current speed to get the lookahead distance for selecting a lookahead point for steering control")
+        self.declare_parameter("lookahead_gain",value=0.65, descriptor=lookahead_gain_param_descriptor)
+        #self.lookahead_gain : float = lookahead_gain_param.get_parameter_value().double_value
+
+        velocity_lookahead_gain_param_descriptor = ParameterDescriptor(description="Velocity Lookahead gain: linear factor multiplied by current speed to get the lookahead distance for selecting a lookahead point for velocity control")
+        self.declare_parameter("velocity_lookahead_gain",value=0.65, descriptor=velocity_lookahead_gain_param_descriptor)
+       # self.velocity_lookahead_gain : float = velocity_lookahead_gain_param.get_parameter_value().double_value
+        
+        self.declare_parameter("left_steer_factor",value=3.39814)
+       # self.left_steer_factor : float = left_steer_factor_param.get_parameter_value().double_value
+        
+        self.declare_parameter("right_steer_factor",value=3.72814)
+       # self.right_steer_factor : float = right_steer_factor_param.get_parameter_value().double_value
+        
+        self.declare_parameter("full_lock_left", value=np.pi/2)
+       # self.full_lock_left : float = full_lock_left_param.get_parameter_value().double_value
+
+        self.declare_parameter("full_lock_right", value=-np.pi/2)
+        #self.full_lock_right : float = full_lock_right_param.get_parameter_value().double_value
+
+        self.declare_parameter("max_steer_delta", value=np.pi/2)
+        
         self.current_pose : PoseStamped = None
         self.current_velocity : TwistStamped = None
         self.pose_semaphore : threading.Semaphore = threading.Semaphore()
         self.velocity_semaphore : threading.Semaphore = threading.Semaphore()
         self.internal_rate : Rate = self.create_rate(60.0)
-        self.get_logger().info("Created semaphores")
 
         self.initSubscriptions()
+
+        self.previous_steering = 0.0
 
     def initSubscriptions(self):
         update_qos = rclpy.qos.QoSProfile(depth=1)
@@ -203,8 +190,8 @@ class PurePursuitControllerROS(Node):
 
 
         speeds = torch.norm(v_local_forward, p=2, dim=1)
-        lookahead_distance = max(self.lookahead_gain*current_speed, 5.0)
-        lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
+        lookahead_distance = max(self.get_parameter("lookahead_gain").get_parameter_value().double_value*current_speed, 5.0)
+        lookahead_distance_vel = self.get_parameter("velocity_lookahead_gain").get_parameter_value().double_value*current_speed
 
         lookahead_index = torch.argmin(torch.abs(distances_forward-lookahead_distance))
         lookahead_index_vel = torch.argmin(torch.abs(distances_forward-lookahead_distance_vel))
@@ -215,14 +202,22 @@ class PurePursuitControllerROS(Node):
         D = torch.norm(lookaheadVector, p=2)
         lookaheadDirection = lookaheadVector/D
         alpha = torch.atan2(lookaheadDirection[self.lateral_dimension],lookaheadDirection[self.forward_dimension])
-        physical_angle = np.clip((torch.atan((2 * self.L*torch.sin(alpha)) / D)).item(), self.full_lock_right, self.full_lock_left)
-        if (physical_angle > 0) :
-            delta = self.left_steer_factor*physical_angle
-        else:
-            delta = self.right_steer_factor*physical_angle
+        L = self.get_parameter("wheelbase").get_parameter_value().double_value
+        full_lock_right = self.get_parameter("full_lock_right").get_parameter_value().double_value
+        full_lock_left = self.get_parameter("full_lock_left").get_parameter_value().double_value
+        left_steer_factor = self.get_parameter("left_steer_factor").get_parameter_value().double_value
+        right_steer_factor = self.get_parameter("right_steer_factor").get_parameter_value().double_value
         
+        max_steer_delta = self.get_parameter("max_steer_delta").get_parameter_value().double_value
+
+        physical_angle = np.clip((torch.atan((2 * L*torch.sin(alpha)) / D)).item(), self.previous_steering - max_steer_delta, self.previous_steering + max_steer_delta)
+        physical_angle = np.clip(physical_angle, full_lock_right, full_lock_left)
+        self.previous_steering = physical_angle
+        if physical_angle>0:
+            delta = left_steer_factor*physical_angle
+        else:
+            delta = right_steer_factor*physical_angle
         velsetpoint = speeds[lookahead_index_vel].item()
-        self.setpoint_publisher.publish(Float64(data=velsetpoint))
         if current_speed<velsetpoint:
             return CarControl(steering=delta, throttle=1.0, brake=0.0), lookahead_positions
         else:
