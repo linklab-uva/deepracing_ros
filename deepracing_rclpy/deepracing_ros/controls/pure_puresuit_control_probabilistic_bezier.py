@@ -156,11 +156,10 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
             self.image_sub = self.create_subscription( CompressedImage, '/cropped_publisher/images/compressed', self.addToBuffer, 1)
         else:
             self.image_sub = self.create_subscription( Image, '/cropped_publisher/images', self.addToBuffer, 1)
-
-        self.Mboundaryfit = mu.bezierM( torch.linspace(0.0,1.0,steps=400,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
-        self.Mboundaryeval = mu.bezierM( torch.linspace(0.0,1.0,steps=10000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 7)
-        self.Mboundarytangenteval = mu.bezierM( torch.linspace(0.0,1.0,steps=self.Mboundaryeval.shape[1],dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), self.Mboundaryeval.shape[2]-2)
-        # self.Mboundarynormaleval = mu.bezierM( torch.linspace(0.0,1.0,steps=4000,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), 3)
+        boundary_bezier_order = 7
+        self.Mboundaryfit = mu.bezierM( torch.linspace(0.0,1.0,steps=400,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), boundary_bezier_order)
+        self.Mboundaryeval = mu.bezierM( torch.linspace(0.0,1.0,steps=2500,dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), boundary_bezier_order)
+        self.Mboundarytangenteval = mu.bezierM( torch.linspace(0.0,1.0,steps=self.Mboundaryeval.shape[1],dtype=self.dtype,device=self.device).unsqueeze(0).repeat(2,1), boundary_bezier_order-1)
         
         self.inner_boundary = None
         self.ib_kdtree = None
@@ -170,7 +169,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
         self.ob_kdtree = None
         self.ob_sub = self.create_subscription(PointCloud2, "/outer_track_boundary/pcl", self.outerBoundaryCB, 1)
 
-        self.boundary_loss = BoundaryLoss(time_reduction="all", batch_reduction="all", relu_type="Leaky", alpha=5.0, beta=0.1).type(self.dtype).to(self.device)
+        self.boundary_loss = BoundaryLoss(time_reduction="all", batch_reduction="all", relu_type="Leaky", alpha=1.0, beta=0.1).type(self.dtype).to(self.device)
    
         num_optim_steps_param : Parameter = self.declare_parameter("num_optim_steps", value=-1)
         self.num_optim_steps = num_optim_steps_param.get_parameter_value().integer_value
@@ -186,7 +185,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
 
-
+        self.image_stdev : float = self.declare_parameter("image_stdev", 0.0).get_parameter_value().double_value
     def innerBoundaryCB(self, pc_msg: PointCloud2):
         inner_boundary = np.array(list(deepracing_ros.convert.pointCloud2ToNumpy(pc_msg, field_names=["x","y","z"])))
        # print(inner_boundary)
@@ -221,9 +220,32 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
             return
         if imnp.shape[0]<=0 or imnp.shape[1]<=0 or (not imnp.shape[2]==3) :
             return
-        
-        imnpdouble = tf.functional.to_tensor(imnp.copy()).double().numpy()
+        imtorch = tf.functional.to_tensor(imnp.copy())
+        if self.image_stdev>0.0:
+            imtorch=torch.clamp(imtorch + self.image_stdev*torch.randn_like(imtorch), 0.0, 1.0)
+        imnpdouble = imtorch.double().numpy()
         self.image_buffer.append(imnpdouble)
+    def getTrackBounds(self, current_pm : torch.Tensor):
+        current_pos = current_pm[0:3,3]#.cpu().numpy()
+        current_pos_np = current_pos.cpu().numpy()
+        current_pm_inv = torch.inverse(current_pm)
+
+        ib_closest_delta, ib_closest_idx = self.ib_kdtree.query(current_pos_np)
+        ibstart = ib_closest_idx - 40
+        ibend = ib_closest_idx + 360
+        ibidx = torch.arange(ibstart,ibend, step=1, dtype=torch.int64)%self.inner_boundary.shape[0]
+        ibsamp = torch.matmul(self.inner_boundary[ibidx], current_pm_inv.t())[:,[0,2]]
+        
+        ob_closest_delta, ob_closest_idx = self.ob_kdtree.query(current_pos_np)
+        obstart = ob_closest_idx - 40
+        obend = ob_closest_idx + 360
+        obidx = torch.arange(obstart,obend, step=1, dtype=torch.int64)%self.outer_boundary.shape[0]
+        obsamp = torch.matmul(self.outer_boundary[obidx], current_pm_inv.t())[:,[0,2]]
+
+        boundaries = torch.stack([obsamp, ibsamp], dim=0)
+
+        _, boundarycurveslocal = mu.bezierLsqfit(boundaries, 7, M=self.Mboundaryfit)
+        return boundarycurveslocal
 
     def getTrajectory(self):
         if self.pose_semaphore.acquire(timeout=1.0):
@@ -247,8 +269,8 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
                 return None, None, None
             inputtorch : torch.Tensor = imtorch.unsqueeze(0).type(self.dtype).to(self.device)
             bezier_control_points, varfactors, covarfactors = self.net(inputtorch)
-            scale_trils = torch.diag_embed(varfactors[0]) + torch.diag_embed(covarfactors[0], offset=-1)
-            covariances = torch.matmul(scale_trils, scale_trils.transpose(1,2))
+            scale_tril = torch.diag_embed(varfactors[0]) + torch.diag_embed(covarfactors[0], offset=-1)
+            covariances = torch.matmul(scale_tril, scale_tril.transpose(1,2))
             covarsmsg = torch.zeros(covariances.shape[0], 3, 3, dtype=self.dtype, device=self.device)
             covarsmsg[:,0,0] = covariances[:,0,0]
             covarsmsg[:,1,1] =  1E-7
@@ -257,42 +279,14 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
             covarsmsg=covarsmsg.cpu()
          #   print(covarsmsg)
         paths_msg : TrajComparison = TrajComparison(ego_pose=current_pose_msg)
-        initial_guess = bezier_control_points[0].detach().clone()
-        initial_guess[:,0]*=self.xscale_factor
-        igcpu = initial_guess.cpu()
-        igcpu = torch.stack([ igcpu[:,0], torch.zeros_like(igcpu[:,0]), igcpu[:,1] ], dim=1)
-        paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(igcpu, Header(frame_id=deepracing_ros.car_coordinate_name, stamp=stamp), covars=covarsmsg))
-        paths_msg.optimization_time=-1.0
 
         if self.num_optim_steps>0 and (self.ib_kdtree is not None) and (self.ob_kdtree is not None):
             #print("Running optimization")
             tick = time.time()
-            current_pos = current_pm[0:3,3]#.cpu().numpy()
-            current_pos_np = current_pos.cpu().numpy()
 
-            ib_closest_delta, ib_closest_idx = self.ib_kdtree.query(current_pos_np)
-            ibstart = ib_closest_idx - 40
-            ibend = ib_closest_idx + 360
-            ibidx = torch.arange(ibstart,ibend, step=1, dtype=torch.int64)%self.inner_boundary.shape[0]
-            ibsamp = torch.matmul(self.inner_boundary[ibidx], current_pm_inv.t())[:,[0,2]]
-            
-            ob_closest_delta, ob_closest_idx = self.ob_kdtree.query(current_pos_np)
-            obstart = ob_closest_idx - 40
-            obend = ob_closest_idx + 360
-            obidx = torch.arange(obstart,obend, step=1, dtype=torch.int64)%self.outer_boundary.shape[0]
-            obsamp = torch.matmul(self.outer_boundary[obidx], current_pm_inv.t())[:,[0,2]]
+            boundarycurveslocal = self.getTrackBounds(current_pm)
+            boundarycurvesformsg = torch.stack([boundarycurveslocal[:,:,0], torch.zeros_like(boundarycurveslocal[:,:,0]), boundarycurveslocal[:,:,1]], dim=2)
 
-            boundaries = torch.stack([obsamp, ibsamp], dim=0)
-
-            _, boundarycurveslocal = mu.bezierLsqfit(boundaries, 7, M=self.Mboundaryfit)
-
-            if boundarycurveslocal.device==torch.device("cpu"):
-                bcxz = boundarycurveslocal.clone()
-            else:
-                bcxz = boundarycurveslocal.cpu()
-            boundarycurvesformsg = torch.stack([bcxz[:,:,0], current_pos_np[1]*torch.ones_like(bcxz[:,:,0]), bcxz[:,:,1]], dim=2)
-
-            
             boundarypoints = torch.matmul(self.Mboundaryeval, boundarycurveslocal)
             _, boundarytangents = mu.bezierDerivative(boundarycurveslocal, M=self.Mboundarytangenteval)
             boundarytangents = boundarytangents/torch.norm(boundarytangents, dim=2)[:,:,None]
@@ -309,8 +303,34 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
             paths_msg.outer_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[0], Header(frame_id=deepracing_ros.car_coordinate_name, stamp=stamp))
             paths_msg.inner_boundary_curve = deepracing_ros.convert.toBezierCurveMsg(boundarycurvesformsg[1], Header(frame_id=deepracing_ros.car_coordinate_name, stamp=stamp))
 
+            
+            curve_distribution : dist.MultivariateNormal = dist.MultivariateNormal(bezier_control_points[0], scale_tril=scale_tril, validate_args=False)
+            curve_samples = curve_distribution.sample((128,))
+            curve_sample_points = torch.matmul(self.bezierM[0], curve_samples)
+            #print(curve_sample_points.shape)
+            
+            _, l1 = self.boundary_loss(curve_sample_points, ibpoints.expand(curve_sample_points.shape[0],-1,-1), ibnormals.expand(curve_sample_points.shape[0],-1,-1))
+            _, l2 = self.boundary_loss(curve_sample_points, obpoints.expand(curve_sample_points.shape[0],-1,-1), obnormals.expand(curve_sample_points.shape[0],-1,-1))
+            l1max, _ = torch.max(l1, dim=1)
+            l2max, _ = torch.max(l2, dim=1)
+            l1idx = l1max<=0.25*self.boundary_loss.relu.alpha
+            l2idx = l2max<=0.25*self.boundary_loss.relu.alpha
+
+           # print(l1max.shape, l2max.shape)
+
+            # initial_guess = bezier_control_points[0].detach().clone()
+            initial_guess = torch.mean(curve_samples[l1idx*l2idx], dim=0)
+            initial_guess[:,0]*=self.xscale_factor
+
+            
             evalpoints = torch.matmul(self.bezierM, initial_guess.unsqueeze(0))
             initial_guess_points = evalpoints.clone()
+            
+            igcpu = initial_guess.cpu()
+            igcpu = torch.stack([ igcpu[:,0], torch.zeros_like(igcpu[:,0]), igcpu[:,1] ], dim=1)
+            paths_msg.curves.append(deepracing_ros.convert.toBezierCurveMsg(igcpu, Header(frame_id=deepracing_ros.car_coordinate_name, stamp=stamp), covars=covarsmsg))
+            paths_msg.optimization_time=-1.0
+
 
             mask=[False] + [True for asdf in range(bezier_control_points.shape[1]-1)]
             bcmodel = mu.BezierCurveModule(initial_guess, mask=mask).train()

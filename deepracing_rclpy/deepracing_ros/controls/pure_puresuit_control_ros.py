@@ -102,8 +102,8 @@ class PurePursuitControllerROS(Node):
         self.path_pub : Publisher = self.create_publisher(Path, "reference_path", 1)
 
         L_param_descriptor = ParameterDescriptor(description="The wheelbase (distance between the axles in meters) of the vehicle being controlled")
-        self.declare_parameter("wheelbase", value=3.5, descriptor=L_param_descriptor)
-        #self.L : float = L_param.get_parameter_value().double_value
+        L_param : Parameter = self.declare_parameter("wheelbase", value=3.5, descriptor=L_param_descriptor)
+        self.L : float = L_param.get_parameter_value().double_value
 
         lookahead_gain_param_descriptor = ParameterDescriptor(description="Lookahead gain: linear factor multiplied by current speed to get the lookahead distance for selecting a lookahead point for steering control")
         self.declare_parameter("lookahead_gain",value=0.65, descriptor=lookahead_gain_param_descriptor)
@@ -126,6 +126,8 @@ class PurePursuitControllerROS(Node):
         #self.full_lock_right : float = full_lock_right_param.get_parameter_value().double_value
 
         self.declare_parameter("max_steer_delta", value=np.pi/2)
+
+
         
         self.current_pose : PoseStamped = None
         self.current_velocity : TwistStamped = None
@@ -202,15 +204,14 @@ class PurePursuitControllerROS(Node):
         D = torch.norm(lookaheadVector, p=2)
         lookaheadDirection = lookaheadVector/D
         alpha = torch.atan2(lookaheadDirection[self.lateral_dimension],lookaheadDirection[self.forward_dimension])
-        L = self.get_parameter("wheelbase").get_parameter_value().double_value
+        
         full_lock_right = self.get_parameter("full_lock_right").get_parameter_value().double_value
         full_lock_left = self.get_parameter("full_lock_left").get_parameter_value().double_value
         left_steer_factor = self.get_parameter("left_steer_factor").get_parameter_value().double_value
         right_steer_factor = self.get_parameter("right_steer_factor").get_parameter_value().double_value
-        
         max_steer_delta = self.get_parameter("max_steer_delta").get_parameter_value().double_value
 
-        physical_angle = np.clip((torch.atan((2 * L*torch.sin(alpha)) / D)).item(), self.previous_steering - max_steer_delta, self.previous_steering + max_steer_delta)
+        physical_angle = np.clip((torch.atan((2 * self.L*torch.sin(alpha)) / D)).item(), self.previous_steering - max_steer_delta, self.previous_steering + max_steer_delta)
         physical_angle = np.clip(physical_angle, full_lock_right, full_lock_left)
         self.previous_steering = physical_angle
         if physical_angle>0:
