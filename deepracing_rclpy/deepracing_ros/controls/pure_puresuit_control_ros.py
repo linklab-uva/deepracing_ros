@@ -98,8 +98,12 @@ class PurePursuitControllerROS(Node):
 
         publish_paths_param : Parameter = self.declare_parameter("publish_paths", value=False)
         self.publish_paths = publish_paths_param.get_parameter_value().bool_value
+        
+        publish_lookahead_points_param : Parameter = self.declare_parameter("publish_lookahead_points", value=False)
+        self.publish_lookahead_points = publish_lookahead_points_param.get_parameter_value().bool_value
 
         self.path_pub : Publisher = self.create_publisher(Path, "reference_path", 1)
+        self.point_pub : Publisher = self.create_publisher(PointStamped, "lookahead_point", 1)
 
         L_param_descriptor = ParameterDescriptor(description="The wheelbase (distance between the axles in meters) of the vehicle being controlled")
         L_param : Parameter = self.declare_parameter("wheelbase", value=3.5, descriptor=L_param_descriptor)
@@ -167,6 +171,7 @@ class PurePursuitControllerROS(Node):
     def getControl(self) -> CarControl:
         
         lookahead_positions, v_local_forward, distances_forward_ = self.getTrajectory()
+        now = self.get_clock().now()
         if lookahead_positions is None:
             self.get_logger().error("Returning None because lookahead_positions is None")
             return None, None
@@ -180,7 +185,7 @@ class PurePursuitControllerROS(Node):
             self.get_logger().error("Returning None because unable to acquire velocity semaphore")
             return None, lookahead_positions
         if self.publish_paths:
-            pathheader = Header(stamp = self.get_clock().now().to_msg(), frame_id=self.base_link)
+            pathheader = Header(stamp = now.to_msg(), frame_id=self.base_link)
             self.path_pub.publish(Path(header=pathheader, poses=[PoseStamped(header=pathheader, pose=Pose(position=Point(x=lookahead_positions[i,0].item(),y=lookahead_positions[i,1].item(),z=lookahead_positions[i,2].item()))) for i in range(lookahead_positions.shape[0])]))
         current_velocity_np = np.array([current_velocity.twist.linear.x, current_velocity.twist.linear.y, current_velocity.twist.linear.z])
         current_speed = np.linalg.norm(current_velocity_np)
@@ -197,6 +202,11 @@ class PurePursuitControllerROS(Node):
 
         lookahead_index = torch.argmin(torch.abs(distances_forward-lookahead_distance))
         lookahead_index_vel = torch.argmin(torch.abs(distances_forward-lookahead_distance_vel))
+
+        if self.publish_lookahead_points:
+            pointheader = Header(stamp = now.to_msg(), frame_id=self.base_link)
+            point = Point(x=lookahead_positions[lookahead_index,0].item(), y=lookahead_positions[lookahead_index,1].item(), z=lookahead_positions[lookahead_index,2].item())
+            self.point_pub.publish(PointStamped(header=pointheader, point=point))
 
         lookaheadVector = lookahead_positions[lookahead_index]
         lookaheadVectorVel = lookahead_positions[lookahead_index_vel]
