@@ -13,6 +13,7 @@
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include "deepracing_ros/utils/f1_msg_utils.h"
 
+
 class NodeWrapperTfUpdater_ 
 {
 
@@ -104,7 +105,7 @@ class NodeWrapperTfUpdater_
       Eigen::Quaterniond rotationEigen(rotmat);
       rotationEigen.normalize();
       geometry_msgs::msg::TransformStamped transformMsg;
-      transformMsg.header.set__frame_id("track");
+      transformMsg.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
       transformMsg.header.set__stamp(motion_data.world_position.header.stamp);
       transformMsg.set__child_frame_id(deepracing_ros::F1MsgUtils::car_coordinate_name);
       transformMsg.transform.rotation.x = rotationEigen.x();
@@ -145,6 +146,20 @@ int main(int argc, char *argv[]) {
   NodeWrapperTfUpdater_ nw;
   std::shared_ptr<rclcpp::Node> node = nw.node;
   RCLCPP_INFO(node->get_logger(), "Updating TF data");
-  rclcpp::spin(node);
-  return 0;
+  int num_threads_ = node->declare_parameter<int>("num_threads", 3);
+  size_t num_threads;
+  if (num_threads_<=0){
+    num_threads = 0;
+    RCLCPP_INFO(node->get_logger(), "Spinning with the number of detected CPU cores");
+  }
+  else{
+    num_threads = (size_t)num_threads_;
+    RCLCPP_INFO(node->get_logger(), "Spinning with %zu threads", num_threads);
+  }
+  
+
+  rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), num_threads);
+  executor.add_node(node);
+  executor.spin();
+  rclcpp::shutdown();
 }
