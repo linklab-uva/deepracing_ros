@@ -1,0 +1,97 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import rclpy
+import time
+import rclpy
+from rclpy.subscription import Subscription
+from rclpy.publisher import Publisher
+from rclpy.node import Node
+from std_msgs.msg import String
+from deepracing_msgs.msg import TimestampedPacketMotionData, PacketMotionData, CarMotionData, TimestampedPacketLapData, PacketLapData, LapData
+from deepracing_msgs.msg import CarControl, DriverStates
+from geometry_msgs.msg import PoseStamped, Pose, PoseArray, Quaternion
+from geometry_msgs.msg import PointStamped, Point
+import numpy as np
+import rclpy.executors
+from deepracing_ros.utils import AsyncSpinner
+from scipy.spatial.transform import Rotation as Rot
+from threading import Semaphore
+import deepracing_ros, deepracing_ros.convert as C
+import deepracing.protobuf_utils
+
+class DriverStatePublisher(Node):
+    def __init__(self,):
+        super(DriverStatePublisher,self).__init__('driver_state_publisher')
+        self.lap_data_semaphore : Semaphore = Semaphore()
+        self.valid_indices : np.ndarray = None
+        self.lap_data_sub : Subscription = self.create_subscription(TimestampedPacketLapData, "lap_data", self.lapDataCB, 1)
+        self.motion_data_sub : Subscription = self.create_subscription(TimestampedPacketMotionData, "motion_data", self.motionPacketCB, 1)
+
+        self.pose_array_pub : Publisher = self.create_publisher(PoseArray, "pose_arrays", 1)
+        self.driver_state_pub : Publisher = self.create_publisher(DriverStates, "driver_states", 1)
+
+
+    def lapDataCB(self, timestamped_lap_data : TimestampedPacketLapData):
+        ego_idx = timestamped_lap_data.udp_packet.header.player_car_index
+        if not self.lap_data_semaphore.acquire(timeout = 2.0):
+            self.get_logger().error("Unable to acquire lap_data_semaphore in lapDataCB")
+            return
+        self.valid_indices : np.ndarray = np.asarray( [i for i in range(len(timestamped_lap_data.udp_packet.lap_data)) if ( (timestamped_lap_data.udp_packet.lap_data[i].result_status not in {0,1}) and (not i==ego_idx) ) ] , dtype=np.int32)
+        self.lap_data_semaphore.release()
+    def motionPacketCB(self, timestamped_motion_data : TimestampedPacketMotionData):
+        ego_idx = timestamped_motion_data.udp_packet.header.player_car_index
+        if self.valid_indices is None:
+            self.get_logger().error("Have not yet received any lap data to infer vehicle indices")
+            return
+        self.get_logger().debug("Processing motion packet")
+        udp_packet : PacketMotionData = timestamped_motion_data.udp_packet
+        motion_data_array = udp_packet.car_motion_data
+        if not self.lap_data_semaphore.acquire(timeout = 2.0):
+            self.get_logger().error("Unable to acquire lap_data_semaphore in lapDataCB")
+            return
+        valid_indices = self.valid_indices.copy()
+        self.lap_data_semaphore.release()
+        driver_states : DriverStates = DriverStates(header = timestamped_motion_data.header, ego_vehicle_index = ego_idx)
+        pose_array : PoseArray = PoseArray(header = timestamped_motion_data.header)
+        for i in range(valid_indices.shape[0]):
+            posnp, qnp = C.extractPose(udp_packet, car_index=valid_indices[i])
+            pose = Pose(position = Point(x=posnp[0], y=posnp[1], z=posnp[2]), orientation=Quaternion(x=qnp[0], y=qnp[1], z=qnp[2], w=qnp[3]))        
+            pose_array.poses.append(pose)
+            driver_states.other_agent_poses.append(pose)
+            driver_states.other_agent_velocities.append(motion_data_array[valid_indices[i]].world_velocity.vector)
+            driver_states.vehicle_indices.append(valid_indices[i])
+        #now grab data for ego vehicle
+        posnp, qnp = C.extractPose(udp_packet)
+        driver_states.ego_pose = Pose(position = Point(x=posnp[0], y=posnp[1], z=posnp[2]), orientation=Quaternion(x=qnp[0], y=qnp[1], z=qnp[2], w=qnp[3]))
+        
+        self.pose_array_pub.publish(pose_array)
+        self.driver_state_pub.publish(driver_states)
+
+
+
+    
+def main(args=None):
+    rclpy.init(args=args)
+    rclpy.logging.initialize()
+    spinner : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor(2)
+    node = DriverStatePublisher()
+    spinner.add_node(node)
+    try:
+        spinner.spin()
+    except KeyboardInterrupt:
+        pass
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
