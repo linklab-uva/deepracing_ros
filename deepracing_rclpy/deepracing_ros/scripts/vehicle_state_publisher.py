@@ -19,7 +19,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 from deepracing_msgs.msg import TimestampedPacketMotionData, PacketMotionData, CarMotionData, TimestampedPacketLapData, PacketLapData, LapData
 from deepracing_msgs.msg import CarControl, DriverStates
-from geometry_msgs.msg import PoseStamped, Pose, PoseArray, Quaternion
+from geometry_msgs.msg import PoseStamped, Pose, PoseArray, Quaternion, Twist
 from geometry_msgs.msg import PointStamped, Point
 import numpy as np
 import rclpy.executors
@@ -28,6 +28,7 @@ from scipy.spatial.transform import Rotation as Rot
 from threading import Semaphore
 import deepracing_ros, deepracing_ros.convert as C
 import deepracing.protobuf_utils
+from typing import List
 
 class DriverStatePublisher(Node):
     def __init__(self,):
@@ -55,7 +56,7 @@ class DriverStatePublisher(Node):
             return
         self.get_logger().debug("Processing motion packet")
         udp_packet : PacketMotionData = timestamped_motion_data.udp_packet
-        motion_data_array = udp_packet.car_motion_data
+        motion_data_array : List[CarMotionData] = udp_packet.car_motion_data
         if not self.lap_data_semaphore.acquire(timeout = 2.0):
             self.get_logger().error("Unable to acquire lap_data_semaphore in lapDataCB")
             return
@@ -64,16 +65,18 @@ class DriverStatePublisher(Node):
         driver_states : DriverStates = DriverStates(header = timestamped_motion_data.header, ego_vehicle_index = ego_idx)
         pose_array : PoseArray = PoseArray(header = timestamped_motion_data.header)
         for i in range(valid_indices.shape[0]):
-            posnp, qnp = C.extractPose(udp_packet, car_index=valid_indices[i])
-            pose = Pose(position = Point(x=posnp[0], y=posnp[1], z=posnp[2]), orientation=Quaternion(x=qnp[0], y=qnp[1], z=qnp[2], w=qnp[3]))        
+            car_index = valid_indices[i]
+            qnp = C.extractOrientation(udp_packet, car_index=car_index).as_quat() 
+            pose = Pose(position = motion_data_array[car_index].world_position.point, orientation=Quaternion(x=qnp[0], y=qnp[1], z=qnp[2], w=qnp[3]))        
             pose_array.poses.append(pose)
             driver_states.other_agent_poses.append(pose)
-            driver_states.other_agent_velocities.append(motion_data_array[valid_indices[i]].world_velocity.vector)
-            driver_states.vehicle_indices.append(valid_indices[i])
+            driver_states.other_agent_velocities.append(motion_data_array[car_index].world_velocity.vector)
+            driver_states.vehicle_indices.append(car_index)
         #now grab data for ego vehicle
-        posnp, qnp = C.extractPose(udp_packet)
-        driver_states.ego_pose = Pose(position = Point(x=posnp[0], y=posnp[1], z=posnp[2]), orientation=Quaternion(x=qnp[0], y=qnp[1], z=qnp[2], w=qnp[3]))
-        
+        ego_rotation = C.extractOrientation(udp_packet)
+        ego_quaternion = ego_rotation.as_quat()
+        driver_states.ego_pose = Pose(position = motion_data_array[ego_idx].world_position.point, orientation=Quaternion(x=ego_quaternion[0], y=ego_quaternion[1], z=ego_quaternion[2], w=ego_quaternion[3]))
+        driver_states.ego_velocity = Twist(linear = motion_data_array[ego_idx].world_velocity.vector, angular = udp_packet.angular_velocity)
         self.pose_array_pub.publish(pose_array)
         self.driver_state_pub.publish(driver_states)
 
