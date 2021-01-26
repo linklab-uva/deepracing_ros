@@ -83,6 +83,7 @@ public:
     deepracing_msgs::msg::TimestampedPacketMotionData rosdata;
     rosdata.header.stamp = now;
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(data.data, all_cars_param_);
+    rosdata.header.frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name;
     for (deepracing_msgs::msg::CarMotionData & motion_data : rosdata.udp_packet.car_motion_data)
     {
       motion_data.world_forward_dir.header.stamp = now;
