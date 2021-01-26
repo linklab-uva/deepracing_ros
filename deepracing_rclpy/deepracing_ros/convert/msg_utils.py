@@ -128,21 +128,21 @@ def arrayToPointCloud2(pointsarray : [torch.Tensor, np.ndarray], field_names : L
    pc2out.fields=[PointField(name=name, offset=i*bytesperfield, count=1, datatype=dtypemsg) for (i,name) in enumerate(field_names)]
    pc2out.data = points.flatten().tobytes()
    return pc2out
-def extractPosition(packet : drmsgs.PacketMotionData , car_index = None):
+
+def extractPosition(packet : drmsgs.PacketMotionData , car_index = None) -> np.ndarray:
    if car_index is None:
-      idx = packet.m_header.player_car_index
+      idx = packet.header.player_car_index
    else:
       idx = car_index
    motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
    position = np.array( (motion_data.world_position.point.x, motion_data.world_position.point.y, motion_data.world_position.point.z), dtype=np.float64)
    return position 
 
-def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
+def extractOrientation(packet : drmsgs.PacketMotionData, car_index = None) -> scipy.spatial.transform.Rotation:
    if car_index is None:
       idx = packet.header.player_car_index
    else:
       idx = car_index
-   position = extractPosition(packet, car_index=idx)
    motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
 
    rightdir : geo_msgs.Vector3 = motion_data.world_right_dir.vector
@@ -156,8 +156,18 @@ def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
 
    upvector = np.cross(rightvector,forwardvector)
    upvector = upvector/la.norm(upvector)
-   rotationmat = np.column_stack((-rightvector,upvector,forwardvector))
-   return ( position, scipy.spatial.transform.Rotation.from_matrix(rotationmat).as_quat() )
+   rotationmat = np.column_stack([-rightvector,upvector,forwardvector])
+   return scipy.spatial.transform.Rotation.from_matrix(rotationmat)
+
+def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
+   if car_index is None:
+      idx = packet.header.player_car_index
+   else:
+      idx = car_index
+   p = extractPosition(packet, car_index=idx)
+   q = extractOrientation(packet, car_index=idx)
+   return ( p, q )
+
 def toBezierCurveMsg(control_points, header: Header, covars = None):
    ptsnp = control_points.detach().cpu().numpy()
    if covars is not None:
