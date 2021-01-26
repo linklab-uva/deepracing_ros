@@ -13,7 +13,6 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <json/json.h>
 #include <deepracing_msgs/msg/timestamped_packet_session_data.hpp>
-#include <deepracing_msgs/msg/boundary_line.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include "deepracing_ros/utils/f1_msg_utils.h"
 #include "deepracing_ros/utils/file_utils.h"
@@ -192,7 +191,7 @@ int main(int argc, char** argv)
 
     while (rclcpp::is_initialized())
     {
-        rclcpp::sleep_for(std::chrono::nanoseconds(int(1E9)));
+        rclcpp::sleep_for(std::chrono::milliseconds(int(100)));
         rclcpp::spin_some(node);
         innercloudMSG.header.stamp = node->now();
         RCLCPP_DEBUG(node->get_logger(), "Ran a spin.");
