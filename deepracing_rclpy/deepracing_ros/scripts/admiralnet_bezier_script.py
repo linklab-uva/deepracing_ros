@@ -23,20 +23,18 @@ import rclpy.executors as executors
 from deepracing_ros.utils import AsyncSpinner
 from scipy.spatial.transform import Rotation as Rot
 from deepracing_ros.controls.pure_puresuit_control_ros import PurePursuitControllerROS
-from deepracing_ros.controls.pure_puresuit_control_bezier_predictor import AdmiralNetBezierPurePursuitControllerROS
 from deepracing_ros.controls.pure_puresuit_control_probabilistic_bezier import ProbabilisticBezierPurePursuitControllerROS
 
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
-    spinner = AsyncSpinner(executor=executors.MultiThreadedExecutor(3))
-   # node = AdmiralNetBezierPurePursuitControllerROS()
+    spinner = AsyncSpinner(executor=executors.MultiThreadedExecutor(4))
     node = ProbabilisticBezierPurePursuitControllerROS()
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     control_pub = node.create_publisher(CarControl, "/car_control", 1)
     spinner.add_node(node)
     spinner.spin()
-    rate = node.create_rate(60.0)
+    rate = node.create_rate(120.0)
 
     try:
         while rclpy.ok():
