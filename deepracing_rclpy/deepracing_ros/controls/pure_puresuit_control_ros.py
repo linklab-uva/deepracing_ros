@@ -1,10 +1,7 @@
-import cv2
 import numpy as np
-import argparse
 import os
 import time
 import logging
-from numpy_ringbuffer import RingBuffer as RB
 import yaml
 import torch
 import torchvision
@@ -17,9 +14,7 @@ import deepracing
 import threading
 import numpy.linalg as la
 import scipy.integrate as integrate
-import socket
 import scipy.spatial
-import queue
 import deepracing_models.math_utils as mu
 import torch
 import torch.nn as NN
@@ -41,9 +36,9 @@ from rclpy.time import Time
 from copy import deepcopy
 import sensor_msgs
 from scipy.spatial.kdtree import KDTree
-from shapely.geometry import Point as ShapelyPoint, MultiPoint#, Point2d as ShapelyPoint2d
-from shapely.geometry.polygon import Polygon
-from shapely.geometry import LinearRing
+# from shapely.geometry import Point as ShapelyPoint, MultiPoint
+# from shapely.geometry.polygon import Polygon
+# from shapely.geometry import LinearRing
 import timeit
 import deepracing_ros, deepracing_ros.convert
 
@@ -69,9 +64,6 @@ class PurePursuitControllerROS(Node):
         callback method for pose_sub, do not call this directly. 
     velocityCallback(velocity_msg : TwistStamped)
         callback method for velocity_sub, do not call this directly. 
-    getTrajectory():
-        This is the core piece of this interface. Users should extend this class and overwrite getTrajectory to
-        return a trajectory for the car to follow given the controller's current state
     getTrajectory():
         This is the core piece of this interface. Users should extend this class and overwrite getTrajectory to
         return a trajectory for the car to follow given the controller's current state
@@ -184,8 +176,12 @@ class PurePursuitControllerROS(Node):
         else:
             self.get_logger().error("Returning None because unable to acquire velocity semaphore")
             return None, lookahead_positions
+        if self.current_pose is None:
+            stamp = self.get_clock().now().to_msg()
+        else:
+            stamp = self.current_pose.header.stamp
         if self.publish_paths:
-            pathheader = Header(stamp = now.to_msg(), frame_id=self.base_link)
+            pathheader = Header(stamp = stamp, frame_id=self.base_link)
             self.path_pub.publish(Path(header=pathheader, poses=[PoseStamped(header=pathheader, pose=Pose(position=Point(x=lookahead_positions[i,0].item(),y=lookahead_positions[i,1].item(),z=lookahead_positions[i,2].item()))) for i in range(lookahead_positions.shape[0])]))
         current_velocity_np = np.array([current_velocity.twist.linear.x, current_velocity.twist.linear.y, current_velocity.twist.linear.z])
         current_speed = np.linalg.norm(current_velocity_np)
@@ -204,7 +200,7 @@ class PurePursuitControllerROS(Node):
         lookahead_index_vel = torch.argmin(torch.abs(distances_forward-lookahead_distance_vel))
 
         if self.publish_lookahead_points:
-            pointheader = Header(stamp = now.to_msg(), frame_id=self.base_link)
+            pointheader = Header(stamp = stamp, frame_id=self.base_link)
             point = Point(x=lookahead_positions[lookahead_index,0].item(), y=lookahead_positions[lookahead_index,1].item(), z=lookahead_positions[lookahead_index,2].item())
             self.point_pub.publish(PointStamped(header=pointheader, point=point))
 
@@ -230,6 +226,6 @@ class PurePursuitControllerROS(Node):
             delta = right_steer_factor*physical_angle
         velsetpoint = speeds[lookahead_index_vel].item()
         if current_speed<velsetpoint:
-            return CarControl(steering=delta, throttle=1.0, brake=0.0), lookahead_positions
+            return CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=1.0, brake=0.0), lookahead_positions
         else:
-            return CarControl(steering=delta, throttle=0.0, brake=1.0), lookahead_positions
+            return CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=0.0, brake=1.0), lookahead_positions
