@@ -119,6 +119,8 @@ class NodeWrapperTfUpdater_
       transformMsg.transform.translation.set__z(positionROS.point.z);
       this->tfbroadcaster->sendTransform(transformMsg);
       this->statictfbroadcaster->sendTransform(mapToTrack);
+
+      carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
       this->statictfbroadcaster->sendTransform(carToBaseLink);
       
 
