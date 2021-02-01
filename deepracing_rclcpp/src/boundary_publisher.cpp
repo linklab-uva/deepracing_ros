@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <algorithm>
 #include "rclcpp/rclcpp.hpp"
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <json/json.h>
 #include <deepracing_msgs/msg/timestamped_packet_session_data.hpp>
@@ -119,7 +121,11 @@ void unpackDictionary(std::shared_ptr<rclcpp::Node> node, const Json::Value& bou
     unsigned int imax = x.size();
     for (unsigned int i =0; i < imax; i++)
     {
-        pcl::PointXYZI pointI(x[i].asDouble(), y[i].asDouble(), z[i].asDouble(), I[i].asDouble());
+       // pcl::PointXYZI pointI(x[i].asDouble(), y[i].asDouble(), z[i].asDouble(), I[i].asDouble());
+        pcl::PointXYZI pointI(I[i].asDouble());
+        pointI.x = x[i].asDouble();
+        pointI.y = y[i].asDouble();
+        pointI.z = z[i].asDouble();
         cloudpcl.push_back(pointI);
     }
 }
@@ -191,7 +197,7 @@ int main(int argc, char** argv)
 
     while (rclcpp::is_initialized())
     {
-        rclcpp::sleep_for(std::chrono::milliseconds(int(100)));
+        rclcpp::sleep_for(std::chrono::milliseconds(int(150)));
         rclcpp::spin_some(node);
         innercloudMSG.header.stamp = node->now();
         RCLCPP_DEBUG(node->get_logger(), "Ran a spin.");
