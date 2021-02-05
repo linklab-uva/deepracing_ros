@@ -147,7 +147,7 @@ class OraclePurePursuitControllerROS(PPC):
         raceline_base_link = torch.matmul(T, self.raceline)
         
         I1 = torch.argmin(torch.norm(raceline_base_link[0:3],p=2,dim=0)).item()
-        print("Starting from: %d" % (I1,))
+       # print("Starting from: %d" % (I1,))
 
         t0 = self.racelinetimes[I1].item()
         t1 = t0 + self.dt

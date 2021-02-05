@@ -28,7 +28,7 @@ from deepracing_ros.controls.pure_puresuit_control_probabilistic_bezier import P
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
-    spinner = AsyncSpinner(executor=executors.MultiThreadedExecutor(4))
+    spinner = AsyncSpinner(executor=executors.MultiThreadedExecutor(3))
     node = ProbabilisticBezierPurePursuitControllerROS()
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     control_pub = node.create_publisher(CarControl, "/car_control", 1)
