@@ -11,13 +11,14 @@ from tqdm import tqdm as tqdm
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
-from deepracing_msgs.msg import BezierCurve, TimestampedPacketMotionData, PacketMotionData, CarMotionData, PacketHeader
+from deepracing_msgs.msg import TimestampedPacketMotionData
+from deepracing_msgs.msg import BezierCurve, PacketMotionData, CarMotionData, PacketHeader, LapData, CarTelemetryData, CarMotionData, PacketSessionData, TrajComparison
 from geometry_msgs.msg import PointStamped, Point, Vector3Stamped, Vector3
 from sensor_msgs.msg import CompressedImage
 
 import torch, torchvision
 
-import deepracing, deepracing.pose_utils, deepracing.raceline_utils, deepracing.evaluation_utils, deepracing_models
+import deepracing, deepracing.pose_utils, deepracing.raceline_utils, deepracing.evaluation_utils, deepracing_models, deepracing_models.math_utils as mu
 
 import numpy as np
 import cv2
@@ -33,7 +34,6 @@ import scipy
 from scipy.spatial.kdtree import KDTree
 import matplotlib.pyplot as plt
 import os
-from sympy import Point as SPPoint, Polygon as SPPolygon, pi
 from shapely.geometry import Point as ShapelyPoint, MultiPoint#, Point2d as ShapelyPoint2d
 from shapely.geometry.polygon import Polygon
 from shapely.geometry import LinearRing
@@ -42,6 +42,9 @@ import time
 import cv2
 import yaml 
 import deepracing_ros.utils.rosbag_utils as rosbag_utils
+
+from ament_index_python import get_package_share_directory
+from tqdm import tqdm as tqdm
 
 def extractPosition(vectormsg):
     return np.array( [ msg.x, msg.y, msg.z ] )
@@ -54,32 +57,31 @@ def poseKey(msg):
 
 parser = argparse.ArgumentParser(description="Look for bad predictions in a run of the bezier curve predictor")
 parser.add_argument("bag_dir", type=str,  help="Bag to load")
-parser.add_argument("--save_all_figures", action="store_true",  help="Save a plot for every bezier curve. Even ones with no track violation.")
-# parser.add_argument("--trackfiledir", help="Path to the directory containing the raceline json files. Default is environment variable F1_TRACK_DIR",  type=str, default=os.environ.get("F1_TRACK_DIR",default=None))
+
 
 args = parser.parse_args()
-
-argdict = dict(vars(args))
-save_all_figures = argdict["save_all_figures"]
-# trackfiledir = argdict["trackfiledir"]
-# if trackfiledir is None:
-#     raise ValueError("Must either specify --trackfiledir or set environment variable F1_TRACK_DIR")
-
-bag_dir = argdict["bag_dir"]
-if bag_dir[-2:] in {"\\\\","//"}:
-    bag_dir = bag_dir[0:-2]
-elif bag_dir[-1] in {"\\","/"}:
+argdict : dict = vars(args)
+bag_dir = os.path.abspath(argdict["bag_dir"])
+if bag_dir[-1] in {"\\", "/"}:
     bag_dir = bag_dir[0:-1]
+
+
+
+bridge = cv_bridge.CvBridge()
+
 topic_types, type_map, reader = rosbag_utils.open_bagfile(bag_dir)
 with open(os.path.join(bag_dir,"metadata.yaml"),"r") as f:
     metadata_dict = yaml.load(f,Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
 topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
 topic_counts = np.array( list(topic_count_dict.values()) ) 
-
+telemetry_data_msgs = []
+lap_data_msgs = []
 idx = 0
 total_msgs = np.sum( topic_counts )
+
+#{'/f1_screencaps/cropped/compressed': 'sensor_msgs/msg/CompressedImage', '/motion_data': 'deepracing_msgs/msg/TimestampedPacketMotionData', '/predicted_path': 'deepracing_msgs/msg/BezierCurve'}
+print("Loading data from bag: %s" % (bag_dir,))
 msg_dict = {key : [] for key in topic_count_dict.keys()}
-print("Loading data from bag")
 for idx in tqdm(iterable=range(total_msgs)):
     if(reader.has_next()):
         (topic, data, t) = reader.read_next()
@@ -87,241 +89,197 @@ for idx in tqdm(iterable=range(total_msgs)):
         msg_type_full = get_message(msg_type)
         msg = deserialize_message(data, msg_type_full)
         msg_dict[topic].append(msg)
-session_packet_msgs = sorted(msg_dict["/cropped_publisher/session_data"], key=poseKey)
-tracknum = session_packet_msgs[-1].udp_packet.track_id
-trackname = deepracing.trackNames[tracknum]
-innerboundfile = deepracing.searchForFile(trackname+"_innerlimit.json", [os.curdir] + os.getenv("F1_TRACK_DIRS").split(os.pathsep) )
-outerboundfile = deepracing.searchForFile(trackname+"_outerlimit.json", [os.curdir] + os.getenv("F1_TRACK_DIRS").split(os.pathsep) )
-rinner, innerboundary = deepracing.raceline_utils.loadBoundary(innerboundfile)
-innerboundary_kdtree = KDTree(innerboundary[0:3].cpu().numpy().copy().transpose())
-innerboundary_poly = Polygon(shell=innerboundary[[0,2]].cpu().numpy().copy().transpose().tolist())
-assert(innerboundary_poly.is_valid)
-router, outerboundary = deepracing.raceline_utils.loadBoundary(outerboundfile)
-outerboundary_kdtree = KDTree(outerboundary[0:3].cpu().numpy().copy().transpose())
-outerboundary_poly = Polygon(shell=outerboundary[[0,2]].cpu().numpy().copy().transpose().tolist())
-assert(outerboundary_poly.is_valid)
+topic_names = list(type_map.keys())
+ego_lap_data : List[LapData] = [msg.udp_packet.lap_data[msg.udp_packet.header.player_car_index] for msg in msg_dict["/cropped_publisher/lap_data"]]
+lapnums = torch.as_tensor([ld.current_lap_num for ld in ego_lap_data], dtype=torch.int32)
+lapdistances = torch.as_tensor([ld.lap_distance for ld in ego_lap_data], dtype=torch.float32)
+Ifinallap1 = torch.argmax(lapnums).item() - 1
+Ifirstlap1 = torch.argmax((lapdistances>=0.0).byte()).item() - 1
+
+session_packets : List[PacketSessionData] = [msg.udp_packet for msg in msg_dict["/cropped_publisher/session_data"]]
+
+ego_telemetry : List[CarTelemetryData] = [msg.udp_packet.car_telemetry_data[msg.udp_packet.header.player_car_index] for msg in msg_dict["/cropped_publisher/telemetry_data"]]
+ego_throttles = torch.as_tensor([msg.throttle for msg in ego_telemetry], dtype=torch.uint8)
+
+gunnin_it = ego_throttles>50
+whoa_there =  ~gunnin_it
+
+ego_positions = torch.as_tensor( [ [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z] for msg in msg_dict["/ego_vehicle/pose"] ] , dtype=torch.float64 )
+ego_quaternions = torch.as_tensor( [ [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w] for msg in msg_dict["/ego_vehicle/pose"] ] , dtype=torch.float64 )
+ego_velocities = torch.as_tensor( [ [msg.twist.linear.x, msg.twist.linear.y, msg.twist.linear.z] for msg in msg_dict["/ego_vehicle/velocity"] ] , dtype=torch.float64 )
+
+ego_speeds = torch.norm(ego_velocities, p=2, dim=1)
+
+results : dict = {}
+results["average_speed"] = torch.mean(ego_speeds).item()
+results["throttle_ratio"] = torch.mean(gunnin_it.double()).item()
 
 
+track_id = session_packets[-1].track_id
+track_name = deepracing.trackNames[track_id]
+search_dirs = os.getenv("F1_TRACK_DIRS","").split(os.pathsep) + [os.path.join(get_package_share_directory("f1_datalogger"), "f1_tracks")]
+inner_boundary_file = deepracing.searchForFile(track_name+"_innerlimit.json", search_dirs)
+outer_boundary_file = deepracing.searchForFile(track_name+"_outerlimit.json", search_dirs)
+raceline_file = deepracing.searchForFile(track_name+"_racingline.json", search_dirs)
+
+with open(inner_boundary_file, "r") as f:
+    inner_boundary_dict = json.load(f)
+    inner_boundary = torch.stack([ torch.as_tensor(inner_boundary_dict["x"], dtype=torch.float32), torch.as_tensor(inner_boundary_dict["y"], dtype=torch.float32), torch.as_tensor(inner_boundary_dict["z"], dtype=torch.float32) ], dim=1)
+
+with open(outer_boundary_file, "r") as f:
+    outer_boundary_dict = json.load(f)
+    outer_boundary = torch.stack([ torch.as_tensor(outer_boundary_dict["x"], dtype=torch.float32), torch.as_tensor(outer_boundary_dict["y"], dtype=torch.float32), torch.as_tensor(outer_boundary_dict["z"], dtype=torch.float32) ], dim=1)
+
+with open(raceline_file, "r") as f:
+    raceline_dict = json.load(f)
+    raceline = torch.stack([ torch.as_tensor(raceline_dict["x"], dtype=torch.float32), torch.as_tensor(raceline_dict["y"], dtype=torch.float32), torch.as_tensor(raceline_dict["z"], dtype=torch.float32) ], dim=1)
+   
+
+bag_dir_base = os.path.basename(bag_dir)
+results_dir = os.path.join(os.path.dirname(bag_dir), bag_dir_base+"_results")
+if os.path.isdir(results_dir):
+    inp = "asdf"
+    while inp not in {"y","n"}:
+        inp = input("Overwrite results directory %s? [y\\n]" % (results_dir,)).lower()
+    if inp=="y":
+        shutil.rmtree(results_dir)
+        time.sleep(1.0)
+os.makedirs(os.path.join(results_dir, "pdf_figures"))
+os.makedirs(os.path.join(results_dir, "svg_figures"))
+os.makedirs(os.path.join(results_dir, "png_figures"))
+    
 
 
+allpoints = torch.cat([ego_positions, inner_boundary, outer_boundary, raceline], dim=0)
 
+min_x = torch.min(allpoints[:,0])
+max_x = torch.max(allpoints[:,0])
 
-lapdata_msgs = sorted(msg_dict["/cropped_publisher/lap_data"], key=poseKey)
-player_car_idx = lapdata_msgs[-1].udp_packet.header.player_car_index
-lapdata_header_timestamps = [rclpy.time.Time.from_msg(msg.header.stamp) for msg in lapdata_msgs]
-lapdata_timestamps = np.array([t.nanoseconds/1E9 for t in lapdata_header_timestamps])
-lapnumbers = np.array([msg.udp_packet.lap_data[player_car_idx].current_lap_num for msg in lapdata_msgs])
-print(lapdata_msgs[0].udp_packet.lap_data[player_car_idx])
-print(lapdata_msgs[-1].udp_packet.lap_data[player_car_idx])
-idxend = np.argmax(np.diff(lapnumbers))+1
-timestampend = rclpy.time.Time.from_msg(lapdata_msgs[idxend].header.stamp)
-print(timestampend)
+min_z = torch.min(allpoints[:,2])
+max_z = torch.max(allpoints[:,2])
 
+fig_path = plt.figure()
+plt.plot(inner_boundary[:,0].numpy(), inner_boundary[:,2].numpy(), label="Track Boundaries", c="black")
+plt.plot(ego_positions[:,0].numpy(), ego_positions[:,2].numpy(), label="Ego Vehicle's Path")
+plt.plot(raceline[:,0].numpy(), raceline[:,2].numpy(), label="Optimal Raceline")
+plt.xlim(max_x.item()+10.0, min_x.item()-10.0)
+plt.legend()
+plt.plot(outer_boundary[:,0].numpy(), outer_boundary[:,2].numpy(), label="Track Boundaries", c="black")
+plt.savefig(os.path.join(results_dir, "path.eps"), format="eps")
+plt.savefig(os.path.join(results_dir, "path.svg"), format="svg")
+plt.savefig(os.path.join(results_dir, "path.png"), format="png")
+plt.close()
 
-pose_msgs = [p for p in sorted(msg_dict["/ego_vehicle/pose"], key=poseKey) if rclpy.time.Time.from_msg(p.header.stamp)<=timestampend]
-pose_header_timestamps = [rclpy.time.Time.from_msg(msg.header.stamp) for msg in pose_msgs]
-pose_timestamps_fit = np.array([t.nanoseconds/1E9 for t in pose_header_timestamps])
-
-twist_msgs = [v for v in sorted(msg_dict["/ego_vehicle/velocity"], key=poseKey) if rclpy.time.Time.from_msg(v.header.stamp)<=timestampend]
-twist_header_timestamps = [rclpy.time.Time.from_msg(msg.header.stamp) for msg in twist_msgs]
-twist_timestamps = np.array([t.nanoseconds/1E9 for t in twist_header_timestamps])
-
-image_msgs = sorted(msg_dict["/full_publisher/images/compressed"], key=imgKey)
-image_header_timestamps = [rclpy.time.Time.from_msg(msg.header.stamp) for msg in image_msgs]
-image_timestamps = np.array([t.nanoseconds/1E9 for t in image_header_timestamps])
-
-predicted_path_msgs = sorted(msg_dict["/predicted_paths"], key=pathsKey)
-path_header_timestamps = [rclpy.time.Time.from_msg(msg.ego_pose.header.stamp) for msg in predicted_path_msgs]
-path_timestamps = np.array([t.nanoseconds/1E9 for t in path_header_timestamps])
-
-
-
-
-t0 = path_timestamps[0]
-path_timestamps = path_timestamps  - t0
-image_timestamps = image_timestamps  - t0
-pose_timestamps_fit = pose_timestamps_fit  - t0
-lapdata_timestamps = lapdata_timestamps  - t0
-twist_timestamps = twist_timestamps  - t0
-
-print("Extracted %d path comparisons" % ( len(predicted_path_msgs), ) )
-print("Extracted %d images" % ( len(image_msgs), ) )
-
-
-
-ib_recon = np.array(innerboundary_poly.exterior.xy).transpose()
-ob_recon = np.array(outerboundary_poly.exterior.xy).transpose()
-all_recon = np.row_stack([ib_recon, ob_recon])
-allx = all_recon[:,0]
-allz = all_recon[:,1]
-minx = float(np.min(allx))-5.0
-maxx = float(np.max(allx))+5.0
-minz = float(np.min(allz))-5.0
-maxz = float(np.max(allz))+5.0
-
-
-positionsfit = np.array( [ [p.pose.position.x, p.pose.position.y, p.pose.position.z] for p in pose_msgs ] )
-position_spline : BSpline = make_interp_spline(pose_timestamps_fit, positionsfit, k=5) 
-
-# pose_timestamps = pose_timestamps_fit.copy()
-# positions = positionsfit.copy()
-
-pose_timestamps = np.linspace(pose_timestamps_fit[0], pose_timestamps_fit[-1], num=int(pose_timestamps_fit.shape[0]*3))
-positions = position_spline(pose_timestamps)
-
-
-velocities = np.array( [ [t.twist.linear.x, t.twist.linear.y, t.twist.linear.z] for t in twist_msgs ] )
-speeds = np.linalg.norm(velocities, ord=2, axis=1)
-
-
-
-
-
-
-quats = np.array( [ [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w] for p in pose_msgs ] )
-rotations = Rotation.from_quat(quats)
-rotation_spline : RotationSpline = RotationSpline(pose_timestamps_fit, rotations) 
-
-
-all_violation_regions, results = deepracing.evaluation_utils.lapMetrics(positions, pose_timestamps, innerboundary_poly, outerboundary_poly)
-violating_points = np.row_stack([positions[all_violation_regions[i,0]:all_violation_regions[i,1]] for i in range(all_violation_regions.shape[0])])
-results["laptime"] = lapdata_msgs[-1].udp_packet.lap_data[player_car_idx].last_lap_time
-results["average_speed"] = np.mean(speeds)
-results["lapdistance"] = lapdata_msgs[idxend-1].udp_packet.lap_data[player_car_idx].lap_distance
-print(results)
-
-bag_base = os.path.basename(bag_dir)
-bag_parent = os.path.abspath( os.path.join(bag_dir, os.pardir) )
-
-
-with open(os.path.join(bag_parent, bag_base+"_results.json"), "w") as f:
+with open(os.path.join(results_dir, "results.json"), "w") as f:
     json.dump(results, f, indent=2)
 
+initial_curves_local = torch.as_tensor([ deepracing_ros.convert.fromBezierCurveMsg(msg.initial_curve)[0].numpy() for msg in msg_dict["/trajectory_comparisons"] ], device=torch.device("cuda:0"), dtype=torch.float64)
+initial_curves_local_aug = torch.cat([initial_curves_local, torch.ones_like(initial_curves_local[:,:,0]).unsqueeze(2)], dim=2)
+filtered_curves_local = torch.as_tensor([ deepracing_ros.convert.fromBezierCurveMsg(msg.filtered_curve)[0].numpy() for msg in msg_dict["/trajectory_comparisons"] ], device=torch.device("cuda:0"), dtype=torch.float64)
+filtered_curves_local_aug = torch.cat([filtered_curves_local, torch.ones_like(filtered_curves_local[:,:,0]).unsqueeze(2)], dim=2)
+curve_poses = torch.as_tensor([ deepracing_ros.convert.poseMsgToTorch(msg.ego_pose.pose).numpy() for msg in msg_dict["/trajectory_comparisons"] ], device=torch.device("cuda:0"), dtype=torch.float64)
+curve_poses_inv = torch.inverse(curve_poses)
+raceline = raceline.type(curve_poses.dtype)
+inner_boundary = inner_boundary.type(curve_poses.dtype)
+outer_boundary = outer_boundary.type(curve_poses.dtype)
 
-fig1 = plt.figure()
-plt.xlim(maxx,minx)
-plt.plot(positions[:,0],positions[:,2], "--", label="Ego Agent Path", c="b")
-plt.plot(ib_recon[:,0],ib_recon[:,1], label="Inner Boundary of Track", c="#006633")
-plt.plot(ob_recon[:,0],ob_recon[:,1], label="Outer Boundary of Track", c="#000033")
-plt.scatter(violating_points[:,0],violating_points[:,2], marker="x",color="r", label="Boundary-Violating Points")
-plt.legend()
-fig2 = plt.figure()
+storch = torch.linspace(0.0, 1.0, steps=240, device=initial_curves_local.device, dtype=initial_curves_local.dtype).unsqueeze(0)
+bezierM = mu.bezierM(storch, initial_curves_local.shape[1]-1)
+bezierMderiv = mu.bezierM(storch, initial_curves_local.shape[1]-2)
+bezierM2ndderiv = mu.bezierM(storch, initial_curves_local.shape[1]-3)
 
-plt.plot(twist_timestamps,speeds)
+dT = 1.5
+initial_curves_local_points = torch.matmul(bezierM.expand(initial_curves_local.shape[0],-1,-1), initial_curves_local).cpu()
+_, initial_curves_vs= mu.bezierDerivative(initial_curves_local, M=bezierMderiv.expand(initial_curves_local.shape[0],-1,-1), order=1)
+initial_curves_velocity = initial_curves_vs/dT
+initial_curves_speeds = torch.norm(initial_curves_velocity, p=2, dim=2)
+initial_curves_average_speeds = torch.mean(initial_curves_speeds, dim=1)
+_, initial_curves_as= mu.bezierDerivative(initial_curves_local, M=bezierM2ndderiv.expand(initial_curves_local.shape[0],-1,-1), order=2)
+initial_curves_acceleration = initial_curves_as/(dT**2)
+initial_curves_linear_accel_norms = torch.norm(initial_curves_acceleration, p=2, dim=2)
+initial_curves_avg_linear_accels = torch.mean(initial_curves_linear_accel_norms, dim=1)
 
-plt.show()
+filtered_curves_local_points = torch.matmul(bezierM.expand(filtered_curves_local.shape[0],-1,-1), filtered_curves_local).cpu()
+_, filtered_curves_vs = mu.bezierDerivative(filtered_curves_local, M=bezierMderiv.expand(filtered_curves_local.shape[0],-1,-1), order=1)
+filtered_curves_velocity = filtered_curves_vs/dT
+filtered_curves_speeds = torch.norm(filtered_curves_velocity, p=2, dim=2)
+filtered_curves_average_speeds = torch.mean(filtered_curves_speeds, dim=1)
+_, filtered_curves_as= mu.bezierDerivative(filtered_curves_local, M=bezierM2ndderiv.expand(filtered_curves_local.shape[0],-1,-1), order=2)
+filtered_curves_acceleration = filtered_curves_as/(dT**2)
+filtered_curves_linear_accel_norms = torch.norm(filtered_curves_acceleration, p=2, dim=2)
+filtered_curves_avg_linear_accels = torch.mean(filtered_curves_linear_accel_norms, dim=1)
 
+speed_deltas = (filtered_curves_average_speeds - initial_curves_average_speeds)
+accel_deltas = (filtered_curves_avg_linear_accels - initial_curves_avg_linear_accels)
+print(torch.mean(speed_deltas))
 
-
-
-
-
-
-
-if predicted_path_msgs[0].optimization_time<=0.0:
-    exit(0)
-
-Mpaths = deepracing_models.math_utils.bezierM(torch.linspace(0,1,250, dtype=torch.float32).unsqueeze(0), len(predicted_path_msgs[0].curves[0].control_points_lateral)-1)[0]
-Mboundaries = deepracing_models.math_utils.bezierM(torch.linspace(0,1,250, dtype=torch.float32).unsqueeze(0), len(predicted_path_msgs[0].inner_boundary_curve.control_points_lateral)-1)[0]#.repeat(2,1,1)
-Nsamp = 90
-figure_dir = os.path.join(bag_parent, bag_base+"_figures")
-if os.path.isdir(figure_dir):
-    shutil.rmtree(figure_dir)
-time.sleep(1.0)
-os.makedirs(figure_dir)
-imwriter = None
-
-bridge = cv_bridge.CvBridge()
-print("Analyzing bezier curves")
-try:
-    for i, paths_msg in tqdm(enumerate(predicted_path_msgs), total=len(predicted_path_msgs)):
-        t = path_timestamps[i]
-        curves = torch.stack([deepracing_ros.convert.fromBezierCurveMsg(msg, dtype=Mpaths.dtype, device=Mpaths.device) for msg in paths_msg.curves], dim=0)
-        boundarycurves = torch.stack([deepracing_ros.convert.fromBezierCurveMsg(paths_msg.outer_boundary_curve, dtype=Mpaths.dtype, device=Mpaths.device), deepracing_ros.convert.fromBezierCurveMsg(paths_msg.inner_boundary_curve, dtype=Mpaths.dtype, device=Mpaths.device)], dim=0)    
-       # print(curves)
-        #print(curves.shape)
-        if not (torch.all(curves==curves)):
-            curves = curves[[0,-1]] 
-        with torch.no_grad():
-            curvepoints = torch.matmul(Mpaths, curves)
-            boundarypoints = torch.matmul(Mboundaries, boundarycurves)
-            ob_distance_matrix = torch.cdist(curvepoints[-1], boundarypoints[0])
-            ob_closest_point_idx = torch.argmin(ob_distance_matrix,dim=1)[-1].item()
-            
-            ib_distance_matrix = torch.cdist(curvepoints[-1], boundarypoints[1])
-            ib_closest_point_idx = torch.argmin(ib_distance_matrix,dim=1)[-1].item()
-            boundarypoints = boundarypoints[:,0:(max(ob_closest_point_idx, ib_closest_point_idx)+20)%Mboundaries.shape[0]]
-            
-        
-       # print(curvepoints.shape)
-        network_predictions = curvepoints[0].cpu().numpy().copy()
-        final_output = curvepoints[-1].cpu().numpy().copy()
-        outer_boundary = boundarypoints[0].cpu().numpy().copy()
-        inner_boundary = boundarypoints[1].cpu().numpy().copy()
-        carposition : np.ndarray = position_spline(t)
-        carrotation : Rotation = rotation_spline(t)
-        homogenous_transform = torch.from_numpy(deepracing.pose_utils.toHomogenousTransform(carposition, carrotation.as_quat()).copy()).type(Mpaths.dtype).to(Mpaths.device)
-        homogenous_transform_inv = torch.inverse(homogenous_transform)
-    
-        image_idx = bisect.bisect(image_timestamps, t)
-        imnp = bridge.compressed_imgmsg_to_cv2(image_msgs[image_idx],desired_encoding="rgb8")
-
-        boundaryx = boundarypoints[:,:,0]
-        boundaryz = boundarypoints[:,:,1]
-        curvex = curvepoints[:,:,0]
-        curvez = curvepoints[:,:,1]
-
-        minx = min(torch.min(curvex).item(), torch.min(boundaryx).item()) - 2.0
-        maxx = max(torch.max(curvex).item(), torch.max(boundaryx).item()) + 2.0
-        minz = min(torch.min(curvez).item(), torch.min(boundaryz).item()) - 5.0
-        maxz = max(torch.max(curvez).item(), torch.max(boundaryz).item()) + 5.0
-
-        fig, (axim, axplot) = plt.subplots(nrows=1, ncols=2)#, figsize=(8,6))
-        axim.imshow(imnp)
-        axplot.set_xlim(maxx, minx)
-        axplot.set_ylim(minz, maxz)
-
-        axplot.scatter(inner_boundary[:,0], inner_boundary[:,1], label="Track Boundaries", marker="o", s=5.0*np.ones_like(inner_boundary[:,1]), c="black")
-
-        axplot.plot(network_predictions[:,0], network_predictions[:,1], label="Initial Network Prediction", c="red")
-        axplot.plot(final_output[:,0], final_output[:,1], label="Optimized Output", c="blue")
-        figprefix = "figure_%d"
-        if curves.shape[0]>2:
-            figprefix = "FIGURE_%d"
-            intermediate_points = curvepoints[1:-1].cpu().numpy().copy()
-            for j in range(intermediate_points.shape[0]):
-                axplot.plot(intermediate_points[j,:,0], intermediate_points[j,:,1], '--', label="Optimization step %d" %(j+1,))
-        plt.legend()
-        axplot.scatter(outer_boundary[:,0], outer_boundary[:,1], marker="o", s=5.0*np.ones_like(outer_boundary[:,1]), c="black")
-        
-        plt.savefig(os.path.join(figure_dir,(figprefix%(i+1,))+".svg"))
-        plt.savefig(os.path.join(figure_dir,(figprefix%(i+1,))+".pdf"))
-        plt.savefig(os.path.join(figure_dir,(figprefix%(i+1,))+".png"))
-        plt.close()
-       # plt.show()
-        
-
-        # plt.savefig(os.path.join(figure_dir,"curve_%d.svg" % (i,)), format="svg")
-except KeyboardInterrupt as e:
-    print("Okie Dokie")
-    #imwriter.release()
-# rotationmats = np.array( [ Rotation.as_matrix(r) for r in rotations] )
-# homogenous_transforms = np.tile(np.eye(4), (len(rotations),1,1) )
-# homogenous_transforms[:,0:3,0:3] = rotationmats
-# homogenous_transforms[:,0:3,3] = positions
+plt.figure()
+plt.title("Difference in average speed between initial curve and filtered curve")
+# plt.hist(initial_curves_average_speeds.cpu().numpy(), bins=75, label="Initial Curve Speeds")
+# plt.hist(filtered_curves_average_speeds.cpu().numpy(), bins=75, label="Filtered Curve Speeds")
+plt.hist(speed_deltas.cpu().numpy(), bins=100)
+plt.xlabel("Average Speed Difference (m/s)")
+plt.savefig(os.path.join(results_dir, "speed_histogram.pdf"), format="pdf")
+plt.savefig(os.path.join(results_dir, "speed_histogram.svg"), format="svg")
+plt.savefig(os.path.join(results_dir, "speed_histogram.png"), format="png")
+plt.close()
 
 
-#rotation_matrices = np.array( [    ] for msg in  player_motion_data  )
-# windowname = "image"
-# cv2.namedWindow(windowname, cv2.WINDOW_AUTOSIZE)
-# for i in range(images_np.shape[0]-1):
-#     imnp = images_np[i]
-#     cv2.imshow(windowname, imnp)
-#     cv2.waitKey(int(round(1000.0*(image_timestamps[i+1] - image_timestamps[i]))))
-# cv2.imshow(windowname, images_np[-1])
-# cv2.waitKey(0)
+
+initial_curves_global = torch.matmul(initial_curves_local_aug, curve_poses.transpose(1,2))[:,:,0:3]
+initial_curves_global_points = torch.matmul(bezierM.expand(initial_curves_global.shape[0],-1,-1), initial_curves_global).cpu()
+
+filtered_curves_global = torch.matmul(filtered_curves_local_aug, curve_poses.transpose(1,2))[:,:,0:3]
+filtered_curves_global_points = torch.matmul(bezierM.expand(filtered_curves_global.shape[0],-1,-1), filtered_curves_global).cpu()
 
 
-    
-# parser.add_argument("inner_track", type=str,  help="Json file for the inner boundaries of the track.")
-# parser.add_argument("outer_track", type=str,  help="Json file for the outer boundaries of the track.")
+
+
+for (i, msg) in tqdm(enumerate(list(msg_dict["/trajectory_comparisons"]))):
+    comparison_msg : TrajComparison = msg
+    ego_pose = curve_poses[i].cpu()
+    ego_pose_inv = curve_poses_inv[i].cpu()
+    initial_curve_points = initial_curves_local_points[i]
+    filtered_curve_points = filtered_curves_local_points[i]
+    initial_curve_points_global = initial_curves_global_points[i]
+    filtered_curve_points_global = filtered_curves_global_points[i]
+
+    dI = 20
+    ibclosest, ibfurthest = (torch.argmin(torch.norm(inner_boundary - ego_pose[0:3,3], p=2, dim=1)) - dI)%inner_boundary.shape[0], (torch.argmin(torch.norm(inner_boundary - filtered_curve_points_global[-1], p=2, dim=1)) + dI)%inner_boundary.shape[0]
+    obclosest, obfurthest = (torch.argmin(torch.norm(outer_boundary - ego_pose[0:3,3], p=2, dim=1)) - dI)%outer_boundary.shape[0], (torch.argmin(torch.norm(outer_boundary - filtered_curve_points_global[-1], p=2, dim=1)) + dI)%outer_boundary.shape[0]
+
+    if ibclosest<ibfurthest:
+        ibidx = torch.arange(ibclosest, ibfurthest, step=1, dtype=torch.int64)%inner_boundary.shape[0]
+    else:
+        ibidx = torch.arange(ibclosest, ibfurthest + inner_boundary.shape[0], step=1, dtype=torch.int64)%inner_boundary.shape[0]
+    inner_boundary_global = inner_boundary[ibidx]
+    inner_boundary_aug = torch.cat([inner_boundary_global, torch.ones_like(inner_boundary_global[:,0]).unsqueeze(1)], dim=1)
+    inner_boundary_local = torch.matmul(inner_boundary_aug, ego_pose_inv.t())[:,0:3]
+
+
+    if obclosest<obfurthest:
+        obidx = torch.arange(obclosest, obfurthest, step=1, dtype=torch.int64)%outer_boundary.shape[0]
+    else:
+        obidx = torch.arange(obclosest, obfurthest + outer_boundary.shape[0], step=1, dtype=torch.int64)%outer_boundary.shape[0]
+    outer_boundary_global = outer_boundary[obidx]
+    outer_boundary_aug = torch.cat([outer_boundary_global, torch.ones_like(outer_boundary_global[:,0]).unsqueeze(1)], dim=1)
+    outer_boundary_local = torch.matmul(outer_boundary_aug, ego_pose_inv.t())[:,0:3]
+
+
+    fig_curve = plt.figure()
+    plt.plot(initial_curve_points[:,0].cpu().numpy(), initial_curve_points[:,2].cpu().numpy(), label="Initial Curve")
+    plt.plot(filtered_curve_points[:,0].cpu().numpy(), filtered_curve_points[:,2].cpu().numpy(), label="Filtered Curve")
+    plt.plot(inner_boundary_local[:,0].cpu().numpy(), inner_boundary_local[:,2].cpu().numpy(), label="Track Boundaries", c="black")
+    plt.legend()
+    plt.plot(outer_boundary_local[:,0].cpu().numpy(), outer_boundary_local[:,2].cpu().numpy(), label="Track Boundaries", c="black")
+    plt.savefig(os.path.join(results_dir, "pdf_figures", "curve_%d.pdf" %(i,)), format="pdf")
+    plt.savefig(os.path.join(results_dir, "svg_figures", "curve_%d.svg" %(i,)), format="svg")
+    plt.savefig(os.path.join(results_dir, "png_figures", "curve_%d.png" %(i,)), format="png")
+    plt.close()
+
+
+
+
+
+
+
