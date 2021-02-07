@@ -186,15 +186,27 @@ public:
    
     cv::Mat rgbimage;
     cv::Range rowrange, colrange;
-    rowrange = cv::Range(top_left_row_,top_left_row_+crop_height_ - 1);
-    colrange = cv::Range(top_left_col_,top_left_col_+crop_width_ - 1);
-    cv::cvtColor(imin(rowrange,colrange),rgbimage,cv::COLOR_BGRA2RGB);
+    if (crop_height_>0 && crop_width_>0)
+    {
+      rowrange = cv::Range(top_left_row_, top_left_row_+crop_height_ - 1);
+      colrange = cv::Range(top_left_col_, top_left_col_+crop_width_ - 1);
+    }
+    else
+    {
+      rowrange = cv::Range(top_left_row_, imin.rows - 1);
+      colrange = cv::Range(top_left_col_, imin.cols - 1);
+    }
+    
+    cv::cvtColor( imin(rowrange,colrange) , rgbimage , cv::COLOR_BGRA2RGB );
     if( (resize_width_ >0) && (resize_height_ >0))
     {
       cv::resize(rgbimage,rgbimage,cv::Size(resize_width_,resize_height_),0.0,0.0,cv::INTER_AREA);
     }
 
-    this->it_publisher_.publish( cv_bridge::CvImage(header, "rgb8", rgbimage).toImageMsg() );
+    cv_bridge::CvImage bridge_image(header, "rgb8", rgbimage);
+    sensor_msgs::msg::Image::Ptr img_msg = bridge_image.toImageMsg();
+    this->it_publisher_.publish( img_msg );
+
   }
   void init(const deepf1::TimePoint& begin, const cv::Size& window_size) override
   {
@@ -237,8 +249,8 @@ class NodeWrapper_
 int main(int argc, char *argv[]) {
   rclcpp::init(argc, argv);
   NodeWrapper_ nw;
-  std::shared_ptr<rclcpp::Node> datagrab_node = nw.datagrab_node;
   std::shared_ptr<rclcpp::Node> imagegrab_node = nw.imagegrab_node;
+  std::shared_ptr<rclcpp::Node> datagrab_node = nw.datagrab_node;
   rcl_interfaces::msg::ParameterDescriptor capture_freq_description;
   capture_freq_description.floating_point_range.push_back(rcl_interfaces::msg::FloatingPointRange());
   capture_freq_description.floating_point_range[0].from_value=1.0;
