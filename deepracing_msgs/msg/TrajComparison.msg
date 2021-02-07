@@ -1,3 +1,4 @@
 geometry_msgs/PoseStamped ego_pose
 BezierCurve initial_curve
 BezierCurve filtered_curve
+BezierCurve[] sample_curves
