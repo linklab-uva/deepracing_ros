@@ -63,11 +63,13 @@ import torch.distributions as dist
 import rclpy.qos
 from sensor_msgs_py.point_cloud2 import read_points, create_cloud
 
+from typing import List
+
 
 class ProbabilisticBezierPurePursuitControllerROS(PPC):
     def __init__(self):
         super(ProbabilisticBezierPurePursuitControllerROS, self).__init__()
-        self.path_publisher : Publisher = self.create_publisher(TrajComparison, "/predicted_paths", 1)
+        self.comparison_publisher : Publisher = self.create_publisher(TrajComparison, "/trajectory_comparisons", 1)
         self.ib_local_publisher : Publisher = self.create_publisher(Path, "/inner_boundary_local", 1)
         self.ob_local_publisher : Publisher = self.create_publisher(Path, "/outer_boundary_local", 1)
         model_file_param = self.declare_parameter("model_file", value=None)
@@ -175,7 +177,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
         self.ob_tangent_spline = None
         self.ob_d = None
 
-        self.boundary_loss = BoundaryLoss(time_reduction="all", batch_reduction="all", relu_type="Leaky", alpha=3.0, beta=1.0).type(self.dtype).to(self.device)
+        self.boundary_loss = BoundaryLoss(time_reduction="all", batch_reduction="all", relu_type="Leaky", alpha=1.0, beta=1.0).type(self.dtype).to(self.device)
    
         num_optim_steps_param : Parameter = self.declare_parameter("num_optim_steps", value=-1)
         self.num_optim_steps = num_optim_steps_param.get_parameter_value().integer_value
@@ -188,6 +190,12 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
 
         num_particles_param : Parameter = self.declare_parameter("num_particles", value=128)
         self.num_particles = num_particles_param.get_parameter_value().integer_value
+
+        gaussian_filtering_param : Parameter = self.declare_parameter("gaussian_filtering", value=True)
+        self.gaussian_filtering = gaussian_filtering_param.get_parameter_value().bool_value
+
+        include_sample_curves_param : Parameter = self.declare_parameter("include_sample_curves", value=False)
+        self.include_sample_curves = include_sample_curves_param.get_parameter_value().bool_value
 
         
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = Duration(seconds=15), node=self)
@@ -323,11 +331,29 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
                 return None, None, None
             inputtorch : torch.Tensor = imtorch.unsqueeze(0).type(self.dtype).to(self.device)
             bezier_control_points, varfactors, covarfactors = self.net(inputtorch)
-
+        
             bezier_control_points[:,:,0]*=self.xscale_factor
+            initial_curve_full = torch.stack([bezier_control_points[0,:,0] , torch.zeros_like(bezier_control_points[0,:,1]) , bezier_control_points[0,:,1] ], dim=1)     
+         #   print("initial_curve_full.shape: " + str(initial_curve_full.shape))
+            initial_curve_msg : BCMessage = deepracing_ros.convert.toBezierCurveMsg(initial_curve_full, Header(frame_id=deepracing_ros.car_coordinate_name, stamp = current_pose_msg.header.stamp))
+            sample_curves : List[BCMessage] = []
 
-            self.current_particles = bezier_control_points
-            self.current_particles[:,:,0]*=self.xscale_factor
+            if self.gaussian_filtering:
+                cvb = torch.zeros(bezier_control_points.shape[1], 2, 2, dtype = varfactors.dtype, device = varfactors.device)
+                cvb[:,0,0]=2.5
+                cvb[:,1,1]=2.5
+                scale_tril = torch.sqrt(cvb)
+                curve_distribution : dist.MultivariateNormal = dist.MultivariateNormal(bezier_control_points[0], scale_tril=scale_tril, validate_args=False)
+                self.current_particles = curve_distribution.sample((self.num_particles,))
+                if self.include_sample_curves:
+                    particles_cpu = self.current_particles.cpu()
+                    particles_cpu = torch.stack([particles_cpu[:,:,0], torch.zeros_like(particles_cpu[:,:,0]), particles_cpu[:,:,1]], dim=2)
+                    for i in range(particles_cpu.shape[0]):
+                        sample_curves.append(deepracing_ros.convert.toBezierCurveMsg(particles_cpu[i], initial_curve_msg.header))
+            else:
+                self.current_particles = bezier_control_points
+
+            
 
             mean_points = torch.matmul(self.bezierM, bezier_control_points)
             _, mean_v_s = mu.bezierDerivative(bezier_control_points, M=self.bezierMderiv)
@@ -351,7 +377,6 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
                 v_t=v_s/self.deltaT
                 speeds = torch.norm(v_t,dim=2,p=2)
                 speed_squares = torch.square(speeds)
-               # speed_cubes = speeds*speed_squares
 
                 v_snorm = torch.norm(v_s,dim=2,p=2)
                 v_snorm_squares = torch.sum(v_s*v_s, dim=2)
@@ -359,66 +384,60 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
 
                 _, a_s = mu.bezierDerivative(particles_good, M=self.bezierM2ndderiv.expand(particles_good.shape[0],-1,-1), order=2)
                 a_t=a_s/(self.deltaT*self.deltaT)
-                
-              #  T = self.s_torch/self.deltaT
                 accel_norms = torch.norm(a_t, dim=2)
 
                 a_snorm = torch.norm(a_s,dim=2,p=2)
                 a_snorm_squares = torch.square(a_snorm)
-
-               # dots = torch.sum(v_t*a_t, dim=2)
                 dots = torch.sum(v_s*a_s, dim=2)
 
-              #  radii = speed_cubes/torch.sqrt(speed_squares*accel_squares - torch.square(dots))
                 radii = v_snorm_cubes/torch.sqrt(v_snorm_squares*a_snorm_squares - torch.square(dots)) + 5E-1
 
                 centripetal_accels = speed_squares/radii
                 centripetal_accels[centripetal_accels!=centripetal_accels] = 0.0
-               # print(torch.max(centripetal_accels,dim=0)[0])
 
                 average_speeds = torch.mean(speeds,dim=1)
                 max_average_speed = torch.max(average_speeds)
-                speed_scores = F.softmax(1.0*average_speeds, dim=0)
+                speed_scores = F.softmax(1.25*average_speeds.double(), dim=0)
                 speed_scores[speed_scores!=speed_scores] = 0.0
 
-                ca_deltas = torch.relu(centripetal_accels[:,30:-30] - self.max_centripetal_acceleration)
+                ca_deltas = torch.relu(centripetal_accels[:,15:-15] - self.max_centripetal_acceleration)
                 max_ca_deltas, _ = torch.max(ca_deltas, dim=1)
-              #  print(max_ca_deltas)
-               # max_ca_deltas[max_ca_deltas!=max_ca_deltas]=0.0
-                ca_scores = torch.clip(torch.exp(-0.25*max_ca_deltas), 1E-6, 1.0)
-                #print(ca_scores)
-
-                
-                # max_accels, _ = torch.max(accel_norms[:,30:-30],dim=1)
-                # accel_factors = F.relu(max_accels - 35.0)
-                # accel_scores = torch.clip(torch.exp(-1.0*accel_factors), 1E-6, 1.0)
-                # accel_scores = torch.clip(torch.exp(-1.0*accel_factors), 1E-6, 1.0)
-
+                ca_scores = torch.clip(torch.exp(-0.25*max_ca_deltas.double()), 1E-10, 1.0)
 
                 _, ib_distances = self.boundary_loss(particle_points, ibpoints.expand(particle_points.shape[0], -1, -1), ibnormals.expand(particle_points.shape[0], -1, -1))
                 ib_max_distances, _ = torch.max(ib_distances, dim=1)
-                ib_max_distances=F.relu(ib_max_distances + 1.0)
+                ib_max_distances=F.relu(ib_max_distances + 1.5)
 
                 _, ob_distances = self.boundary_loss(particle_points, obpoints.expand(particle_points.shape[0], -1, -1), obnormals.expand(particle_points.shape[0], -1, -1))
                 ob_max_distances, _ = torch.max(ob_distances, dim=1)
-                ob_max_distances=F.relu(ob_max_distances + 1.0)
+                ob_max_distances=F.relu(ob_max_distances + 1.5)
 
-                ib_scores = torch.clip( torch.exp(-2.0*ib_max_distances), 1E-6, 1.0)
-                ob_scores = torch.clip( torch.exp(-2.0*ob_max_distances), 1E-6, 1.0)
+                ib_scores = torch.clip( torch.exp(-1.0*ib_max_distances.double()), 1E-10, 1.0)
+                ob_scores = torch.clip( torch.exp(-1.0*ob_max_distances.double()), 1E-10, 1.0)
                 
                 #score_products = ib_scores*ob_scores*ca_scores
                 score_products = ca_scores*speed_scores*ib_scores*ob_scores#*accel_scores
 
                 prefilterspeed = torch.mean(average_speeds)
                 probs = (score_products/torch.sum(score_products))#.cpu().numpy()
-                mean_particle = torch.sum(probs[:,None,None]*particles_good, dim=0, keepdim=True)
+                mean_particle = torch.sum(probs[:,None,None]*particles_good.double(), dim=0, keepdim=True).type(self.bezierM.dtype)
                 x_samp = torch.matmul(self.bezierM, mean_particle)[0]
                 _, vels = mu.bezierDerivative(mean_particle, M=self.bezierMderiv)
                 vels=vels[0]/self.deltaT
+                mean_particle = mean_particle[0]
+                filtered_curve_full = torch.stack([ mean_particle[:,0] , torch.zeros_like(mean_particle[:,1]) , mean_particle[:,1] ] , dim=1)   
+             #   print("filtered_curve_full.shape: " + str(filtered_curve_full.shape))
+                filtered_curve_msg : BCMessage = deepracing_ros.convert.toBezierCurveMsg(filtered_curve_full, initial_curve_msg.header)
+
             else:
                 x_samp = torch.matmul(self.bezierM, particles_good)[0]
                 _, vels = mu.bezierDerivative(particles_good, M=self.bezierMderiv)
                 vels=vels[0]/self.deltaT
+                filtered_curve_msg : BCMessage = initial_curve_msg
+
+            comparison : TrajComparison = TrajComparison(ego_pose = current_pose_msg, initial_curve = initial_curve_msg, filtered_curve = filtered_curve_msg, sample_curves = sample_curves)
+            self.comparison_publisher.publish(comparison)
+
             speeds = torch.norm(vels, dim=1)
             distances_forward = mu.integrate.cumtrapz(speeds.unsqueeze(0), self.s_torch, initial=torch.zeros(1,1,dtype=vels.dtype,device=vels.device))[0]
 
