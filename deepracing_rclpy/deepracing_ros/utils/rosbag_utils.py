@@ -1,6 +1,6 @@
 import rosbag2_py
-def get_rosbag_options(path, serialization_format='cdr'):
-    storage_options = rosbag2_py.StorageOptions(uri=path, storage_id='sqlite3')
+def get_rosbag_options(path, serialization_format="cdr", storage_id="sqlite3"):
+    storage_options = rosbag2_py.StorageOptions(uri=path, storage_id=storage_id)
 
     converter_options = rosbag2_py.ConverterOptions(
         input_serialization_format=serialization_format,
@@ -8,8 +8,8 @@ def get_rosbag_options(path, serialization_format='cdr'):
 
     return storage_options, converter_options
 
-def open_bagfile(filepath: str):
-    storage_options, converter_options = get_rosbag_options(filepath)
+def open_bagfile(filepath: str, serialization_format="cdr", storage_id="sqlite3"):
+    storage_options, converter_options = get_rosbag_options(filepath, serialization_format=serialization_format, storage_id=storage_id)
 
     reader = rosbag2_py.SequentialReader()
     reader.open(storage_options, converter_options)
