@@ -137,6 +137,8 @@ endif()
  ament_export_dependencies(laser_geometry)
  ament_export_dependencies(deepracing_msgs)
  ament_export_dependencies(f1_datalogger)
+ ament_export_dependencies(TBB)
+ 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
