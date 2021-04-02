@@ -44,6 +44,7 @@ find_package(tf2_ros REQUIRED)
 
 #Provides imported targets for f1_datalogger, armadillo, Boost, Eigen3, Opencv, and (on Windows) vJoy_plusplus
 find_package(f1_datalogger CONFIG REQUIRED)
+find_package(TBB CONFIG REQUIRED)
 
 
 
@@ -54,6 +55,7 @@ PUBLIC
   f1_datalogger::headers
   f1_datalogger::f1_datalogger_proto
   Eigen3::Eigen
+  TBB::tbb
 )
 set_target_properties(utils PROPERTIES OUTPUT_NAME ${PROJECT_NAME}_utils)
 target_include_directories(utils
