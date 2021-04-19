@@ -43,6 +43,7 @@ find_package(tf2_ros REQUIRED)
 #Provides imported targets for f1_datalogger, armadillo, Boost, Eigen3, Opencv, and (on Windows) vJoy_plusplus
 find_package(f1_datalogger CONFIG REQUIRED)
 find_package(TBB CONFIG REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 
 
