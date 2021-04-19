@@ -75,16 +75,9 @@ target_link_libraries(tf_updater
  Eigen3::Eigen
 )
 
-add_executable(path_converter src/path_converter.cpp)
-ament_target_dependencies(path_converter rclcpp geometry_msgs nav_msgs deepracing_msgs)
-target_link_libraries(path_converter
- Eigen3::Eigen
- utils
-)
 
 set(nodes_to_install_
   tf_updater
-  path_converter
 )
 
 
