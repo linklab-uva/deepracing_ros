@@ -27,7 +27,6 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
-find_package(cv_bridge REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)
 find_package(image_transport REQUIRED)
@@ -45,9 +44,8 @@ find_package(f1_datalogger CONFIG REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 
-
 add_library(utils SHARED src/utils/f1_msg_utils.cpp src/utils/file_utils.cpp)
-ament_target_dependencies(utils PUBLIC cv_bridge sensor_msgs std_msgs deepracing_msgs rclcpp rosidl_default_runtime)
+ament_target_dependencies(utils PUBLIC sensor_msgs std_msgs deepracing_msgs rclcpp rosidl_default_runtime)
 target_link_libraries(utils
 PUBLIC
   f1_datalogger::headers
@@ -84,6 +82,7 @@ find_package(PCL CONFIG QUIET COMPONENTS common core features geometry filters i
 find_package(pcl_conversions QUIET)
 find_package(pcl_ros QUIET)
 find_package(jsoncpp CONFIG QUIET)
+find_package(cv_bridge QUIET)
 
 if (pcl_ros_FOUND AND jsoncpp_FOUND)
   add_executable(boundary_publisher src/boundary_publisher.cpp)
@@ -110,7 +109,7 @@ if (pcl_ros_FOUND AND jsoncpp_FOUND)
 endif()
 
 
-if(TARGET f1_datalogger::f1_datalogger)
+if((TARGET f1_datalogger::f1_datalogger) AND cv_bridge_FOUND)
   add_executable(ros_rebroadcaster src/ros_rebroadcaster.cpp)
   ament_target_dependencies(ros_rebroadcaster cv_bridge image_transport sensor_msgs std_msgs deepracing_msgs)
   target_link_libraries(ros_rebroadcaster
@@ -119,6 +118,7 @@ if(TARGET f1_datalogger::f1_datalogger)
   )
   list(APPEND nodes_to_install_ ros_rebroadcaster)
   ament_export_dependencies(TBB)
+  ament_export_dependencies(cv_bridge)
 endif()
 
 
