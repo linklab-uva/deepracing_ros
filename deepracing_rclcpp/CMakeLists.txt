@@ -118,6 +118,7 @@ if(TARGET f1_datalogger::f1_datalogger)
   f1_datalogger::f1_datalogger
   )
   list(APPEND nodes_to_install_ ros_rebroadcaster)
+  ament_export_dependencies(TBB)
 endif()
 
 
@@ -127,7 +128,6 @@ endif()
  ament_export_dependencies(laser_geometry)
  ament_export_dependencies(deepracing_msgs)
  ament_export_dependencies(f1_datalogger)
- ament_export_dependencies(TBB)
  
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
