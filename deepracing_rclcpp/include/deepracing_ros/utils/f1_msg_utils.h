@@ -12,7 +12,6 @@
 #include "deepracing_msgs/msg/packet_session_data.hpp"
 #include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/header.hpp>
-#include <opencv2/core.hpp>
 #include <vector>
 #include <array>
 

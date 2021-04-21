@@ -36,7 +36,6 @@
 #include "deepracing_ros/utils/f1_msg_utils.h"
 #include <Eigen/Geometry>
 #include <rclcpp/rclcpp.hpp>
-#include <opencv2/core.hpp>
 #include <sensor_msgs/image_encodings.hpp>
 #include <map>
 #include <memory>
