@@ -207,13 +207,13 @@ def pointMsgToTorch(point_msg: geo_msgs.Point, dtype=torch.float32, device=torch
 def vectorMsgToTorch(vector_msg: geo_msgs.Vector3, dtype=torch.float32, device=torch.device("cpu")):
    return torch.as_tensor([vector_msg.x, vector_msg.y, vector_msg.z], dtype=dtype, device=device)
 
-def torchToVector3Msg(vector_torch : torch.Tensor):
+def torchToVector3Msg(vector_torch : torch.Tensor) -> geo_msgs.Vector3:
    return geo_msgs.Vector3(x = vector_torch[0].item(), y = vector_torch[1].item(), z = vector_torch[2].item())
 
-def torchToPointMsg(point_torch : torch.Tensor):
+def torchToPointMsg(point_torch : torch.Tensor) -> geo_msgs.Point:
    return geo_msgs.Point(x = point_torch[0].item(), y = point_torch[1].item(), z = point_torch[2].item())
 
-def torchToPoseMsg(pose_torch : torch.Tensor):
+def torchToPoseMsg(pose_torch : torch.Tensor) -> geo_msgs.Pose:
    rtn : geo_msgs.Pose =  geo_msgs.Pose(position = torchToPointMsg(pose_torch[0:3,3]))
    rotsp : Rot = Rot.from_matrix(pose_torch[0:3,0:3].cpu().numpy())
    quatnp = rotsp.as_quat()
