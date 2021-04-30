@@ -203,3 +203,6 @@ def poseMsgToTorch(pose_msg: geo_msgs.Pose, dtype=torch.float32, device=torch.de
    return rtn
 def pointMsgToTorch(point_msg: geo_msgs.Point, dtype=torch.float32, device=torch.device("cpu")):
    return torch.as_tensor([point_msg.x, point_msg.y, point_msg.z], dtype=dtype, device=device)
+
+def vectorMsgToTorch(vector_msg: geo_msgs.Vector3, dtype=torch.float32, device=torch.device("cpu")):
+   return torch.as_tensor([vector_msg.x, vector_msg.y, vector_msg.z], dtype=dtype, device=device)
