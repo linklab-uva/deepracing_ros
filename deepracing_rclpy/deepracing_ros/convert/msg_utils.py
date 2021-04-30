@@ -212,3 +212,10 @@ def torchToVector3Msg(vector_torch : torch.Tensor):
 
 def torchToPointMsg(point_torch : torch.Tensor):
    return geo_msgs.Point(x = point_torch[0].item(), y = point_torch[1].item(), z = point_torch[2].item())
+
+def torchToPoseMsg(pose_torch : torch.Tensor):
+   rtn : geo_msgs.Pose =  geo_msgs.Pose(position = torchToPointMsg(pose_torch[0:3,3]))
+   rotsp : Rot = Rot.from_matrix(pose_torch[0:3,0:3].cpu().numpy())
+   quatnp = rotsp.as_quat()
+   rtn.orientation = geo_msgs.Quaternion(x = float(quatnp[0]), y = float(quatnp[1]), z = float(quatnp[2]), w = float(quatnp[3]))
+   return rtn
