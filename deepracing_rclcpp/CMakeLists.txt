@@ -29,7 +29,6 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)
-find_package(image_transport REQUIRED)
 find_package(laser_geometry REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -78,15 +77,13 @@ set(nodes_to_install_
 )
 
 
-find_package(PCL CONFIG QUIET COMPONENTS common core features geometry filters io keypoints segmentation surface)
+find_package(PCL QUIET COMPONENTS common)
 find_package(pcl_conversions QUIET)
-find_package(pcl_ros QUIET)
-find_package(jsoncpp CONFIG QUIET)
-find_package(cv_bridge QUIET)
-
-if (pcl_ros_FOUND AND jsoncpp_FOUND)
+find_package(pcl_msgs QUIET)
+find_package(jsoncpp QUIET)
+if (PCL_FOUND AND pcl_conversions_FOUND AND pcl_msgs_FOUND AND jsoncpp_FOUND)
   add_executable(boundary_publisher src/boundary_publisher.cpp)
-  ament_target_dependencies(boundary_publisher ament_index_cpp deepracing_msgs rclcpp pcl_conversions pcl_msgs pcl_ros sensor_msgs std_msgs)
+  ament_target_dependencies(boundary_publisher ament_index_cpp deepracing_msgs rclcpp pcl_conversions pcl_msgs sensor_msgs std_msgs)
   target_include_directories(boundary_publisher
   PUBLIC
   ${PCL_COMMON_INCLUDE_DIRS}
@@ -95,21 +92,19 @@ if (pcl_ros_FOUND AND jsoncpp_FOUND)
   #  ${PCL_KDTREE_LIBRARIES}
   #  ${PCL_SEARCH_LIBRARIES}
     ${PCL_COMMON_LIBRARIES}
-    ${PCL_FEATURES_LIBRARIES}
-    ${PCL_FILTERS_LIBRARIES}
-    ${PCL_GEOMETRY_LIBRARIES}
-    ${PCL_KEYPOINTS_LIBRARIES}
-    ${PCL_SURFACE_LIBRARIES}
-    ${PCL_LIBRARIES}
+    # ${PCL_LIBRARIES}
     utils
     jsoncpp_lib
   )
   list(APPEND nodes_to_install_ boundary_publisher)
-  
+  ament_export_dependencies(pcl_msgs)
+  ament_export_dependencies(pcl_conversions)
 endif()
 
 
-if((TARGET f1_datalogger::f1_datalogger) AND cv_bridge_FOUND)
+find_package(cv_bridge QUIET)
+find_package(image_transport QUIET)
+if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge_FOUND)
   add_executable(ros_rebroadcaster src/ros_rebroadcaster.cpp)
   ament_target_dependencies(ros_rebroadcaster cv_bridge image_transport sensor_msgs std_msgs deepracing_msgs)
   target_link_libraries(ros_rebroadcaster
@@ -119,6 +114,7 @@ if((TARGET f1_datalogger::f1_datalogger) AND cv_bridge_FOUND)
   list(APPEND nodes_to_install_ ros_rebroadcaster)
   ament_export_dependencies(TBB)
   ament_export_dependencies(cv_bridge)
+  ament_export_dependencies(image_transport)
 endif()
 
 
@@ -137,7 +133,7 @@ install(TARGETS ${nodes_to_install_}
     DESTINATION lib/${PROJECT_NAME}
 )
 install(TARGETS utils
-    EXPORT ${PROJECT_NAME}
+    EXPORT ${PROJECT_NAME}-export
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
@@ -154,6 +150,5 @@ install(DIRECTORY
   config
   DESTINATION share/${PROJECT_NAME}/
 )
-ament_export_dependencies(f1_datalogger)
-ament_export_targets(${PROJECT_NAME})
+ament_export_targets(${PROJECT_NAME}-export)
 ament_package()
