@@ -1,3 +1,2 @@
 PacketMotionData udp_packet
-float64 timestamp
 std_msgs/Header header
