@@ -195,7 +195,7 @@ int main(int argc, char** argv)
     std::string track_name = "";
     std::array<std::string,25> track_name_array = deepracing_ros::F1MsgUtils::track_names();
 
-    while (rclcpp::is_initialized())
+    while (rclcpp::ok())
     {
         rclcpp::sleep_for(std::chrono::milliseconds(int(150)));
         rclcpp::spin_some(node);
