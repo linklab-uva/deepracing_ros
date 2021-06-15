@@ -34,6 +34,7 @@ find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosidl_default_runtime REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -106,7 +107,7 @@ find_package(cv_bridge QUIET)
 find_package(image_transport QUIET)
 if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge_FOUND)
   add_executable(ros_rebroadcaster src/ros_rebroadcaster.cpp)
-  ament_target_dependencies(ros_rebroadcaster cv_bridge image_transport sensor_msgs std_msgs deepracing_msgs)
+  ament_target_dependencies(ros_rebroadcaster cv_bridge image_transport sensor_msgs std_msgs std_srvs deepracing_msgs)
   target_link_libraries(ros_rebroadcaster
   utils
   f1_datalogger::f1_datalogger
@@ -115,6 +116,7 @@ if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge
   ament_export_dependencies(TBB)
   ament_export_dependencies(cv_bridge)
   ament_export_dependencies(image_transport)
+  ament_export_dependencies(std_srvs)
 endif()
 
 

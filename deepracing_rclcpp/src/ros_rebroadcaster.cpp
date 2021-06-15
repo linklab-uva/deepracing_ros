@@ -16,6 +16,7 @@
 #include "deepracing_msgs/msg/timestamped_packet_car_telemetry_data.hpp"
 #include "deepracing_msgs/msg/timestamped_packet_lap_data.hpp"
 #include "deepracing_msgs/msg/timestamped_packet_session_data.hpp"
+#include <std_srvs/srv/empty.hpp>
 
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
@@ -24,6 +25,7 @@
 #include <rclcpp/exceptions.hpp>
 #include <chrono>
 #include <cmath>
+
 // #include <image_transport/camera_publisher.h>
 // #include <image_transport/transport_hints.h>
 namespace deepf1
@@ -33,7 +35,7 @@ inline rclcpp::Time fromDouble(const double& ts)
   double fractpart, intpart;
   fractpart = modf(ts, &intpart);  
   int32_t sec =(int32_t)(intpart);
-  int32_t nanosec =(int32_t)(fractpart*1E9);
+  uint32_t nanosec =(uint32_t)(fractpart*1E9);
   return rclcpp::Time(sec, nanosec, RCL_SYSTEM_TIME);
 }
 template < typename FloatType = double, class RatioType = std::ratio<1,1> >
@@ -315,9 +317,11 @@ class NodeWrapper_
      {
       node_ = rclcpp::Node::make_shared("f1_ros_rebroadcaster","");
     }  
+
     std::shared_ptr<rclcpp::Node> node_;
     std::shared_ptr<ROSRebroadcaster_2018DataGrabHandler> datagrab_handler;
     std::shared_ptr<ROSRebroadcaster_FrameGrabHandler> image_handler;
+    
 };
 int main(int argc, char *argv[])
 {
@@ -401,7 +405,12 @@ int main(int argc, char *argv[])
     rtn.successful=true;
     return rtn;
   });
-
+  rclcpp::Service<std_srvs::srv::Empty>::SharedPtr shudownservice = node->create_service<std_srvs::srv::Empty>("deepracing_shutdown", 
+  []
+  (const std::shared_ptr<std_srvs::srv::Empty::Request> req,  std::shared_ptr<std_srvs::srv::Empty::Response> res)
+  {
+    rclcpp::shutdown();
+  });
   rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(),5);
   exec.add_node(node);
   dl.add2018UDPHandler(nw.datagrab_handler);
