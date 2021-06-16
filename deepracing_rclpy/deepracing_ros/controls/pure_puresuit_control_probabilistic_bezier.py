@@ -17,11 +17,12 @@ import torch.utils.data as data_utils
 import deepracing.imutils
 import scipy
 import scipy.interpolate
-import rpyutils
 import tf2_ros
+import rpyutils
+import numpy as np
 with rpyutils.add_dll_directories_from_env("PATH"):
-    import py_f1_interface
     import cv_bridge
+    import py_f1_interface
 import deepracing.pose_utils
 import deepracing
 import threading
@@ -52,7 +53,7 @@ from rclpy.clock import Clock, ROSClock
 import deepracing_models.nn_models.Models as M
 import deepracing_models.nn_models.VariationalModels as VM
 from scipy.spatial.transform import Rotation as Rot
-import cv2, numpy as np
+import cv2
 import timeit
 import array
 import torch.nn.functional as F
@@ -64,7 +65,6 @@ import rclpy.qos
 from sensor_msgs_py.point_cloud2 import read_points, create_cloud
 
 from typing import List
-
 
 class ProbabilisticBezierPurePursuitControllerROS(PPC):
     def __init__(self):
@@ -340,9 +340,16 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
 
             if self.gaussian_filtering:
                 cvb = torch.zeros(bezier_control_points.shape[1], 2, 2, dtype = varfactors.dtype, device = varfactors.device)
-                cvb[:,0,0]=2.5
-                cvb[:,1,1]=2.5
-                scale_tril = torch.sqrt(cvb)
+                
+                # cvb[0,0,0]= 3.25
+                # cvb[0,1,1]= 3.25
+                # cvb[1:,0,0]= 3.25
+                # cvb[1:,1,1]= 3.25
+                cvb[:,0,0] = 2.8
+                cvb[:,1,1] = 2.8
+
+                scale_tril = cvb
+                #scale_tril = torch.sqrt(cvb)
                 curve_distribution : dist.MultivariateNormal = dist.MultivariateNormal(bezier_control_points[0], scale_tril=scale_tril, validate_args=False)
                 self.current_particles = curve_distribution.sample((self.num_particles,))
                 if self.include_sample_curves:
@@ -361,7 +368,8 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
             ds = torch.mean( self.s_torch[:,1:] - self.s_torch[:,:-1], dim=1 )
             meanlength = mu.simpson(mean_vs_norm, ds)[0].item()
 
-            boundarypoints, boundarynormals = self.getTrackBounds(transform, meanlength+20.0, N=int(round(meanlength/.05)))
+            tbdelta = meanlength+20.0
+            boundarypoints, boundarynormals = self.getTrackBounds(transform, tbdelta, N=int(round(tbdelta/.075)))
         
             obnormals = boundarynormals[0].unsqueeze(0)
             obpoints = boundarypoints[0].unsqueeze(0)
@@ -397,20 +405,21 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
 
                 average_speeds = torch.mean(speeds,dim=1)
                 max_average_speed = torch.max(average_speeds)
-                speed_scores = F.softmax(1.25*average_speeds.double(), dim=0)
+                speed_scores = F.softmax(0.65*average_speeds.double(), dim=0)
+                # speed_scores = torch.clip(torch.exp(-0.01*F.relu(95.0-average_speeds)), 0.01, 1.0)
                 speed_scores[speed_scores!=speed_scores] = 0.0
 
                 ca_deltas = torch.relu(centripetal_accels[:,15:-15] - self.max_centripetal_acceleration)
                 max_ca_deltas, _ = torch.max(ca_deltas, dim=1)
-                ca_scores = torch.clip(torch.exp(-0.25*max_ca_deltas.double()), 1E-10, 1.0)
+                ca_scores = torch.clip(torch.exp(-0.125*max_ca_deltas.double()), 0.0001, 1.0)
 
                 _, ib_distances = self.boundary_loss(particle_points, ibpoints.expand(particle_points.shape[0], -1, -1), ibnormals.expand(particle_points.shape[0], -1, -1))
                 ib_max_distances, _ = torch.max(ib_distances, dim=1)
-                ib_max_distances=F.relu(ib_max_distances + 1.5)
+                ib_max_distances=F.relu(ib_max_distances + 1.25)
 
                 _, ob_distances = self.boundary_loss(particle_points, obpoints.expand(particle_points.shape[0], -1, -1), obnormals.expand(particle_points.shape[0], -1, -1))
                 ob_max_distances, _ = torch.max(ob_distances, dim=1)
-                ob_max_distances=F.relu(ob_max_distances + 1.5)
+                ob_max_distances=F.relu(ob_max_distances + 1.25)
 
                 ib_scores = torch.clip( torch.exp(-1.0*ib_max_distances.double()), 1E-10, 1.0)
                 ob_scores = torch.clip( torch.exp(-1.0*ob_max_distances.double()), 1E-10, 1.0)
