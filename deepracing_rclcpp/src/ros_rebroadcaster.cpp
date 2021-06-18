@@ -217,13 +217,17 @@ public:
     {
       std::cout<<s<<std::endl;
     }
-    rclcpp::ParameterValue resize_height_p = node->declare_parameter("resize_height",rclcpp::ParameterValue(0));
+    rclcpp::ParameterValue resize_height_p = node->declare_parameter("resize_height",rclcpp::ParameterValue(-1));
     resize_height_ =  resize_height_p.get<int>();
 
-    rclcpp::ParameterValue resize_width_p = node->declare_parameter("resize_width",rclcpp::ParameterValue(0));
+    rclcpp::ParameterValue resize_width_p = node->declare_parameter("resize_width",rclcpp::ParameterValue(-1));
     resize_width_ =  resize_width_p.get<int>();
 
-    rclcpp::ParameterValue top_left_row_p = node->declare_parameter("top_left_row",rclcpp::ParameterValue(32));
+    rclcpp::ParameterValue resize_factor_p = node->declare_parameter("resize_factor",rclcpp::ParameterValue(1.0));
+    resize_factor_ =  resize_factor_p.get<double>();
+
+
+    rclcpp::ParameterValue top_left_row_p = node->declare_parameter("top_left_row",rclcpp::ParameterValue(0));
     top_left_row_ =  top_left_row_p.get<int>();
     RCLCPP_INFO(node->get_logger(),"Cropping from row %d\n", top_left_row_);
 
@@ -276,9 +280,13 @@ public:
     }
     
     cv::cvtColor( imin(rowrange,colrange) , rgbimage , cv::COLOR_BGRA2RGB );
-    if( (resize_width_ >0) && (resize_height_ >0))
+    if( resize_factor_!=1.0 )
     {
-      cv::resize(rgbimage,rgbimage,cv::Size(resize_width_,resize_height_),0.0,0.0,cv::INTER_AREA);
+      cv::resize(rgbimage, rgbimage, cv::Size(),resize_factor_,resize_factor_,cv::INTER_AREA);
+    }
+    else if(resize_width_>0 && resize_height_>0)
+    {
+      cv::resize(rgbimage, rgbimage, cv::Size(resize_width_, resize_height_), 0.0, 0.0, cv::INTER_AREA);
     }
 
     cv_bridge::CvImage bridge_image(header, "rgb8", rgbimage);
@@ -290,12 +298,14 @@ public:
     this->begin_ = begin;
     ready = true;
   }
+  double resize_factor_;
   int resize_width_;
   int resize_height_;
   int crop_height_;
   int crop_width_;
   int top_left_row_;
   int top_left_col_;
+
 
   std::string time_source;
 private:
@@ -356,8 +366,8 @@ int main(int argc, char *argv[])
 
   rclcpp::ParameterValue search_string_p = node->declare_parameter("search_string",rclcpp::ParameterValue("F1"));
   rclcpp::ParameterValue capture_frequency_p = node->declare_parameter("capture_frequency",rclcpp::ParameterValue(35.0), capture_freq_description);
-  
   rclcpp::ParameterValue hostname_p = node->declare_parameter("hostname",rclcpp::ParameterValue("127.0.0.1"));
+  rclcpp::ParameterValue num_theads_p = node->declare_parameter("num_theads",rclcpp::ParameterValue(0));
 
   
 
@@ -410,8 +420,9 @@ int main(int argc, char *argv[])
   (const std::shared_ptr<std_srvs::srv::Empty::Request> req,  std::shared_ptr<std_srvs::srv::Empty::Response> res)
   {
     rclcpp::shutdown();
-  });
-  rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(),5);
+  }
+  );
+  rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(), num_theads_p.get<int>());
   exec.add_node(node);
   dl.add2018UDPHandler(nw.datagrab_handler);
   dl.start(capture_frequency_p.get<double>(), nw.image_handler);
