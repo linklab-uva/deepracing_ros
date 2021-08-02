@@ -62,50 +62,53 @@ public:
   {
     return ready_;
   }
-  virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketCarSetupData& data) override
+  virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketCarSetupData& udp_data) override
   {
-    rclcpp::Time now = this->node_->now();
+    //rclcpp::Time now = this->node_->now();
     deepracing_msgs::msg::TimestampedPacketCarSetupData rosdata;
-    rosdata.header.stamp = now;
-    rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(data.data, all_cars_param_);
+    //rosdata.header.stamp = now;
+    rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     setup_data_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketCarStatusData& udp_data) override
   {
     
     deepracing_msgs::msg::TimestampedPacketCarStatusData rosdata;
-    if (time_source == "ROS2")
-    {
-      rosdata.header.stamp = this->node_->now();
-    }
-    else if(time_source == "DeepRacing")
-    {
-      rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
-    }
-    else
-    {
-      rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
-    } 
+    // if (time_source == "ROS2")
+    // {
+    //   rosdata.header.stamp = this->node_->now();
+    // }
+    // else if(time_source == "DeepRacing")
+    // {
+    //   rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
+    // }
+    // else
+    // {
+    //   rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
+    // } 
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     status_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketCarTelemetryData& udp_data) override
   {
     
     deepracing_msgs::msg::TimestampedPacketCarTelemetryData rosdata;
-    if (time_source == "ROS2")
-    {
-      rosdata.header.stamp = this->node_->now();
-    }
-    else if(time_source == "DeepRacing")
-    {
-      rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
-    }
-    else
-    {
-      rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
-    }   
+    // if (time_source == "ROS2")
+    // {
+    //   rosdata.header.stamp = this->node_->now();
+    // }
+    // else if(time_source == "DeepRacing")
+    // {
+    //   rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
+    // }
+    // else
+    // {
+    //   rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
+    // }   
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     telemetry_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketEventData& data) override
@@ -114,46 +117,49 @@ public:
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketLapData& udp_data) override
   {
     deepracing_msgs::msg::TimestampedPacketLapData rosdata;
-    if (time_source == "ROS2")
-    {
-      rosdata.header.stamp = this->node_->now();
-    }
-    else if(time_source == "DeepRacing")
-    {
-      rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
-    }
-    else
-    {
-      rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
-    }  
+    // if (time_source == "ROS2")
+    // {
+    //   rosdata.header.stamp = this->node_->now();
+    // }
+    // else if(time_source == "DeepRacing")
+    // {
+    //   rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
+    // }
+    // else
+    // {
+    //   rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
+    // }  
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     lap_data_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketMotionData& udp_data) override
   {
+    rclcpp::Time now = this->node_->now();
     deepracing_msgs::msg::TimestampedPacketMotionData rosdata;
-    if (time_source == "ROS2")
-    {
-      rosdata.header.stamp = this->node_->now();
-    }
-    else if(time_source == "DeepRacing")
-    {
-      rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
-    }
-    else
-    {
-      rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
-    }  
+    // if (time_source == "ROS2")
+    // {
+    //   rosdata.header.stamp = this->node_->now();
+    // }
+    // else if(time_source == "DeepRacing")
+    // {
+    //   rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
+    // }
+    // else
+    // {
+    //   rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
+    // }  
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
-    rosdata.header.frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name;
+    // rosdata.header.frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name;
     for (deepracing_msgs::msg::CarMotionData & motion_data : rosdata.udp_packet.car_motion_data)
     {
-      motion_data.world_forward_dir.header.stamp = rosdata.header.stamp;
-      motion_data.world_position.header.stamp = rosdata.header.stamp;
-      motion_data.world_right_dir.header.stamp = rosdata.header.stamp;
-      motion_data.world_up_dir.header.stamp = rosdata.header.stamp;
-      motion_data.world_velocity.header.stamp = rosdata.header.stamp;
+      motion_data.world_forward_dir.header.stamp = now;
+      motion_data.world_position.header.stamp = now;
+      motion_data.world_right_dir.header.stamp = now;
+      motion_data.world_up_dir.header.stamp = now;
+      motion_data.world_velocity.header.stamp = now;
     }
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     motion_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketParticipantsData& data) override
@@ -162,19 +168,20 @@ public:
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketSessionData& udp_data) override
   {
     deepracing_msgs::msg::TimestampedPacketSessionData rosdata;
-    if (time_source == "ROS2")
-    {
-      rosdata.header.stamp = this->node_->now();
-    }
-    else if(time_source == "DeepRacing")
-    {
-      rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
-    }
-    else
-    {
-      rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
-    }  
+    // if (time_source == "ROS2")
+    // {
+    //   rosdata.header.stamp = this->node_->now();
+    // }
+    // else if(time_source == "DeepRacing")
+    // {
+    //   rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
+    // }
+    // else
+    // {
+    //   rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
+    // }  
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data);
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     session_publisher_->publish(rosdata);
   }
   void init(const std::string& host, unsigned int port, const deepf1::TimePoint& begin) override

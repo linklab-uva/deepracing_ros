@@ -1,6 +1,7 @@
-f1_data_publisher:
+/cropped_publisher/f1_ros_rebroadcaster:
     ros__parameters:
         crop_width : 1758
-        crop_height : 362
+        crop_height : 366
         resize_height : 66
         resize_width : 200
+        top_left_row : 32
