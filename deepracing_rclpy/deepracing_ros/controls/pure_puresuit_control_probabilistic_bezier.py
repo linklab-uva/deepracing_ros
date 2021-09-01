@@ -161,7 +161,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
         self.bezierMderiv = mu.bezierM(self.s_torch, self.net.bezier_order-1)
         self.bezierM2ndderiv = mu.bezierM(self.s_torch, self.net.bezier_order-2)
         self.bezierM.requires_grad = False
-        self.image_sub = self.create_subscription( Image, '/cropped_publisher/images', self.addToBuffer, 1)
+        self.image_sub = self.create_subscription( Image, '/f1_game/images', self.addToBuffer, 1)
         boundary_bezier_order = 19
         
         self.inner_boundary = None
@@ -343,7 +343,7 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
                 self.get_logger().error("%d images in the buffer. exptected %d." % (imtorch.shape[0], self.net.context_length))
                 return None, None, None
             inputtorch : torch.Tensor = imtorch.unsqueeze(0).type(self.dtype).to(self.device)
-            bezier_control_points, varfactors, covarfactors = self.net(inputtorch)
+            bezier_control_points, varfactors, _ = self.net(inputtorch)
         
             bezier_control_points[:,:,0]*=self.xscale_factor
            # initial_curve_full = torch.stack([bezier_control_points[0,:,0] , torch.zeros_like(bezier_control_points[0,:,1]) , bezier_control_points[0,:,1] ], dim=1)     
@@ -354,6 +354,10 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
             scale_tril =  torch.zeros(bezier_control_points.shape[1], 2, 2, dtype = varfactors.dtype, device = varfactors.device)
             scale_tril[:,0,0] = 3.0
             scale_tril[:,1,1] = 3.0
+
+            # scale_tril[0,0,0] = 1E-9
+            # scale_tril[0,1,1] = 1E-9
+            
             for i in range(self.gaussian_filtering_steps):
 
                 #scale_tril = torch.sqrt(cvb)
@@ -404,21 +408,21 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
 
                 average_speeds = torch.mean(speeds,dim=1)
                # max_average_speed = torch.max(average_speeds)
-                speed_scores = torch.clip(F.softmax(0.25 *average_speeds.double(), dim=0), 1E-8, 1.0)
+                speed_scores = torch.clip(F.softmax(0.0*average_speeds.double(), dim=0), 1E-8, 1.0)
                 # speed_scores = torch.clip(torch.exp(-0.01*F.relu(95.0-average_speeds)), 0.01, 1.0)
                 speed_scores[speed_scores!=speed_scores] = 0.0
 
                 ca_deltas = torch.relu(centripetal_accels[:,15:-15] - self.max_centripetal_acceleration)
                 max_ca_deltas, _ = torch.max(ca_deltas, dim=1)
-                ca_scores = torch.clip(torch.exp(-0.05*max_ca_deltas.double()), 1E-8, 1.0)
+                ca_scores = torch.clip(torch.exp(-0.0*max_ca_deltas.double()), 1E-8, 1.0)
 
                 _, ib_distances = self.boundary_loss(particle_points, ibpoints.expand(particle_points.shape[0], -1, -1), ibnormals.expand(particle_points.shape[0], -1, -1))
                 ib_max_distances, _ = torch.max(ib_distances, dim=1)
-                ib_max_distances=F.relu(ib_max_distances + 1.75)
+                ib_max_distances=F.relu(ib_max_distances + 1.5)
 
                 _, ob_distances = self.boundary_loss(particle_points, obpoints.expand(particle_points.shape[0], -1, -1), obnormals.expand(particle_points.shape[0], -1, -1))
                 ob_max_distances, _ = torch.max(ob_distances, dim=1)
-                ob_max_distances=F.relu(ob_max_distances + 1.75)
+                ob_max_distances=F.relu(ob_max_distances + 1.5)
 
                 all_distances = torch.stack([ib_max_distances, ob_max_distances], dim=0)
 

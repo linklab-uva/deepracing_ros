@@ -143,7 +143,7 @@ class NodeWrapper_
             {
                 this->node=node;
             }
-            listener =  this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>( "/session_data", 1, std::bind(&NodeWrapper_::sessionDataCallback, this, std::placeholders::_1)  );
+            listener =  this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>( "session_data", 1, std::bind(&NodeWrapper_::sessionDataCallback, this, std::placeholders::_1)  );
             current_session_data.reset(new deepracing_msgs::msg::TimestampedPacketSessionData);
             current_session_data->udp_packet.track_id=-1;
         }

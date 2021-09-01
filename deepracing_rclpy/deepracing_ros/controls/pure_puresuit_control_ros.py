@@ -141,8 +141,8 @@ class PurePursuitControllerROS(Node):
 
     def initSubscriptions(self):
         update_qos = rclpy.qos.QoSProfile(depth=1)
-        self.telemetry_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketCarTelemetryData, '/cropped_publisher/telemetry_data', self.telemetryCallback, update_qos)
-        self.status_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketCarStatusData, '/cropped_publisher/status_data', self.statusCallback, update_qos)
+        self.telemetry_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketCarTelemetryData, '/f1_game/telemetry_data', self.telemetryCallback, update_qos)
+        self.status_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketCarStatusData, '/f1_game/status_data', self.statusCallback, update_qos)
         self.pose_sub : rclpy.subscription.Subscription = self.create_subscription(PoseStamped, 'car_pose', self.poseCallback, update_qos)
         self.velocity_sub : rclpy.subscription.Subscription = self.create_subscription(TwistStamped,'car_velocity',self.velocityCallback, update_qos)
 
@@ -210,7 +210,7 @@ class PurePursuitControllerROS(Node):
 
 
         speeds = torch.norm(v_local_forward, p=2, dim=1)
-        lookahead_distance = max(self.get_parameter("lookahead_gain").get_parameter_value().double_value*current_speed, 17.5)
+        lookahead_distance = max(self.get_parameter("lookahead_gain").get_parameter_value().double_value*current_speed, 2.0)
         lookahead_distance_vel = self.get_parameter("velocity_lookahead_gain").get_parameter_value().double_value*current_speed
 
         lookahead_index = torch.argmin(torch.abs(distances_forward-lookahead_distance))
@@ -244,19 +244,15 @@ class PurePursuitControllerROS(Node):
             delta = left_steer_factor*physical_angle
         else:
             delta = right_steer_factor*physical_angle
-        #print(torch.max(anglemags))
-        if self.drs_allowed:# or current_speed!=current_speed or ((torch.max(anglemags)*(180.0/np.pi))<30.0):
-            velsetpoint = 1.0E5
-           # print("Gunning it because DRS allowed")
-            self.prev_control = CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=1.0, brake=0.0)
-            return self.prev_control, lookahead_positions
-        if self.drs_enabled:
-            velsetpoint = 1.0E5
-           # print("Gunning it because DRS enabled")
-            self.prev_control = CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=1.0, brake=0.0)
-            return self.prev_control, lookahead_positions
+        # if self.drs_allowed:
+        #     velsetpoint = 1.0E5
+        #     self.prev_control = CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=1.0, brake=0.0)
+        #     return self.prev_control, lookahead_positions
+        # if self.drs_enabled:
+        #     velsetpoint = 1.0E5
+        #     self.prev_control = CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=1.0, brake=0.0)
+        #     return self.prev_control, lookahead_positions
         velsetpoint = speeds[lookahead_index_vel].item()
-       # current_speed=0.0
         if current_speed<velsetpoint:
             self.prev_control = CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=1.0, brake=0.0)
             return self.prev_control, lookahead_positions
