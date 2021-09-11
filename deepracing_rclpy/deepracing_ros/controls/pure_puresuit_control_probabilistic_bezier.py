@@ -401,23 +401,23 @@ class ProbabilisticBezierPurePursuitControllerROS(PPC):
                 # speed_scores = torch.clip(torch.exp(-0.01*F.relu(95.0-average_speeds)), 0.01, 1.0)
                 speed_scores[speed_scores!=speed_scores] = 0.0
 
-                ca_deltas = torch.relu(centripetal_accels[:,10:-10] - self.max_centripetal_acceleration)
+                ca_deltas = torch.relu(centripetal_accels - self.max_centripetal_acceleration)
                 max_ca_deltas, _ = torch.max(ca_deltas, dim=1)
                 ca_scores = torch.clip(torch.exp(-0.1*max_ca_deltas.double()), 1E-8, 1.0)
 
                 _, ib_distances = self.boundary_loss(particle_points, ibpoints.expand(particle_points.shape[0], -1, -1), ibnormals.expand(particle_points.shape[0], -1, -1))
                 ib_max_distances, _ = torch.max(ib_distances, dim=1)
-                ib_max_distances=F.relu(ib_max_distances + 1.0)
+                ib_max_distances=F.relu(ib_max_distances + 2.5)
 
                 _, ob_distances = self.boundary_loss(particle_points, obpoints.expand(particle_points.shape[0], -1, -1), obnormals.expand(particle_points.shape[0], -1, -1))
                 ob_max_distances, _ = torch.max(ob_distances, dim=1)
-                ob_max_distances=F.relu(ob_max_distances + 1.0)
+                ob_max_distances=F.relu(ob_max_distances + 2.5)
 
                 all_distances = torch.stack([ib_max_distances, ob_max_distances], dim=0)
 
                 overall_max_distances, _ = torch.max(all_distances, dim=0)
 
-                boundary_scores = torch.clip( torch.exp(-1.5*overall_max_distances.double()), 1E-4, 1.0)
+                boundary_scores = torch.clip( torch.exp(-1.0*overall_max_distances.double()), 1E-4, 1.0)
                 score_products = ca_scores*speed_scores*boundary_scores
 
                 probs = (score_products/torch.sum(score_products))
