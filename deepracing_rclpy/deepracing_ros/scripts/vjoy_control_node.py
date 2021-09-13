@@ -51,8 +51,9 @@ class VJoyControl(Node):
 
     def controlCB(self, control : CarControl):
         self.controller.setControl(control.steering, control.throttle, control.brake)
-        # if self.current_status_packet.drs_allowed and (not bool(self.current_telemetry_packet.drs)):
-        #     self.controller.pushDRS()
+        if self.current_status_packet.drs_allowed and (not bool(self.current_telemetry_packet.drs)):
+          #  self.get_logger().info("Pushing drs")
+            self.controller.pushDRS()
 
 def main(args=None):
     rclpy.init(args=args)

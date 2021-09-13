@@ -169,7 +169,7 @@ class OraclePurePursuitControllerROS(PPC):
         tfit = tfit-tfit[0]
         dt = tfit[-1]
 
-        positions_local = torch.matmul( T, positions_global_aug)[0:3].transpose(0,1)
+        positions_local = torch.matmul( T, positions_global_aug)[[0,2]].transpose(0,1)
         sfit = (tfit/dt).unsqueeze(0)
         fit = mu.bezierLsqfit(positions_local.unsqueeze(0), self.bezier_order, t=sfit)
         bcurve = fit[1]
@@ -182,7 +182,7 @@ class OraclePurePursuitControllerROS(PPC):
         positionsbcurve = torch.matmul(Msamp, bcurve)[0]
 
         _, bcurvderiv = mu.bezierDerivative(bcurve, t=tsamp)
-        velocitiesbcurve = (bcurvderiv[0]/dt)
+        velocitiesbcurve = (bcurvderiv[0]/dt)*1.15
         norms = torch.norm(velocitiesbcurve, p=2, dim=1)
         unit_tangents = velocitiesbcurve/norms[:,None]
 

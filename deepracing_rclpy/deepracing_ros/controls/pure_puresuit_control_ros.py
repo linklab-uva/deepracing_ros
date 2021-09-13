@@ -85,7 +85,7 @@ class PurePursuitControllerROS(Node):
         forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
         self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
 
-        base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
+        base_link_param : Parameter = self.declare_parameter("base_link", value="base_link")
         self.base_link : str = base_link_param.get_parameter_value().string_value
 
         publish_paths_param : Parameter = self.declare_parameter("publish_paths", value=False)
@@ -180,18 +180,15 @@ class PurePursuitControllerROS(Node):
         now = self.get_clock().now()
         if lookahead_positions is None:
             self.get_logger().error("Returning None because lookahead_positions is None")
-            #return None, None
             return self.prev_control, None
         if v_local_forward is None:
             self.get_logger().error("Returning None because v_local_forward is None")
-            #return None, lookahead_positions
             return self.prev_control, lookahead_positions
         if self.velocity_semaphore.acquire(timeout=1.0):
             current_velocity = deepcopy(self.current_velocity)
             self.velocity_semaphore.release()
         else:
             self.get_logger().error("Returning None because unable to acquire velocity semaphore")
-           # return None, lookahead_positions
             return self.prev_control, lookahead_positions
         if self.current_pose is None:
             stamp = self.get_clock().now().to_msg()
@@ -216,20 +213,10 @@ class PurePursuitControllerROS(Node):
         lookahead_index = torch.argmin(torch.abs(distances_forward-lookahead_distance))
         lookahead_index_vel = torch.argmin(torch.abs(distances_forward-lookahead_distance_vel))
 
-        if self.publish_lookahead_points:
-            pointheader = Header(stamp = stamp, frame_id=self.base_link)
-            point = Point(x=lookahead_positions[lookahead_index,0].item(), y=lookahead_positions[lookahead_index,1].item(), z=lookahead_positions[lookahead_index,2].item())
-            self.point_pub.publish(PointStamped(header=pointheader, point=point))
-
         lookaheadVector = lookahead_positions[lookahead_index]
-        #lookaheadVectorVel = lookahead_positions[lookahead_index_vel]
-        lookahead_directions = lookahead_positions/(torch.norm(lookahead_positions, p=2, dim=1)[:,None])
-        angles = torch.atan2(lookahead_directions[10:,self.lateral_dimension], lookahead_directions[10:,self.forward_dimension])
-        anglemags = torch.abs(angles)
-
         D = torch.norm(lookaheadVector, p=2)
         lookaheadDirection = lookaheadVector/D
-        alpha = torch.atan2(lookaheadDirection[self.lateral_dimension],lookaheadDirection[self.forward_dimension])
+        alpha = torch.atan2(lookaheadDirection[1],lookaheadDirection[0])
         
         full_lock_right = self.get_parameter("full_lock_right").get_parameter_value().double_value
         full_lock_left = self.get_parameter("full_lock_left").get_parameter_value().double_value
