@@ -18,7 +18,10 @@
 #include "deepracing_msgs/msg/timestamped_packet_session_data.hpp"
 #include <std_srvs/srv/empty.hpp>
 
+
 #include <cv_bridge/cv_bridge.h>
+#include <sensor_msgs/msg/camera_info.hpp>
+#include <image_transport/camera_publisher.hpp>
 #include <image_transport/image_transport.h>
 #include <rclcpp/executor.hpp>
 #include <rclcpp/executor_options.hpp>
@@ -62,50 +65,29 @@ public:
   {
     return ready_;
   }
-  virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketCarSetupData& data) override
+  virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketCarSetupData& udp_data) override
   {
-    rclcpp::Time now = this->node_->now();
+    //rclcpp::Time now = this->node_->now();
     deepracing_msgs::msg::TimestampedPacketCarSetupData rosdata;
-    rosdata.header.stamp = now;
-    rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(data.data, all_cars_param_);
+    //rosdata.header.stamp = now;
+    rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     setup_data_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketCarStatusData& udp_data) override
   {
     
     deepracing_msgs::msg::TimestampedPacketCarStatusData rosdata;
-    if (time_source == "ROS2")
-    {
-      rosdata.header.stamp = this->node_->now();
-    }
-    else if(time_source == "DeepRacing")
-    {
-      rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
-    }
-    else
-    {
-      rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
-    } 
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     status_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketCarTelemetryData& udp_data) override
   {
     
     deepracing_msgs::msg::TimestampedPacketCarTelemetryData rosdata;
-    if (time_source == "ROS2")
-    {
-      rosdata.header.stamp = this->node_->now();
-    }
-    else if(time_source == "DeepRacing")
-    {
-      rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
-    }
-    else
-    {
-      rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
-    }   
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     telemetry_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketEventData& data) override
@@ -114,46 +96,25 @@ public:
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketLapData& udp_data) override
   {
     deepracing_msgs::msg::TimestampedPacketLapData rosdata;
-    if (time_source == "ROS2")
-    {
-      rosdata.header.stamp = this->node_->now();
-    }
-    else if(time_source == "DeepRacing")
-    {
-      rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
-    }
-    else
-    {
-      rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
-    }  
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     lap_data_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketMotionData& udp_data) override
   {
+    rclcpp::Time now = this->node_->now();
     deepracing_msgs::msg::TimestampedPacketMotionData rosdata;
-    if (time_source == "ROS2")
-    {
-      rosdata.header.stamp = this->node_->now();
-    }
-    else if(time_source == "DeepRacing")
-    {
-      rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
-    }
-    else
-    {
-      rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
-    }  
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
-    rosdata.header.frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name;
+    // rosdata.header.frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name;
     for (deepracing_msgs::msg::CarMotionData & motion_data : rosdata.udp_packet.car_motion_data)
     {
-      motion_data.world_forward_dir.header.stamp = rosdata.header.stamp;
-      motion_data.world_position.header.stamp = rosdata.header.stamp;
-      motion_data.world_right_dir.header.stamp = rosdata.header.stamp;
-      motion_data.world_up_dir.header.stamp = rosdata.header.stamp;
-      motion_data.world_velocity.header.stamp = rosdata.header.stamp;
+      motion_data.world_forward_dir.header.stamp = now;
+      motion_data.world_position.header.stamp = now;
+      motion_data.world_right_dir.header.stamp = now;
+      motion_data.world_up_dir.header.stamp = now;
+      motion_data.world_velocity.header.stamp = now;
     }
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     motion_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketParticipantsData& data) override
@@ -162,19 +123,8 @@ public:
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketSessionData& udp_data) override
   {
     deepracing_msgs::msg::TimestampedPacketSessionData rosdata;
-    if (time_source == "ROS2")
-    {
-      rosdata.header.stamp = this->node_->now();
-    }
-    else if(time_source == "DeepRacing")
-    {
-      rosdata.header.stamp = deepf1::fromDeepf1Timestamp(udp_data.timestamp, begin_);
-    }
-    else
-    {
-      rosdata.header.stamp = deepf1::fromDouble(udp_data.data.m_header.m_sessionTime);
-    }  
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data);
+    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     session_publisher_->publish(rosdata);
   }
   void init(const std::string& host, unsigned int port, const deepf1::TimePoint& begin) override
@@ -217,13 +167,17 @@ public:
     {
       std::cout<<s<<std::endl;
     }
-    rclcpp::ParameterValue resize_height_p = node->declare_parameter("resize_height",rclcpp::ParameterValue(0));
+    rclcpp::ParameterValue resize_height_p = node->declare_parameter("resize_height",rclcpp::ParameterValue(-1));
     resize_height_ =  resize_height_p.get<int>();
 
-    rclcpp::ParameterValue resize_width_p = node->declare_parameter("resize_width",rclcpp::ParameterValue(0));
+    rclcpp::ParameterValue resize_width_p = node->declare_parameter("resize_width",rclcpp::ParameterValue(-1));
     resize_width_ =  resize_width_p.get<int>();
 
-    rclcpp::ParameterValue top_left_row_p = node->declare_parameter("top_left_row",rclcpp::ParameterValue(32));
+    rclcpp::ParameterValue resize_factor_p = node->declare_parameter("resize_factor",rclcpp::ParameterValue(1.0));
+    resize_factor_ =  resize_factor_p.get<double>();
+
+
+    rclcpp::ParameterValue top_left_row_p = node->declare_parameter("top_left_row",rclcpp::ParameterValue(0));
     top_left_row_ =  top_left_row_p.get<int>();
     RCLCPP_INFO(node->get_logger(),"Cropping from row %d\n", top_left_row_);
 
@@ -239,7 +193,8 @@ public:
 
     this->node_ = node;
         
-    this->it_publisher_ = it.advertise("images", 1, true);
+    // this->it_publisher_ = it.advertise("images", 1, true);
+    this->it_publisher_ = it.advertiseCamera("images", 1, true);
   }
   virtual ~ROSRebroadcaster_FrameGrabHandler()
   {
@@ -276,13 +231,26 @@ public:
     }
     
     cv::cvtColor( imin(rowrange,colrange) , rgbimage , cv::COLOR_BGRA2RGB );
-    if( (resize_width_ >0) && (resize_height_ >0))
+    if( resize_factor_!=1.0 )
     {
-      cv::resize(rgbimage,rgbimage,cv::Size(resize_width_,resize_height_),0.0,0.0,cv::INTER_AREA);
+      cv::resize(rgbimage, rgbimage, cv::Size(),resize_factor_,resize_factor_,cv::INTER_AREA);
+    }
+    else if(resize_width_>0 && resize_height_>0)
+    {
+      cv::resize(rgbimage, rgbimage, cv::Size(resize_width_, resize_height_), 0.0, 0.0, cv::INTER_AREA);
     }
 
     cv_bridge::CvImage bridge_image(header, "rgb8", rgbimage);
-    this->it_publisher_.publish( bridge_image.toImageMsg() );
+
+    sensor_msgs::msg::CameraInfo camera_info;
+    camera_info.distortion_model="plumbob";
+    camera_info.header = header;
+    camera_info.height=static_cast<sensor_msgs::msg::CameraInfo::_height_type>(imin.rows);
+    camera_info.width=static_cast<sensor_msgs::msg::CameraInfo::_width_type>(imin.cols);
+    sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info_ptr = std::make_shared<sensor_msgs::msg::CameraInfo const>(camera_info);
+    this->it_publisher_.publish( bridge_image.toImageMsg(), camera_info_ptr);
+
+    // this->it_publisher_.publish( bridge_image.toImageMsg() );
 
   }
   void init(const deepf1::TimePoint& begin, const cv::Size& window_size) override
@@ -290,6 +258,7 @@ public:
     this->begin_ = begin;
     ready = true;
   }
+  double resize_factor_;
   int resize_width_;
   int resize_height_;
   int crop_height_;
@@ -297,13 +266,15 @@ public:
   int top_left_row_;
   int top_left_col_;
 
+
   std::string time_source;
 private:
   double full_image_resize_factor_;
   bool ready;
   std::shared_ptr<rclcpp::Node> node_;
   image_transport::ImageTransport it;
-  image_transport::Publisher it_publisher_;
+  // image_transport::Publisher it_publisher_;
+  image_transport::CameraPublisher it_publisher_;
   std::shared_ptr<rclcpp::Publisher <sensor_msgs::msg::Image> > publisher_;
   std::shared_ptr<rclcpp::Publisher <deepracing_msgs::msg::TimestampedImage> > timestamped_publisher_;
   deepf1::TimePoint begin_;
@@ -356,8 +327,8 @@ int main(int argc, char *argv[])
 
   rclcpp::ParameterValue search_string_p = node->declare_parameter("search_string",rclcpp::ParameterValue("F1"));
   rclcpp::ParameterValue capture_frequency_p = node->declare_parameter("capture_frequency",rclcpp::ParameterValue(35.0), capture_freq_description);
-  
   rclcpp::ParameterValue hostname_p = node->declare_parameter("hostname",rclcpp::ParameterValue("127.0.0.1"));
+  rclcpp::ParameterValue num_theads_p = node->declare_parameter("num_theads",rclcpp::ParameterValue(0));
 
   
 
@@ -410,11 +381,21 @@ int main(int argc, char *argv[])
   (const std::shared_ptr<std_srvs::srv::Empty::Request> req,  std::shared_ptr<std_srvs::srv::Empty::Response> res)
   {
     rclcpp::shutdown();
-  });
-  rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(),5);
+  }
+  );
+  rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(), num_theads_p.get<int>());
   exec.add_node(node);
   dl.add2018UDPHandler(nw.datagrab_handler);
-  dl.start(capture_frequency_p.get<double>(), nw.image_handler);
+  bool log_images = node->declare_parameter<bool>("log_images", false);
+  std::shared_ptr<deepf1::IF1FrameGrabHandler> nullhandler;
+  if (log_images)
+  {
+    dl.start(capture_frequency_p.get<double>(), nw.image_handler);
+  }
+  else
+  { 
+    dl.start(capture_frequency_p.get<double>(), nullhandler);
+  }
   exec.spin();
   rclcpp::shutdown();
   return 0;

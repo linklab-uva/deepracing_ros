@@ -20,6 +20,7 @@
 #include "deepracing_ros/utils/file_utils.h"
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <ament_index_cpp/get_package_prefix.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 Json::Value readRacelineFile(std::shared_ptr<rclcpp::Node> node, std::string filepath)
 {
@@ -78,31 +79,31 @@ Json::Value readBoundaryFile(std::shared_ptr<rclcpp::Node> node, std::string fil
     file.close();
     if(parsed)
     {
-        RCLCPP_INFO(node->get_logger(), "Parsed json");
+        RCLCPP_INFO(node->get_logger(), "%s", "Parsed json");
     }
     else
     {
-        RCLCPP_FATAL(node->get_logger(), "Failed to parse json");
+        RCLCPP_FATAL(node->get_logger(), "%s", "Failed to parse json");
     }
     Json::Value xarray = rootval["x"];
     if(  xarray.isNull() )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"x\" key found in the json dictionary for a boundary file");
+        RCLCPP_FATAL(node->get_logger(), "%s", "no \"x\" key found in the json dictionary for a boundary file");
     }
     Json::Value yarray = rootval["y"];
     if(  yarray.isNull() )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"y\" key found in the json dictionary for a boundary file");
+        RCLCPP_FATAL(node->get_logger(), "%s", "no \"y\" key found in the json dictionary for a boundary file");
     }
     Json::Value zarray = rootval["z"];
     if(  zarray.isNull() )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"z\" key found in the json dictionary for a boundary file");
+        RCLCPP_FATAL(node->get_logger(), "%s", "no \"z\" key found in the json dictionary for a boundary file");
     }
     Json::Value rarray = rootval["r"];
     if(  rarray.isNull() )
     {
-        RCLCPP_FATAL(node->get_logger(), "no \"r\" key found in the json dictionary for a boundary file");
+        RCLCPP_FATAL(node->get_logger(), "%s", "no \"r\" key found in the json dictionary for a boundary file");
     }   
     std::array<uint32_t,4> sizes = {(uint32_t)xarray.size(), (uint32_t)yarray.size(), (uint32_t)zarray.size(),(uint32_t)rarray.size()};
     if ( !std::all_of(sizes.begin(), sizes.end(), [xarray](uint32_t i){return i==xarray.size();}) )
@@ -142,7 +143,7 @@ class NodeWrapper_
             {
                 this->node=node;
             }
-            listener =  this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>( "/session_data", 1, std::bind(&NodeWrapper_::sessionDataCallback, this, std::placeholders::_1)  );
+            listener =  this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>( "session_data", 1, std::bind(&NodeWrapper_::sessionDataCallback, this, std::placeholders::_1)  );
             current_session_data.reset(new deepracing_msgs::msg::TimestampedPacketSessionData);
             current_session_data->udp_packet.track_id=-1;
         }
@@ -183,15 +184,15 @@ int main(int argc, char** argv)
     }
     catch(const ament_index_cpp::PackageNotFoundError& e)
     {   
-        RCLCPP_WARN(node->get_logger(), "f1_datalogger was built as plain cmake (not ament), cannot locate it's install directory with ament");
+        RCLCPP_WARN(node->get_logger(), "%s", "f1_datalogger was built as plain cmake (not ament), cannot locate it's install directory with ament");
     }
     if (search_dirs.empty())
     {
-        RCLCPP_FATAL(node->get_logger(), "No directories specified to search for track files. Default location is the share directory of f1_datalogger or specified in the track_search_dirs ros parameter");
+        RCLCPP_FATAL(node->get_logger(), "%s", "No directories specified to search for track files. Default location is the share directory of f1_datalogger or specified in the track_search_dirs ros parameter");
     }
     std::stringstream ss;
     std::for_each(search_dirs.begin(), search_dirs.end(), [&ss](const std::string dir){ss<<std::endl<<dir;});
-    RCLCPP_INFO(node->get_logger(), "Searching in the following directories for track files (in order):%s", ss.str().c_str());
+    RCLCPP_INFO(node->get_logger(), "%s", "Searching in the following directories for track files (in order):%s", ss.str().c_str());
     std::string track_name = "";
     std::array<std::string,25> track_name_array = deepracing_ros::F1MsgUtils::track_names();
 
@@ -200,7 +201,7 @@ int main(int argc, char** argv)
         rclcpp::sleep_for(std::chrono::milliseconds(int(150)));
         rclcpp::spin_some(node);
         innercloudMSG.header.stamp = node->now();
-        RCLCPP_DEBUG(node->get_logger(), "Ran a spin.");
+        RCLCPP_DEBUG(node->get_logger(), "%s", "Ran a spin.");
         std::string active_track="";
         int8_t track_index = nw.current_session_data->udp_packet.track_id;
         if(track_index>=0 && track_index<track_name_array.size())

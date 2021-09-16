@@ -34,8 +34,8 @@ class VJoyControl(Node):
         self.controller = py_f1_interface.F1Interface(self.vjoy_index.get_parameter_value().integer_value)
         self.controller.setControl(0.0,0.0,0.0)      
 
-        self.status_sub = self.create_subscription(TimestampedPacketCarStatusData, "/cropped_publisher/status_data", self.statusPacketCB, 1)
-        self.telemery_sub = self.create_subscription(TimestampedPacketCarTelemetryData, "/cropped_publisher/telemetry_data", self.telemeryPacketCB, 1)
+        self.status_sub = self.create_subscription(TimestampedPacketCarStatusData, "/f1_game/status_data", self.statusPacketCB, 1)
+        self.telemery_sub = self.create_subscription(TimestampedPacketCarTelemetryData, "/f1_game/telemetry_data", self.telemeryPacketCB, 1)
 
         self.current_status_packet : CarStatusData = CarStatusData()
         self.current_telemetry_packet : CarTelemetryData = CarTelemetryData()
@@ -51,8 +51,9 @@ class VJoyControl(Node):
 
     def controlCB(self, control : CarControl):
         self.controller.setControl(control.steering, control.throttle, control.brake)
-        # if self.current_status_packet.drs_allowed and (not bool(self.current_telemetry_packet.drs)):
-        #     self.controller.pushDRS()
+        if self.current_status_packet.drs_allowed and (not bool(self.current_telemetry_packet.drs)):
+          #  self.get_logger().info("Pushing drs")
+            self.controller.pushDRS()
 
 def main(args=None):
     rclpy.init(args=args)

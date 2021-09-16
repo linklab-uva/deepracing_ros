@@ -35,12 +35,13 @@ def main(args=None):
     spinner.add_node(node)
     spinner.spin()
     rate = node.create_rate(120.0)
-
+    control = CarControl(steering=0.0, throttle=1.0, brake=0.0)
     try:
         while rclpy.ok():
-            control, lookahead_positions = node.getControl()
-            if control is not None:
-                control_pub.publish(control)
+            new_control, lookahead_positions = node.getControl()
+            if new_control is not None:
+                control = new_control
+            control_pub.publish(control)
             rate.sleep()
     except KeyboardInterrupt:
         pass

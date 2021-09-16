@@ -20,7 +20,7 @@ import torch
 import torch.nn as NN
 import torch.utils.data as data_utils
 import deepracing_models.nn_models.Models
-from deepracing_msgs.msg import CarControl
+from deepracing_msgs.msg import CarControl, TimestampedPacketCarStatusData, TimestampedPacketCarTelemetryData
 from nav_msgs.msg import Path
 from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion, PoseArray, Twist, TwistStamped
 from sensor_msgs.msg import PointCloud2
@@ -85,7 +85,7 @@ class PurePursuitControllerROS(Node):
         forward_dimension_param : Parameter = self.declare_parameter("forward_dimension", value=2)
         self.forward_dimension : int = forward_dimension_param.get_parameter_value().integer_value
 
-        base_link_param : Parameter = self.declare_parameter("base_link", value="rear_axis_middle_ground")
+        base_link_param : Parameter = self.declare_parameter("base_link", value="base_link")
         self.base_link : str = base_link_param.get_parameter_value().string_value
 
         publish_paths_param : Parameter = self.declare_parameter("publish_paths", value=False)
@@ -134,11 +134,25 @@ class PurePursuitControllerROS(Node):
         self.initSubscriptions()
 
         self.previous_steering = 0.0
+        self.drs_allowed = False
+        self.drs_enabled = False
+
+        self.prev_control : CarControl = CarControl()
 
     def initSubscriptions(self):
         update_qos = rclpy.qos.QoSProfile(depth=1)
+        self.telemetry_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketCarTelemetryData, '/f1_game/telemetry_data', self.telemetryCallback, update_qos)
+        self.status_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketCarStatusData, '/f1_game/status_data', self.statusCallback, update_qos)
         self.pose_sub : rclpy.subscription.Subscription = self.create_subscription(PoseStamped, 'car_pose', self.poseCallback, update_qos)
         self.velocity_sub : rclpy.subscription.Subscription = self.create_subscription(TwistStamped,'car_velocity',self.velocityCallback, update_qos)
+
+    def telemetryCallback(self, status_msg : TimestampedPacketCarTelemetryData):
+        player_idx = status_msg.udp_packet.header.player_car_index
+        self.drs_enabled = bool(status_msg.udp_packet.car_telemetry_data[player_idx].drs)
+
+    def statusCallback(self, status_msg : TimestampedPacketCarStatusData):
+        player_idx = status_msg.udp_packet.header.player_car_index
+        self.drs_allowed = bool(status_msg.udp_packet.car_status_data[player_idx].drs_allowed)
 
     def poseCallback(self, pose_msg : PoseStamped):
         self.get_logger().debug("Got a new pose: " + str(pose_msg))
@@ -166,16 +180,16 @@ class PurePursuitControllerROS(Node):
         now = self.get_clock().now()
         if lookahead_positions is None:
             self.get_logger().error("Returning None because lookahead_positions is None")
-            return None, None
+            return self.prev_control, None
         if v_local_forward is None:
             self.get_logger().error("Returning None because v_local_forward is None")
-            return None, lookahead_positions
+            return self.prev_control, lookahead_positions
         if self.velocity_semaphore.acquire(timeout=1.0):
             current_velocity = deepcopy(self.current_velocity)
             self.velocity_semaphore.release()
         else:
             self.get_logger().error("Returning None because unable to acquire velocity semaphore")
-            return None, lookahead_positions
+            return self.prev_control, lookahead_positions
         if self.current_pose is None:
             stamp = self.get_clock().now().to_msg()
         else:
@@ -193,23 +207,16 @@ class PurePursuitControllerROS(Node):
 
 
         speeds = torch.norm(v_local_forward, p=2, dim=1)
-        lookahead_distance = max(self.get_parameter("lookahead_gain").get_parameter_value().double_value*current_speed, 5.0)
+        lookahead_distance = max(self.get_parameter("lookahead_gain").get_parameter_value().double_value*current_speed, 2.0)
         lookahead_distance_vel = self.get_parameter("velocity_lookahead_gain").get_parameter_value().double_value*current_speed
 
         lookahead_index = torch.argmin(torch.abs(distances_forward-lookahead_distance))
         lookahead_index_vel = torch.argmin(torch.abs(distances_forward-lookahead_distance_vel))
 
-        if self.publish_lookahead_points:
-            pointheader = Header(stamp = stamp, frame_id=self.base_link)
-            point = Point(x=lookahead_positions[lookahead_index,0].item(), y=lookahead_positions[lookahead_index,1].item(), z=lookahead_positions[lookahead_index,2].item())
-            self.point_pub.publish(PointStamped(header=pointheader, point=point))
-
         lookaheadVector = lookahead_positions[lookahead_index]
-        lookaheadVectorVel = lookahead_positions[lookahead_index_vel]
-
         D = torch.norm(lookaheadVector, p=2)
         lookaheadDirection = lookaheadVector/D
-        alpha = torch.atan2(lookaheadDirection[self.lateral_dimension],lookaheadDirection[self.forward_dimension])
+        alpha = torch.atan2(lookaheadDirection[1],lookaheadDirection[0])
         
         full_lock_right = self.get_parameter("full_lock_right").get_parameter_value().double_value
         full_lock_left = self.get_parameter("full_lock_left").get_parameter_value().double_value
@@ -224,8 +231,18 @@ class PurePursuitControllerROS(Node):
             delta = left_steer_factor*physical_angle
         else:
             delta = right_steer_factor*physical_angle
+        # if self.drs_allowed:
+        #     velsetpoint = 1.0E5
+        #     self.prev_control = CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=1.0, brake=0.0)
+        #     return self.prev_control, lookahead_positions
+        # if self.drs_enabled:
+        #     velsetpoint = 1.0E5
+        #     self.prev_control = CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=1.0, brake=0.0)
+        #     return self.prev_control, lookahead_positions
         velsetpoint = speeds[lookahead_index_vel].item()
         if current_speed<velsetpoint:
-            return CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=1.0, brake=0.0), lookahead_positions
+            self.prev_control = CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=1.0, brake=0.0)
+            return self.prev_control, lookahead_positions
         else:
-            return CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=0.0, brake=1.0), lookahead_positions
+            self.prev_control = CarControl(header = Header(stamp = stamp, frame_id=self.base_link), steering=delta, throttle=0.0, brake=1.0)
+            return self.prev_control, lookahead_positions

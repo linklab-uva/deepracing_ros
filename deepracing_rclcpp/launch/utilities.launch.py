@@ -12,6 +12,6 @@ def generate_launch_description():
     config_file = DeclareLaunchArgument("config_file", default_value=os.path.join(config_dir, "tf_updater.yaml"))
     
     entries = [config_file]
-    entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='f1_boundary_publisher', executable='boundary_publisher', output='screen', parameters=[{"track_search_dirs": os.getenv("F1_TRACK_DIRS","").split(os.pathsep)}], remappings=[("/motion_data", "/cropped_publisher/motion_data"), ("/session_data", "/cropped_publisher/session_data")]))
-    entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='f1_tf_updater', executable='tf_updater', output='screen', parameters=[LaunchConfiguration(config_file.name)], remappings=[("/motion_data", "/cropped_publisher/motion_data"), ("/session_data", "/cropped_publisher/session_data")]))
+    entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='f1_boundary_publisher', executable='boundary_publisher', output='screen', parameters=[{"track_search_dirs": os.getenv("F1_TRACK_DIRS","").split(os.pathsep)}], remappings=[("motion_data", "/f1_game/motion_data"), ("session_data", "/f1_game/session_data")]))
+    entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='f1_tf_updater', executable='tf_updater', output='screen', parameters=[LaunchConfiguration(config_file.name)], remappings=[("motion_data", "/f1_game/motion_data"), ("session_data", "/f1_game/session_data")]))
     return LaunchDescription(entries)
