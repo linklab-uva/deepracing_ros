@@ -8,10 +8,11 @@
 #include "tf2_ros/static_transform_broadcaster.h"
 #include <tf2/LinearMath/Quaternion.h>
 #include <boost/math/constants/constants.hpp>
-#include <tf2/convert.h>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 #include "deepracing_ros/utils/f1_msg_utils.h"
+#include <tf2_eigen/tf2_eigen.h>
 
 
 class NodeWrapperTfUpdater_ 
@@ -26,11 +27,9 @@ class NodeWrapperTfUpdater_
      statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node));
      tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node));
      mapToTrack.header.frame_id = "map";
-     mapToTrack.header.stamp = this->node->now();
      mapToTrack.child_frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name;
 
      carToBaseLink.header.frame_id = deepracing_ros::F1MsgUtils::car_coordinate_name;
-     carToBaseLink.header.stamp = this->node->now();
      carToBaseLink.child_frame_id = "base_link";
 
      tf2::Quaternion quat;
@@ -43,34 +42,42 @@ class NodeWrapperTfUpdater_
      mapToTrack.transform.rotation.z = quat.z();
      mapToTrack.transform.rotation.w = quat.w();
 
-     node->declare_parameter("car_to_base_translation", std::vector<double>{0.0, 0.0, 0.0});
-     node->declare_parameter("car_to_base_quaternion", std::vector<double>{0.0, 0.0, 0.0, 1.0});
-     std::vector<double> car_to_base_translation = node->get_parameter("car_to_base_translation").as_double_array();
-     std::vector<double> car_to_base_quaternion = node->get_parameter("car_to_base_quaternion").as_double_array();
+     std::vector<double> car_to_base_translation = node->declare_parameter< std::vector<double> >("centroid_to_base_translation", std::vector<double>{-1.85, 0.0, 0.0});
+     if (car_to_base_translation.size()!=3)
+     {
+       throw rclcpp::exceptions::InvalidParameterValueException("\"centroid_to_base_translation\" must have exactly 3 values");
+     }
      carToBaseLink.transform.translation.x = car_to_base_translation.at(0);
      carToBaseLink.transform.translation.y = car_to_base_translation.at(1);
      carToBaseLink.transform.translation.z = car_to_base_translation.at(2);
-     carToBaseLink.transform.rotation.x = car_to_base_quaternion.at(0);
-     carToBaseLink.transform.rotation.y = car_to_base_quaternion.at(1);
-     carToBaseLink.transform.rotation.z = car_to_base_quaternion.at(2);
-     carToBaseLink.transform.rotation.w = car_to_base_quaternion.at(3);
+     carToBaseLink.transform.rotation.x = 0.0;
+     carToBaseLink.transform.rotation.y = 0.0;
+     carToBaseLink.transform.rotation.z = 0.0;
+     carToBaseLink.transform.rotation.w = 1.0;
+    
+     carToBaseLinkEigen = tf2::transformToEigen(carToBaseLink);
+     baseLinkToCarEigen = carToBaseLinkEigen.inverse();
 
 
-     this->statictfbroadcaster->sendTransform(mapToTrack);
      this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("motion_data", 1, std::bind(&NodeWrapperTfUpdater_::packetCallback, this, std::placeholders::_1));
      this->pose_publisher = this->node->create_publisher<geometry_msgs::msg::PoseStamped>("/ego_vehicle/pose", 1);
      this->twist_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("/ego_vehicle/velocity", 1);
+     this->twist_local_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("/ego_vehicle/velocity_local", 1);
+     this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("/ego_vehicle/odom", 1);
      
      
     }  
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketMotionData>::SharedPtr listener;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_publisher;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_publisher;
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_local_publisher;
+    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
 
     std::shared_ptr<rclcpp::Node> node;
     std::shared_ptr<tf2_ros::TransformBroadcaster> tfbroadcaster;
     std::shared_ptr<tf2_ros::StaticTransformBroadcaster> statictfbroadcaster;
     geometry_msgs::msg::TransformStamped mapToTrack, carToBaseLink;    
+    Eigen::Isometry3d carToBaseLinkEigen, baseLinkToCarEigen;
   private:
     void packetCallback(const deepracing_msgs::msg::TimestampedPacketMotionData::SharedPtr motion_data_packet)
     {
@@ -99,17 +106,13 @@ class NodeWrapperTfUpdater_
       Eigen::Vector3d upEigen = forwardEigen.cross(leftEigen);
       upEigen.normalize();
       Eigen::Matrix3d rotmat;
-      // rotmat.col(0) = leftEigen;
-      // rotmat.col(1) = upEigen;
-      // rotmat.col(2) = forwardEigen;
       rotmat.col(0) = forwardEigen;
       rotmat.col(1) = leftEigen;
       rotmat.col(2) = upEigen;
       Eigen::Quaterniond rotationEigen(rotmat);
       rotationEigen.normalize();
       geometry_msgs::msg::TransformStamped transformMsg;
-      transformMsg.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
-      transformMsg.header.set__stamp(motion_data.world_position.header.stamp);
+      transformMsg.set__header(motion_data_packet->header);
       transformMsg.set__child_frame_id(deepracing_ros::F1MsgUtils::car_coordinate_name);
       transformMsg.transform.rotation.x = rotationEigen.x();
       transformMsg.transform.rotation.y = rotationEigen.y();
@@ -120,27 +123,82 @@ class NodeWrapperTfUpdater_
       transformMsg.transform.translation.set__x(positionROS.point.x);
       transformMsg.transform.translation.set__y(positionROS.point.y);
       transformMsg.transform.translation.set__z(positionROS.point.z);
-      this->tfbroadcaster->sendTransform(transformMsg);
-      this->statictfbroadcaster->sendTransform(mapToTrack);
 
-      carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
-      this->statictfbroadcaster->sendTransform(carToBaseLink);
       
+      Eigen::Isometry3d trackToCarEigen = tf2::transformToEigen(transformMsg);
+      Eigen::Isometry3d trackToBLEigen = trackToCarEigen * carToBaseLinkEigen;
+
+      Eigen::Vector3d trackToBL_translation(trackToBLEigen.translation());
+      Eigen::Quaterniond trackToBL_quaternion(trackToBLEigen.rotation());
+
 
       geometry_msgs::msg::PoseStamped pose;
       pose.set__header(transformMsg.header);
-      pose.pose.position.set__x(transformMsg.transform.translation.x);
-      pose.pose.position.set__y(transformMsg.transform.translation.y);
-      pose.pose.position.set__z(transformMsg.transform.translation.z);
-      pose.pose.set__orientation(transformMsg.transform.rotation);
+      pose.pose.position.set__x(trackToBL_translation.x());
+      pose.pose.position.set__y(trackToBL_translation.y());
+      pose.pose.position.set__z(trackToBL_translation.z());
+      pose.pose.orientation.set__x(trackToBL_quaternion.x());
+      pose.pose.orientation.set__y(trackToBL_quaternion.y());
+      pose.pose.orientation.set__z(trackToBL_quaternion.z());
+      pose.pose.orientation.set__w(trackToBL_quaternion.w());
 
-      this->pose_publisher->publish(pose);
+      
+      //Need to come back to this.  It's not clear exactly what angular velocity is coming off the UDP stream. Will follow up with CodeMasters on that.
+      // Eigen::Vector3d 
+      Eigen::Vector3d centroidVelEigenLocal(motion_data_packet->udp_packet.local_velocity.z, motion_data_packet->udp_packet.local_velocity.x, motion_data_packet->udp_packet.local_velocity.y);
+      
+      Eigen::Vector3d centroidAngVelEigenGlobal(motion_data_packet->udp_packet.angular_velocity.x, motion_data_packet->udp_packet.angular_velocity.y, motion_data_packet->udp_packet.angular_velocity.z);
+      Eigen::Vector3d centroidAngVelEigenLocal = trackToBLEigen.rotation().inverse()*centroidAngVelEigenGlobal;
+      // if (centroidAngVelEigenLocal.z()>=0)
+      // {
+      //   centroidAngVelEigenLocal = Eigen::Vector3d(0.0,0.0, centroidAngVelEigenLocal.norm());
+      // }
+      // else
+      // {
+      //   centroidAngVelEigenLocal = Eigen::Vector3d(0.0,0.0, -centroidAngVelEigenLocal.norm());
+      // }
+     
+      Eigen::Vector3d baseLinkToCarVec(baseLinkToCarEigen.translation());
+      Eigen::Vector3d localVelEigen = centroidVelEigenLocal - centroidAngVelEigenLocal.cross(baseLinkToCarVec);
+      localVelEigen = Eigen::Vector3d(localVelEigen.norm(), 0.0, 0.0);
 
       geometry_msgs::msg::TwistStamped car_velocity;
       car_velocity.set__header(transformMsg.header);
       car_velocity.twist.set__linear(motion_data.world_velocity.vector);
       car_velocity.twist.set__angular(motion_data_packet->udp_packet.angular_velocity);
+
+      geometry_msgs::msg::TwistStamped car_velocity_local;
+      car_velocity_local.header.set__stamp(transformMsg.header.stamp);
+      car_velocity_local.header.set__frame_id("base_link");
+      car_velocity_local.twist.linear.set__x(localVelEigen.x());
+      car_velocity_local.twist.linear.set__y(localVelEigen.y());
+      car_velocity_local.twist.linear.set__z(localVelEigen.z());
+      car_velocity_local.twist.angular.set__x(centroidAngVelEigenLocal.x());
+      car_velocity_local.twist.angular.set__y(centroidAngVelEigenLocal.y());
+      car_velocity_local.twist.angular.set__z(centroidAngVelEigenLocal.z());
+
+      nav_msgs::msg::Odometry odom;
+      odom.set__header(transformMsg.header);
+      odom.set__child_frame_id(car_velocity_local.header.frame_id);
+      odom.pose.set__pose(pose.pose);
+      odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14]=0.0025;
+      odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35]=1.0E-4;
+
+      odom.twist.set__twist(car_velocity_local.twist);
+      odom.twist.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14]=0.000225;
+      odom.twist.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35]=2.0E-5;
+
+      carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
+      mapToTrack.header.set__stamp(motion_data.world_position.header.stamp);
+      this->statictfbroadcaster->sendTransform(carToBaseLink);
+      this->statictfbroadcaster->sendTransform(mapToTrack);
+
+      this->tfbroadcaster->sendTransform(transformMsg);
       this->twist_publisher->publish(car_velocity);
+      this->twist_local_publisher->publish(car_velocity_local);
+      this->pose_publisher->publish(pose);
+      this->odom_publisher->publish(odom);
+
       
 
 
@@ -151,7 +209,7 @@ int main(int argc, char *argv[]) {
   NodeWrapperTfUpdater_ nw;
   std::shared_ptr<rclcpp::Node> node = nw.node;
   RCLCPP_INFO(node->get_logger(), "Updating TF data");
-  int num_threads_ = node->declare_parameter<int>("num_threads", 3);
+  int num_threads_ = node->declare_parameter<int>("num_threads", 0);
   size_t num_threads;
   if (num_threads_<=0){
     num_threads = 0;
