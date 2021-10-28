@@ -1,3 +1,3 @@
 PacketSessionData udp_packet
-# std_msgs/Header header
-float64 timestamp
+std_msgs/Header header
+#float64 timestamp

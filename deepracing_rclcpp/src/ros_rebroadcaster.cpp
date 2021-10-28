@@ -26,26 +26,28 @@
 #include <rclcpp/executor.hpp>
 #include <rclcpp/executor_options.hpp>
 #include <rclcpp/exceptions.hpp>
+#include <rclcpp/time.hpp>
 #include <chrono>
 #include <cmath>
+#include <rosgraph_msgs/msg/clock.hpp>
 
 // #include <image_transport/camera_publisher.h>
 // #include <image_transport/transport_hints.h>
 namespace deepf1
 {
-inline rclcpp::Time fromDouble(const double& ts)
+inline rclcpp::Time fromDouble(const double& ts, rcl_clock_type_t clock_type = rcl_clock_type_t::RCL_SYSTEM_TIME)
 {
   double fractpart, intpart;
   fractpart = modf(ts, &intpart);  
   int32_t sec =(int32_t)(intpart);
   uint32_t nanosec =(uint32_t)(fractpart*1E9);
-  return rclcpp::Time(sec, nanosec, RCL_SYSTEM_TIME);
+  return rclcpp::Time(sec, nanosec, clock_type);
 }
 template < typename FloatType = double, class RatioType = std::ratio<1,1> >
 inline rclcpp::Time fromDeepf1Timestamp(const deepf1::TimePoint& timestamp, const deepf1::TimePoint& begin = deepf1::TimePoint())
 {
   std::chrono::duration<FloatType, RatioType> dt = timestamp - begin;
-  return fromDouble((double)dt.count());
+  return fromDouble((double)dt.count(), rcl_clock_type_t::RCL_STEADY_TIME);
 }
 }
 class ROSRebroadcaster_2018DataGrabHandler : public deepf1::IF12018DataGrabHandler
@@ -60,6 +62,13 @@ public:
     all_cars_description.description = "Whether to publish information about all 20 cars in the session, or just the ego vehicle. True means publish information about all cars";
     all_cars_description.read_only = false;
     all_cars_param_ = node_->declare_parameter<bool>("publish_all_cars", true, all_cars_description);
+    node_->get_parameter<std::string>("time_source", this->time_source);
+    // use_sim_time_ = node_->declare_parameter<bool>("use_sim_time");
+    if (!(this->time_source=="ROS2"))
+    {
+      clock_publisher_ = node_->create_publisher<rosgraph_msgs::msg::Clock>("/clock", 1);
+    }
+    
   }
   bool isReady() override
   {
@@ -67,27 +76,27 @@ public:
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketCarSetupData& udp_data) override
   {
-    //rclcpp::Time now = this->node_->now();
     deepracing_msgs::msg::TimestampedPacketCarSetupData rosdata;
-    //rosdata.header.stamp = now;
+    setStamp(rosdata.header.stamp, udp_data.data.m_header, udp_data.timestamp);
+    rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
-    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     setup_data_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketCarStatusData& udp_data) override
-  {
-    
+  {    
     deepracing_msgs::msg::TimestampedPacketCarStatusData rosdata;
+    setStamp(rosdata.header.stamp, udp_data.data.m_header, udp_data.timestamp);
+    rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
-    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     status_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketCarTelemetryData& udp_data) override
   {
     
     deepracing_msgs::msg::TimestampedPacketCarTelemetryData rosdata;
+    setStamp(rosdata.header.stamp, udp_data.data.m_header, udp_data.timestamp);
+    rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
-    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     telemetry_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketEventData& data) override
@@ -96,25 +105,31 @@ public:
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketLapData& udp_data) override
   {
     deepracing_msgs::msg::TimestampedPacketLapData rosdata;
+    setStamp(rosdata.header.stamp, udp_data.data.m_header, udp_data.timestamp);
+    rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
-    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     lap_data_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketMotionData& udp_data) override
   {
-    rclcpp::Time now = this->node_->now();
     deepracing_msgs::msg::TimestampedPacketMotionData rosdata;
-    rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
-    // rosdata.header.frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name;
-    for (deepracing_msgs::msg::CarMotionData & motion_data : rosdata.udp_packet.car_motion_data)
+    setStamp(rosdata.header.stamp, udp_data.data.m_header, udp_data.timestamp);
+    if (clock_publisher_)
     {
-      motion_data.world_forward_dir.header.stamp = now;
-      motion_data.world_position.header.stamp = now;
-      motion_data.world_right_dir.header.stamp = now;
-      motion_data.world_up_dir.header.stamp = now;
-      motion_data.world_velocity.header.stamp = now;
+      rosgraph_msgs::msg::Clock clockmsg;
+      clockmsg.set__clock(rosdata.header.stamp);
+      clock_publisher_->publish(clockmsg);
     }
-    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
+    rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
+    rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
+    for(deepracing_msgs::msg::CarMotionData & motion_data : rosdata.udp_packet.car_motion_data)
+    {
+      motion_data.world_forward_dir.header.stamp =
+      motion_data.world_position.header.stamp = 
+      motion_data.world_right_dir.header.stamp =
+      motion_data.world_up_dir.header.stamp = 
+      motion_data.world_velocity.header.stamp = rosdata.header.stamp;
+    }
     motion_publisher_->publish(rosdata);
   }
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketParticipantsData& data) override
@@ -123,8 +138,9 @@ public:
   virtual inline void handleData(const deepf1::twenty_eighteen::TimestampedPacketSessionData& udp_data) override
   {
     deepracing_msgs::msg::TimestampedPacketSessionData rosdata;
+    setStamp(rosdata.header.stamp, udp_data.data.m_header, udp_data.timestamp);
+    rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data);
-    rosdata.timestamp = std::chrono::duration<double, std::milli>(udp_data.timestamp - this->begin_).count();
     session_publisher_->publish(rosdata);
   }
   void init(const std::string& host, unsigned int port, const deepf1::TimePoint& begin) override
@@ -149,13 +165,33 @@ public:
   std::shared_ptr<rclcpp::Publisher <deepracing_msgs::msg::TimestampedPacketCarSetupData> > setup_data_publisher_;
   std::shared_ptr<rclcpp::Publisher <deepracing_msgs::msg::TimestampedPacketCarStatusData> > status_publisher_;
   std::shared_ptr<rclcpp::Publisher <deepracing_msgs::msg::TimestampedPacketCarTelemetryData> > telemetry_publisher_;
+  std::shared_ptr<rclcpp::Publisher <rosgraph_msgs::msg::Clock> > clock_publisher_;
   std::string time_source;
 private:
   bool ready_;
   std::chrono::high_resolution_clock::time_point begin_;
   std::string host_;
   unsigned int port_;
-  bool all_cars_param_;
+  bool all_cars_param_, use_sim_time_;
+  void setStamp(builtin_interfaces::msg::Time& stamp, const deepf1::twenty_eighteen::PacketHeader& f1_header, const deepf1::TimePoint& deepracing_time)
+  {
+    if(this->time_source == "ROS2")
+    {
+      stamp = this->node_->get_clock()->now();
+    }
+    else if(this->time_source == "F1")
+    {
+      stamp = deepf1::fromDouble((double)f1_header.m_sessionTime, rcl_clock_type_t::RCL_STEADY_TIME);
+    }
+    else if(this->time_source == "DeepRacing")
+    {
+      stamp = deepf1::fromDeepf1Timestamp(deepracing_time, this->begin_);
+    }
+    else
+    {
+      throw std::runtime_error("\"time_source\" param set to invalid value: " + this->time_source);
+    }
+  }
 };
 class ROSRebroadcaster_FrameGrabHandler : public deepf1::IF1FrameGrabHandler
 {
@@ -195,6 +231,8 @@ public:
         
     // this->it_publisher_ = it.advertise("images", 1, true);
     this->it_publisher_ = it.advertiseCamera("images", 1, true);
+
+    node_->get_parameter<std::string>("time_source", this->time_source);
   }
   virtual ~ROSRebroadcaster_FrameGrabHandler()
   {
@@ -206,15 +244,20 @@ public:
   void handleData(const deepf1::TimestampedImageData& data) override
   {
     std_msgs::msg::Header header;
+    
     if(time_source == "ROS2")
     {
       header.stamp = this->node_->get_clock()->now();
     }
-    else
+    else if ((time_source == "F1") || (time_source == "DeepRacing"))
     {
       header.stamp = deepf1::fromDeepf1Timestamp(data.timestamp, this->begin_);
     }
-    header.frame_id = "car";
+    else
+    {
+      throw std::runtime_error("\"time_source\" param set to invalid value: " + time_source);
+    }
+    header.frame_id = deepracing_ros::F1MsgUtils::car_coordinate_name;
     const cv::Mat& imin = data.image;
    
     cv::Mat rgbimage;
@@ -251,6 +294,7 @@ public:
     this->it_publisher_.publish( bridge_image.toImageMsg(), camera_info_ptr);
 
     // this->it_publisher_.publish( bridge_image.toImageMsg() );
+    
 
   }
   void init(const deepf1::TimePoint& begin, const cv::Size& window_size) override
@@ -265,9 +309,9 @@ public:
   int crop_width_;
   int top_left_row_;
   int top_left_col_;
-
-
   std::string time_source;
+
+
 private:
   double full_image_resize_factor_;
   bool ready;
@@ -301,6 +345,7 @@ int main(int argc, char *argv[])
   const std::shared_ptr<rclcpp::Node>& node = nw.node_;
   rcl_interfaces::msg::ParameterDescriptor time_source_description;
   time_source_description.name="time_source";
+  time_source_description.read_only=false;
   time_source_description.type=rclcpp::PARAMETER_STRING;
   std::stringstream tsdesc_stream;
   tsdesc_stream<<"What time source to use for populating the header timestamps of the various ROS2 messages."<<std::endl;
@@ -309,9 +354,9 @@ int main(int argc, char *argv[])
   tsdesc_stream<<"\"DeepRacing\". Both images and UDP types will use the DeepRacing logger's internal C++ std::chrono clock."<<std::endl;
   tsdesc_stream<<"\"F1\". UDP types will use the session timestamp off the UDP stream. Images will use the DeepRacing logger clock."<<std::endl;
   time_source_description.description = tsdesc_stream.str();
-  rclcpp::ParameterValue time_source_p = node->declare_parameter(time_source_description.name, rclcpp::ParameterValue("ROS2"), time_source_description);
+  std::string time_source_p = node->declare_parameter<std::string>(time_source_description.name, "ROS2", time_source_description);
   std::set<std::string> acceptable_time_sources = {"ROS2", "DeepRacing", "F1"};
-  if (acceptable_time_sources.find(time_source_p.get<std::string>())==acceptable_time_sources.end())
+  if (acceptable_time_sources.find(time_source_p)==acceptable_time_sources.end())
   {
     throw rclcpp::exceptions::InvalidParameterValueException("time_source parameter must be on of: {\"ROS2\", \"DeepRacing\", \"F1\"}");
   }
@@ -359,8 +404,6 @@ int main(int argc, char *argv[])
               "Resizing cropped area to (HxW)  (%d, %d)\n"
               ,nw.image_handler->crop_height_, nw.image_handler->crop_width_, nw.image_handler->resize_height_, nw.image_handler->resize_width_);
   
-  nw.datagrab_handler->time_source = time_source_p.get<std::string>();
-  nw.image_handler->time_source = time_source_p.get<std::string>();
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr cb = node->add_on_set_parameters_callback([nw]
   (const std::vector<rclcpp::Parameter> & params)
   {
