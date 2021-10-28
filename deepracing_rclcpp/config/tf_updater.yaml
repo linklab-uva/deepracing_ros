@@ -1,4 +1,4 @@
 f1_tf_updater:
     ros__parameters:
-        car_to_base_translation: [0.0, -0.2, -1.95]
-        car_to_base_quaternion: [0.0,0.0,0.0,1.0]
+        centroid_to_base_translation: [-1.85, 0.0, 0.0]
+        use_sim_time: True
