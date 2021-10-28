@@ -9,10 +9,11 @@ import numpy.linalg as la
 import scipy.spatial.transform
 import math
 import struct
-from typing import List
+from typing import List, Union
 from scipy.spatial.transform import Rotation as Rot
 import deepracing
 import torch
+import sys
 # _DATATYPES = {
 # PointField.INT8    : ('b', 1),\
 # PointField.UINT8  : ('B', 1),\
@@ -104,7 +105,7 @@ def pointCloud2ToNumpy(cloud: PointCloud2, field_names=None, skip_nans=False, uv
                   yield unpack_from(data, offset)
                   offset += point_step
 
-def arrayToPointCloud2(pointsarray : [torch.Tensor, np.ndarray], field_names : List[str], header : Header, is_bigendian = False):
+def arrayToPointCloud2(pointsarray : Union[torch.Tensor, np.ndarray], field_names : List[str], header : Header, is_bigendian = False):
    if isinstance(pointsarray, torch.Tensor):
       points = pointsarray.detach().cpu().numpy()
    elif isinstance(pointsarray, np.ndarray):
@@ -191,16 +192,20 @@ def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, devi
    else:
       covariances = None
    return torch.as_tensor(ptsnp.copy(), device=device, dtype=dtype), covariances
-def transformMsgToTorch(transform_msg: geo_msgs.Transform, dtype=torch.float32, device=torch.device("cpu")):
-   rtn = torch.eye(4, dtype=dtype, device=device, requires_grad=False)
+   
+def transformMsgToTorch(transform_msg: geo_msgs.Transform, dtype=torch.float32, device=torch.device("cpu"), requires_grad=False):
+   rtn = torch.eye(4, dtype=dtype, device=device, requires_grad=requires_grad)
    rtn[0:3,0:3] = torch.as_tensor(Rot.from_quat(np.array([transform_msg.rotation.x, transform_msg.rotation.y, transform_msg.rotation.z, transform_msg.rotation.w], copy=False)).as_matrix().copy(), dtype=dtype, device=device)
    rtn[0:3,3] = torch.as_tensor(np.array([transform_msg.translation.x, transform_msg.translation.y, transform_msg.translation.z]), dtype=dtype, device=device)
    return rtn
-def poseMsgToTorch(pose_msg: geo_msgs.Pose, dtype=torch.float32, device=torch.device("cpu")):
-   rtn = torch.eye(4, dtype=dtype, device=device, requires_grad=False)
-   rtn[0:3,0:3] = torch.as_tensor(Rot.from_quat(np.array([pose_msg.orientation.x, pose_msg.orientation.y, pose_msg.orientation.z, pose_msg.orientation.w], copy=False)).as_matrix().copy(), dtype=dtype, device=device)
-   rtn[0:3,3] = torch.as_tensor(np.array([pose_msg.position.x, pose_msg.position.y, pose_msg.position.z]), dtype=dtype, device=device)
+
+def poseMsgToTorch(pose_msg: geo_msgs.Pose, dtype=torch.float32, device=torch.device("cpu"), requires_grad=False) ->  torch.Tensor:
+   rtn = torch.eye(4, dtype=dtype, device=device, requires_grad=requires_grad)
+   r : Rot = Rot.from_quat([pose_msg.orientation.x, pose_msg.orientation.y, pose_msg.orientation.z, pose_msg.orientation.w])
+   rtn[0:3,0:3] = torch.as_tensor(r.as_matrix(), dtype=dtype, device=device).requires_grad_(requires_grad)
+   rtn[0:3,3] = torch.as_tensor([pose_msg.position.x, pose_msg.position.y, pose_msg.position.z], dtype=dtype, device=device).requires_grad_(requires_grad)
    return rtn
+
 def pointMsgToTorch(point_msg: geo_msgs.Point, dtype=torch.float32, device=torch.device("cpu")):
    return torch.as_tensor([point_msg.x, point_msg.y, point_msg.z], dtype=dtype, device=device)
 
