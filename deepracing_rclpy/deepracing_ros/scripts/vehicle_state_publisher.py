@@ -38,7 +38,7 @@ class DriverStatePublisher(Node):
         self.lap_data_sub : Subscription = self.create_subscription(TimestampedPacketLapData, "lap_data", self.lapDataCB, 1)
         self.motion_data_sub : Subscription = self.create_subscription(TimestampedPacketMotionData, "motion_data", self.motionPacketCB, 1)
 
-        self.pose_array_pub : Publisher = self.create_publisher(PoseArray, "pose_arrays", 1)
+        self.pose_array_pub : Publisher = self.create_publisher(PoseArray, "driver_poses", 1)
         self.driver_state_pub : Publisher = self.create_publisher(DriverStates, "driver_states", 1)
 
 

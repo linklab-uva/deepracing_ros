@@ -14,5 +14,6 @@ def generate_launch_description():
     
     entries = [config_file,use_sim_time]
     entries.append(launch_ros.actions.Node(package='deepracing_rclpy', name='f1_boundary_publisher', executable='boundary_publisher', output='screen', parameters=[{"track_search_dirs": os.getenv("F1_TRACK_DIRS","").split(os.pathsep), "use_sim_time" : LaunchConfiguration(use_sim_time.name)}], remappings=[("session_data", "/f1_game/session_data")]))
+    entries.append(launch_ros.actions.Node(package='deepracing_rclpy', name='vehicle_state_publisher', executable='vehicle_state_publisher', output='screen', parameters=[{"use_sim_time" : LaunchConfiguration(use_sim_time.name)}], remappings=[("motion_data", "/f1_game/motion_data"), ("lap_data", "/f1_game/lap_data")]))
     entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='f1_tf_updater', executable='tf_updater', output='screen', parameters=[LaunchConfiguration(config_file.name), {"use_sim_time" : LaunchConfiguration(use_sim_time.name)}], remappings=[("motion_data", "/f1_game/motion_data"), ("session_data", "/f1_game/session_data")]))
     return LaunchDescription(entries)
