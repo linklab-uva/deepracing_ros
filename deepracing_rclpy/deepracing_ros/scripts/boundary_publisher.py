@@ -118,5 +118,5 @@ def main(args=None):
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     executor : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor(3)
     executor.add_node(node)
-    node.create_timer(.1, node.timerCB)
+    node.create_timer(.05, node.timerCB)
     executor.spin()
