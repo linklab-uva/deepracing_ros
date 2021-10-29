@@ -6,4 +6,3 @@
     i_clamp_max: 0.75
     i_clamp_min: -0.75
     antiwindup: True
-    frequency: 35.0
