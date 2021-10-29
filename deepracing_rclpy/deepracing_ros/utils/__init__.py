@@ -1,9 +1,9 @@
 import rclpy, rclpy.executors as executors
 import threading
 class AsyncSpinner():
-    def __init__(self, executor : executors.Executor):
+    def __init__(self, executor : executors.Executor, daemon=True):
         self.executor : rclpy.executors.Executor = executor
-        self.thread : threading.Thread = threading.Thread(target=self.executor.spin, daemon=True)
+        self.thread : threading.Thread = threading.Thread(target=self.executor.spin, daemon=daemon)
     def spin(self):
         self.thread.start()
     def add_node(self, node):
