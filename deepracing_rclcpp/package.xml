@@ -9,8 +9,9 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>f1_datalogger</depend>
+  <depend>control_toolbox</depend>
   <depend>deepracing_msgs</depend>
+  <depend>f1_datalogger</depend>
   <depend>geometry_msgs</depend>
   <depend>image_tools</depend>
   <depend>image_transport</depend>

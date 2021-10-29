@@ -27,6 +27,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
+find_package(control_toolbox REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)
 find_package(laser_geometry REQUIRED)
@@ -74,9 +75,12 @@ target_link_libraries(tf_updater
  Eigen3::Eigen
 )
 
+add_executable(velocity_control_node src/velocity_control_node.cpp)
+ament_target_dependencies(velocity_control_node control_toolbox deepracing_msgs geometry_msgs nav_msgs rclcpp std_msgs)
 
 set(nodes_to_install_
   tf_updater
+  velocity_control_node
 )
 
 
