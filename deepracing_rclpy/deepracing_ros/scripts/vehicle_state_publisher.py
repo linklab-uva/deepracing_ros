@@ -86,8 +86,15 @@ class DriverStatePublisher(Node):
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
-    spinner : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor(2)
     node = DriverStatePublisher()
+    num_threads_param : rclpy.Parameter = node.declare_parameter("num_threads", 0)
+    num_threads : int = num_threads_param.get_parameter_value().integer_value
+    if num_threads<=0:
+        node.get_logger().info("Spinning with number of CPU cores")
+        spinner : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor(None)
+    else:
+        node.get_logger().info("Spinning with %d threads" % (num_threads,))
+        spinner : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor(num_threads)
     spinner.add_node(node)
     try:
         spinner.spin()
