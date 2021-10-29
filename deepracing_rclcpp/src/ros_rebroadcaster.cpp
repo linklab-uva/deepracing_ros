@@ -122,13 +122,22 @@ public:
     }
     rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
     rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(udp_data.data, all_cars_param_);
-    for(deepracing_msgs::msg::CarMotionData & motion_data : rosdata.udp_packet.car_motion_data)
+    deepracing_msgs::msg::CarMotionData& ego_motion_data = rosdata.udp_packet.car_motion_data.at(rosdata.udp_packet.header.player_car_index);
+    ego_motion_data.world_forward_dir.header.stamp =
+    ego_motion_data.world_position.header.stamp = 
+    ego_motion_data.world_right_dir.header.stamp =
+    ego_motion_data.world_up_dir.header.stamp = 
+    ego_motion_data.world_velocity.header.stamp = rosdata.header.stamp;
+    if (all_cars_param_)
     {
-      motion_data.world_forward_dir.header.stamp =
-      motion_data.world_position.header.stamp = 
-      motion_data.world_right_dir.header.stamp =
-      motion_data.world_up_dir.header.stamp = 
-      motion_data.world_velocity.header.stamp = rosdata.header.stamp;
+      for(deepracing_msgs::msg::CarMotionData & motion_data : rosdata.udp_packet.car_motion_data)
+      {
+        motion_data.world_forward_dir.header.stamp =
+        motion_data.world_position.header.stamp = 
+        motion_data.world_right_dir.header.stamp =
+        motion_data.world_up_dir.header.stamp = 
+        motion_data.world_velocity.header.stamp = rosdata.header.stamp;
+      }
     }
     motion_publisher_->publish(rosdata);
   }
