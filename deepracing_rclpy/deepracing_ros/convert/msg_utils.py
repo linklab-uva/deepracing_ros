@@ -157,7 +157,7 @@ def extractOrientation(packet : drmsgs.PacketMotionData, car_index = None) -> sc
 
    upvector = np.cross(rightvector,forwardvector)
    upvector = upvector/la.norm(upvector)
-   rotationmat = np.column_stack([-rightvector,upvector,forwardvector])
+   rotationmat = np.column_stack([forwardvector,-rightvector,upvector])
    return scipy.spatial.transform.Rotation.from_matrix(rotationmat)
 
 def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
