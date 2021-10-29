@@ -10,7 +10,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     config_dir = os.path.join(get_package_share_directory("deepracing_rclcpp"),"config")
     config_file = DeclareLaunchArgument("config_file", default_value=os.path.join(config_dir, "velocity_pid.yaml"))
-    frequency = DeclareLaunchArgument("frequency", default_value="100.0")
+    frequency = DeclareLaunchArgument("frequency", default_value="20.0")
     with_acceleration = DeclareLaunchArgument("with_acceleration", default_value="false")
     
     entries = [config_file, frequency, with_acceleration]
