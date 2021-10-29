@@ -31,6 +31,7 @@ find_package(control_toolbox REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)
 find_package(laser_geometry REQUIRED)
+find_package(message_filters REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosidl_default_runtime REQUIRED)
@@ -76,7 +77,10 @@ target_link_libraries(tf_updater
 )
 
 add_executable(velocity_control_node src/velocity_control_node.cpp)
-ament_target_dependencies(velocity_control_node control_toolbox deepracing_msgs geometry_msgs nav_msgs rclcpp std_msgs)
+ament_target_dependencies(velocity_control_node control_toolbox deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
+target_link_libraries(velocity_control_node
+ Eigen3::Eigen
+)
 
 set(nodes_to_install_
   tf_updater
