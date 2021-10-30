@@ -83,12 +83,7 @@ class OraclePurePursuitControllerROS(PPC):
         self.racelinespeeds = None
         self.racelinedists = None
         self.racelinetimes = None
-        self.racelinespline : scipy.interpolate.BSpline = None
 
-        print(self.raceline)
-        print(self.racelinedists)
-        print(self.racelinetimes)
-        print(self.racelinespline)
 
         plot_param : Parameter = self.declare_parameter("plot", value=False)
         self.plot : bool = plot_param.get_parameter_value().bool_value
@@ -127,17 +122,17 @@ class OraclePurePursuitControllerROS(PPC):
             raceline[0:3,i] = pt[0:3]
             racelinetimes[i] = pt[3]
             racelinespeeds[i] = pt[4]
-        racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(racelinetimes.cpu().numpy().copy(), raceline[0:3].cpu().numpy().copy().transpose(), bc_type="natural")
+        # racelinetimes[(racelinetimes.shape[0]-20):] *= 0.85
+        # racelinetimes[0:20] *= 0.85
         self.racelineframe=raceline_pc.header.frame_id
         self.raceline=raceline
         self.racelinetimes=racelinetimes
         self.racelinespeeds=racelinespeeds
-        self.racelinespline=racelinespline   
 
        
         
     def getTrajectory(self):
-        if (self.racelineframe is None)  or (self.raceline is None) or (self.racelinespline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None):
+        if (self.racelineframe is None)  or (self.raceline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None):
             self.get_logger().info("Returning None because raceline not yet received")
             return None, None, None
 
