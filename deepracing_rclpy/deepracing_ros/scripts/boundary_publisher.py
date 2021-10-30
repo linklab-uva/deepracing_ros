@@ -16,7 +16,6 @@ import json
 import numpy as np
 from typing import List
 
-
 class BoundaryPubNode(Node):
     def __init__(self):
         super(BoundaryPubNode, self).__init__('boundary_pub_node')
@@ -52,6 +51,7 @@ class BoundaryPubNode(Node):
     def sessionDataCB(self, session_data : deepracing_msgs.msg.TimestampedPacketSessionData):
         idx = session_data.udp_packet.track_id
         if not (idx==self.current_track_id):
+            now = self.get_clock().now()
             racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_racingline.json", self.search_dirs)
             innerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_innerlimit.json", self.search_dirs)
             outerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_outerlimit.json", self.search_dirs)
@@ -61,7 +61,7 @@ class BoundaryPubNode(Node):
                 raceline = raceline.astype(np.float32)
                 raceline_msg : sensor_msgs.msg.PointCloud2 = sensor_msgs.msg.PointCloud2()
                 raceline_msg.fields=self.raceline_fields
-                raceline_msg.header=std_msgs.msg.Header(frame_id=deepracing_ros.world_coordinate_name, stamp=self.get_clock().now().to_msg())
+                raceline_msg.header=std_msgs.msg.Header(frame_id=deepracing_ros.world_coordinate_name, stamp=now.to_msg())
                 raceline_msg.is_bigendian=False
                 raceline_msg.is_dense=True
                 raceline_msg.height=1
@@ -97,10 +97,12 @@ class BoundaryPubNode(Node):
                 outerboundary_msg.point_step=4*len(outerboundary_msg.fields)
                 outerboundary_msg.row_step=outerboundary_msg.point_step*outerboundary_msg.width
                 outerboundary_msg.data=outerboundary.flatten().tobytes()
+
             self.current_track_id = idx
             self.current_racingline = raceline_msg
             self.current_innerboundary = innerboundary_msg
             self.current_outerboundary = outerboundary_msg
+
     def timerCB(self):
         if self.current_racingline is not None:
             self.racingline_pub.publish(self.current_racingline)
@@ -118,5 +120,5 @@ def main(args=None):
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     executor : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor(3)
     executor.add_node(node)
-    node.create_timer(.05, node.timerCB)
+    node.create_timer(1.0/40.0, node.timerCB)
     executor.spin()
