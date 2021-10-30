@@ -184,7 +184,8 @@ class OraclePurePursuitControllerROS(PPC):
             trajpoint.longitudinal_velocity_mps=speedsbcurve[i].item()
             trajpoint.acceleration_mps2=longitudinal_accels[i].item()
             fracpart, intpart = math.modf((tsamp[0,i]*dt).item())
-            trajpoint.time_from_start=Duration(seconds=int(intpart), nanoseconds=int(fracpart*1.0E9)).to_msg()
+            trajpoint.time_from_start.sec=int(intpart)
+            trajpoint.time_from_start.nanosec=int(fracpart*1.0E9)
             trajectory_msg.points.append(trajpoint)
 
 
