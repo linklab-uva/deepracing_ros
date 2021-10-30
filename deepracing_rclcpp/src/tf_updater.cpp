@@ -56,6 +56,7 @@ class NodeWrapperTfUpdater_
      carToBaseLink.transform.rotation.w = 1.0;
     
      carToBaseLinkEigen = tf2::transformToEigen(carToBaseLink);
+     mapToTrackEigen = tf2::transformToEigen(mapToTrack);
      baseLinkToCarEigen = carToBaseLinkEigen.inverse();
 
 
@@ -77,7 +78,7 @@ class NodeWrapperTfUpdater_
     std::shared_ptr<tf2_ros::TransformBroadcaster> tfbroadcaster;
     std::shared_ptr<tf2_ros::StaticTransformBroadcaster> statictfbroadcaster;
     geometry_msgs::msg::TransformStamped mapToTrack, carToBaseLink;    
-    Eigen::Isometry3d carToBaseLinkEigen, baseLinkToCarEigen;
+    Eigen::Isometry3d mapToTrackEigen, carToBaseLinkEigen, baseLinkToCarEigen;
   private:
     void packetCallback(const deepracing_msgs::msg::TimestampedPacketMotionData::SharedPtr motion_data_packet)
     {
@@ -177,10 +178,22 @@ class NodeWrapperTfUpdater_
       car_velocity_local.twist.angular.set__y(centroidAngVelEigenLocal.y());
       car_velocity_local.twist.angular.set__z(centroidAngVelEigenLocal.z());
 
+      Eigen::Isometry3d mapToBLEigen = mapToTrackEigen * trackToBLEigen;
       nav_msgs::msg::Odometry odom;
-      odom.set__header(transformMsg.header);
+      odom.header.set__stamp(transformMsg.header.stamp);
+      odom.header.set__frame_id(mapToTrack.header.frame_id);
       odom.set__child_frame_id(car_velocity_local.header.frame_id);
-      odom.pose.set__pose(pose.pose);
+      Eigen::Vector3d mapToBLTranslation(mapToBLEigen.translation());
+      odom.pose.pose.position.set__x(mapToBLTranslation.x());
+      odom.pose.pose.position.set__y(mapToBLTranslation.y());
+      odom.pose.pose.position.set__z(mapToBLTranslation.z());
+      Eigen::Quaterniond mapToBLQuat(mapToBLEigen.rotation());
+      odom.pose.pose.orientation.set__x(mapToBLQuat.x());
+      odom.pose.pose.orientation.set__y(mapToBLQuat.y());
+      odom.pose.pose.orientation.set__z(mapToBLQuat.z());
+      odom.pose.pose.orientation.set__w(mapToBLQuat.w());
+
+
       odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14]=0.0025;
       odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35]=1.0E-4;
 
