@@ -79,6 +79,11 @@ class NodeWrapperTfUpdater_
     std::shared_ptr<tf2_ros::StaticTransformBroadcaster> statictfbroadcaster;
     geometry_msgs::msg::TransformStamped mapToTrack, carToBaseLink;    
     Eigen::Isometry3d mapToTrackEigen, carToBaseLinkEigen, baseLinkToCarEigen;
+    inline void publishStatic()
+    {
+      this->statictfbroadcaster->sendTransform(carToBaseLink);
+      this->statictfbroadcaster->sendTransform(mapToTrack);
+    }
   private:
     void packetCallback(const deepracing_msgs::msg::TimestampedPacketMotionData::SharedPtr motion_data_packet)
     {
@@ -203,18 +208,13 @@ class NodeWrapperTfUpdater_
 
       carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
       mapToTrack.header.set__stamp(motion_data.world_position.header.stamp);
-      this->statictfbroadcaster->sendTransform(carToBaseLink);
-      this->statictfbroadcaster->sendTransform(mapToTrack);
 
       this->tfbroadcaster->sendTransform(transformMsg);
       this->twist_publisher->publish(car_velocity);
       this->twist_local_publisher->publish(car_velocity_local);
       this->pose_publisher->publish(pose);
       this->odom_publisher->publish(odom);
-
-      
-
-
+      publishStatic();
     }
 };
 int main(int argc, char *argv[]) {
@@ -232,7 +232,7 @@ int main(int argc, char *argv[]) {
     num_threads = (size_t)num_threads_;
     RCLCPP_INFO(node->get_logger(), "Spinning with %zu threads", num_threads);
   }
-  
+ // node->create_wall_timer(std::chrono::seconds(1), std::bind(&NodeWrapperTfUpdater_::publishStatic, &nw), node->create_callback_group(rclcpp::CallbackGroupType::Reentrant));
 
   rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), num_threads);
   executor.add_node(node);
