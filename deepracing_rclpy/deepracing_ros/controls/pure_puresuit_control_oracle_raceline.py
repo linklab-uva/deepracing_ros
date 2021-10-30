@@ -145,17 +145,18 @@ class OraclePurePursuitControllerROS(PPC):
         if tf<=self.racelinetimes[-1]:
             Imax = torch.argmin(torch.abs(self.racelinetimes - tf))
             tfit = self.racelinetimes[Imin:Imax]
-            rlpiece = self.raceline[0:3,Imin:Imax].t()
+            rlpiece = self.raceline[0:3,Imin:Imax]
         else:
             dsfinal = torch.norm(self.raceline[0:3,0] - self.raceline[0:3,-1], p=2)
             tfinal = dsfinal/self.racelinespeeds[-1]
             Imax = torch.argmin(torch.abs(self.racelinetimes - (tf - self.racelinetimes[-1])) )
             tfit = torch.cat([self.racelinetimes[Imin:], self.racelinetimes[:Imax]+self.racelinetimes[-1]+tfinal], dim=0)
-            rlpiece = torch.cat([self.raceline[0:3,Imin:], self.raceline[0:3,:Imax]], dim=1).t()
-
+            rlpiece = torch.cat([self.raceline[0:3,Imin:], self.raceline[0:3,:Imax]], dim=1)
+        
+        ymean = torch.mean(rlpiece[1]).item()
         dt = tfit[-1]-tfit[0]
         sfit = (tfit-tfit[0])/dt
-        _, bcurve = mu.bezierLsqfit(rlpiece.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
+        _, bcurve = mu.bezierLsqfit(rlpiece[[0,2]].t().unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
 
         positionsbcurve : torch.Tensor = torch.matmul(self.Msamp, bcurve)[0]
 
@@ -176,12 +177,12 @@ class OraclePurePursuitControllerROS(PPC):
 
             pose : PoseStamped = PoseStamped(header=path_msg.header)
             pose.pose.position.x=positionsbcurve[i,0].item()
-            pose.pose.position.y=positionsbcurve[i,1].item()
-            pose.pose.position.z=positionsbcurve[i,2].item()
+            pose.pose.position.y=ymean
+            pose.pose.position.z=positionsbcurve[i,1].item()
             path_msg.poses.append(pose)
 
             trajpoint : TrajectoryPoint = TrajectoryPoint()
-            headingangle = torch.atan2(xvec[2], xvec[0]).item()
+            headingangle = torch.atan2(xvec[1], xvec[0]).item()
             trajpoint.heading=Complex32(real=math.cos(headingangle), imag=math.sin(headingangle))
             trajpoint.x=pose.pose.position.x
             trajpoint.y=pose.pose.position.y
