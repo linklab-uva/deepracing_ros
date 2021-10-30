@@ -14,7 +14,10 @@ import rclpy
 import time
 import rclpy
 from rclpy.node import Node
+from rclpy.publisher import Publisher
 from std_msgs.msg import String
+from nav_msgs.msg import Path
+from autoware_auto_msgs.msg import Trajectory
 from deepracing_msgs.msg import TimestampedPacketMotionData, CarMotionData, CarControl
 from geometry_msgs.msg import PoseStamped, Pose
 from geometry_msgs.msg import PointStamped, Point
@@ -28,19 +31,22 @@ from rclpy.executors import MultiThreadedExecutor
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
-    spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor(3))
+    spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor())
     node = OraclePurePursuitControllerROS()
-    control_pub = node.create_publisher(CarControl, "/car_control", 1)
+    path_pub : Publisher = node.create_publisher(Path, "localpaths", 1)
+    trajectory_pub : Publisher = node.create_publisher(Trajectory, "localtrajectories", 1)
     spinner.add_node(node)
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     spinner.spin()
-    rate : rclpy.timer.Rate = node.create_rate(60.0)
+    rate : rclpy.timer.Rate = node.create_rate(20.0)
     try:
         while rclpy.ok():
             rate.sleep()
-            control, _ = node.getControl()
-            if control is not None:
-                control_pub.publish(control)
+            bcurve, path_msg, traj_msg = node.getTrajectory()
+            if path_msg is not None:
+                path_pub.publish(path_msg)
+            if traj_msg is not None:
+                trajectory_pub.publish(traj_msg)
     except KeyboardInterrupt:
         pass
     spinner.shutdown()

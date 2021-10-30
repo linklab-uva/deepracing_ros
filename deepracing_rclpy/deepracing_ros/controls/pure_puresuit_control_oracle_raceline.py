@@ -1,4 +1,5 @@
 import argparse
+from typing import Generator
 import skimage
 import skimage.io as io
 import os
@@ -29,14 +30,15 @@ import deepracing_models.math_utils as mu
 import torch
 import torch.nn as NN
 import torch.utils.data as data_utils
-from sensor_msgs.msg import Image, CompressedImage
-from deepracing_msgs.msg import PathRaw, ImageWithPath
-from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion
-from nav_msgs.msg import Path
+from sensor_msgs.msg import PointCloud2
+from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Float64, Header
-import rclpy
+from nav_msgs.msg import Path
+from autoware_auto_msgs.msg import Trajectory, TrajectoryPoint, Complex32
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.parameter import Parameter
+from rclpy.subscription import Subscription
+from rclpy.publisher import Publisher
 from rclpy.node import Node
 from rclpy.time import Time, Duration
 from rclpy.clock import Clock, ROSClock
@@ -54,6 +56,8 @@ import deepracing.raceline_utils as raceline_utils
 import pickle as pkl
 import tf2_ros
 import deepracing_models.math_utils as mu
+import sensor_msgs_py.point_cloud2
+import math
 
 class OraclePurePursuitControllerROS(PPC):
     def __init__(self):
@@ -61,58 +65,30 @@ class OraclePurePursuitControllerROS(PPC):
         #Say hello to all of the wonderful people
         self.get_logger().info("Hello Pure Pursuit!")
 
-        #Set a parameter for grabbing the raceline from file. This file must either be a .json contain
-        # a dictionary with keys "x","y","z","r","t" or a .csv file with the top row containing header information
-        # and the remaining rows being of the form "x,y,z"
-        raceline_file_param : Parameter = self.declare_parameter("raceline_file")
-        if raceline_file_param.type_==Parameter.Type.NOT_SET:
-            raise ValueError("\"raceline_file\" parameter not set")
-        raceline_file = raceline_file_param.get_parameter_value().string_value
-        self.get_logger().info("Loading raceline: %s" %(raceline_file,))
 
-        #If the passed in parameter is an absolute filepath, make sure it's a file and then load it.
-        if  os.path.isabs(raceline_file):
-            if not os.path.isfile(raceline_file):
-                raise ValueError("Absolute \"raceline_file\" parameter: %s is not a file" %(raceline_file,))
-            self.raceline_file = raceline_file
-        #If the passed in parameter is a relative path, look for it on a list of directories in the "F1_TRACK_DIRS" variable.
-        else:
-            envsearchdirs = [s for s in str.split(os.getenv("F1_TRACK_DIRS",""), os.pathsep) if s!=""]
-            self.raceline_file = deepracing.searchForFile(raceline_file,envsearchdirs)
-        if self.raceline_file is None:
-            raise ValueError("\"raceline_file\" parameter must either be an absolute path or in a directory contained in an environment variable F1_TRACK_DIRS")
-
-        racelinefile_base, racelinefile_ext = os.path.splitext(os.path.basename(self.raceline_file))
         
-        racelinetimes, racelinedists, raceline, racelinespeeds = raceline_utils.loadRaceline(self.raceline_file)
-        bc_type=([(3, np.zeros(3))], [(3, np.zeros(3))])
-        #bc_type="natural"
-        #bc_type=None
-
         gpu_param_descriptor = ParameterDescriptor(description="Which gpu to use for computation. Any negative number means use CPU")
         gpu_param : Parameter = self.declare_parameter("gpu", value=-1, descriptor=gpu_param_descriptor)
         self.gpu : int = gpu_param.get_parameter_value().integer_value
-        if self.gpu>=0:
+        if torch.has_cuda and self.gpu>=0:
             self.device = torch.device("cuda:%d" % self.gpu)
             self.get_logger().info("Running on gpu %d" % (self.gpu,))
         else:
             self.device = torch.device("cpu")
             self.get_logger().info("Running on the cpu" )
 
-        self.raceline = raceline.to(self.device)
-        self.dsfinal = torch.norm(self.raceline[0:3,-1] - self.raceline[0:3,0], p=2).item()
-        self.racelinespeeds = racelinespeeds.to(self.device)
-        self.racelinedists = racelinedists.to(self.device)
-        self.racelinetimes = racelinetimes.to(torch.device("cpu"))
+        self.raceline = None
+        self.dsfinal = None
+        self.racelineframe = None
+        self.racelinespeeds = None
+        self.racelinedists = None
+        self.racelinetimes = None
+        self.racelinespline : scipy.interpolate.BSpline = None
+
         print(self.raceline)
         print(self.racelinedists)
         print(self.racelinetimes)
-        self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(self.racelinetimes.cpu().numpy().copy(),self.raceline[0:3].cpu().numpy().copy().transpose(), bc_type=bc_type)
-        self.racelinesplineder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=1)
-        self.racelinespline2ndder : scipy.interpolate.BSpline = self.racelinespline.derivative(nu=2)
         print(self.racelinespline)
-        print(self.racelinesplineder)
-        print(self.racelinespline2ndder)
 
         plot_param : Parameter = self.declare_parameter("plot", value=False)
         self.plot : bool = plot_param.get_parameter_value().bool_value
@@ -120,75 +96,100 @@ class OraclePurePursuitControllerROS(PPC):
         dt_param : Parameter = self.declare_parameter("dt", value=2.75)
         self.dt : float = dt_param.get_parameter_value().double_value
 
-        sample_indices_param : Parameter = self.declare_parameter("sample_indices", value=60)
+        sample_indices_descriptor : ParameterDescriptor = ParameterDescriptor()
+        sample_indices_descriptor.name="sample_indices"
+        sample_indices_descriptor.read_only=True
+        sample_indices_descriptor.description="How many points to sample on the optimal line"
+        sample_indices_param : Parameter = self.declare_parameter(sample_indices_descriptor.name, value=100)
         self.sample_indices : int = sample_indices_param.get_parameter_value().integer_value
         
-        bezier_order_param : Parameter = self.declare_parameter("bezier_order", value=5)
+        bezier_order_param : Parameter = self.declare_parameter("bezier_order", value=3)
         self.bezier_order : int = bezier_order_param.get_parameter_value().integer_value
 
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(node=self)
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
         
-        measurement_link_param : Parameter = self.declare_parameter("measurement_link", value="car")
-        self.measurement_link : str = measurement_link_param.get_parameter_value().string_value
+        self.rlsub : Subscription = self.create_subscription(PointCloud2, "racingline", self.racelineCB, 1)
 
+    def racelineCB(self, raceline_pc : PointCloud2):
+        numpoints : int = raceline_pc.width 
+        rlgenerator : Generator = sensor_msgs_py.point_cloud2.read_points(raceline_pc, field_names=["x","y","z","time","speed"])
+        raceline : torch.Tensor = torch.empty(4, numpoints, dtype=torch.float64, device=self.device)
+        raceline[3]=1.0
+        racelinetimes : torch.Tensor = torch.empty(numpoints, dtype=torch.float64, device=self.device)
+        racelinespeeds : torch.Tensor = torch.empty(numpoints, dtype=torch.float64, device=self.device)
+        for (i, p) in enumerate(rlgenerator):
+            pt : torch.Tensor = torch.as_tensor(p, dtype=torch.float64, device=self.device)
+            raceline[0:3,i] = pt[0:3]
+            racelinetimes[i] = pt[3]
+            racelinespeeds[i] = pt[4]
+        racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(racelinetimes.cpu().numpy().copy(), raceline[0:3].cpu().numpy().copy().transpose(), bc_type="natural")
+        self.racelineframe=raceline_pc.header.frame_id
+        self.raceline=raceline
+        self.racelinetimes=racelinetimes
+        self.racelinespeeds=racelinespeeds
+        self.racelinespline=racelinespline   
 
        
         
     def getTrajectory(self):
-        if (self.current_pose is None):
+        if (self.racelineframe is None)  or (self.raceline is None) or (self.racelinespline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None):
+            self.get_logger().info("Returning None because raceline not yet received")
             return None, None, None
 
-        # if self.pose_semaphore.acquire(timeout=1.0):
-        #     current_pose_msg = deepcopy(self.current_pose)
-        #     self.pose_semaphore.release()
-        # else:
-        #     self.get_logger().error("Unable to acquire semaphore for reading pose data")
-        #     return None, None, None
+        transformmsg = self.tf2_buffer.lookup_transform("base_link", self.racelineframe, Time(), timeout=Duration(seconds=1))
+        transform = C.transformMsgToTorch(transformmsg.transform, device=self.device, dtype=self.raceline.dtype)
+
+        raceline_base_link = torch.matmul(transform, self.raceline)
+        Imin = torch.argmin(torch.norm(raceline_base_link[0:3],p=2,dim=0))
+        t0 = self.racelinetimes[Imin]
+        tfit = np.linspace(t0, t0+self.dt, num=self.sample_indices)
+        rlpiece = torch.as_tensor(self.racelinespline(tfit % self.racelinetimes[-1].item()), dtype=transform.dtype, device=transform.device)
+        tfit = torch.as_tensor(tfit, dtype=transform.dtype, device=transform.device)
+        dt = tfit[-1]-tfit[0]
+        sfit = (tfit-tfit[0])/dt
+        _, bcurve = mu.bezierLsqfit(rlpiece.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
         
-        base_link_to_measurement_link = C.transformMsgToTorch(self.tf2_buffer.lookup_transform(self.base_link, self.measurement_link, Time(), timeout=Duration(seconds=1)).transform, device=self.device, dtype=self.raceline.dtype)
-        measurement_link_to_world = torch.inverse(C.poseMsgToTorch(self.current_pose.pose, device=self.device, dtype=self.raceline.dtype))
-        T = torch.matmul(base_link_to_measurement_link, measurement_link_to_world)
-
-        raceline_base_link = torch.matmul(T, self.raceline)
-        
-        I1 = torch.argmin(torch.norm(raceline_base_link[0:3],p=2,dim=0))
-        t0 = self.racelinetimes[I1]
-        timedeltas = torch.abs(self.racelinetimes - (t0 + self.dt)%self.racelinetimes[-1].item())
-        I2 = torch.argmin(timedeltas)
-        if I2<I1:
-            I2+=self.racelinetimes.shape[0]
-        idx = torch.arange(I1, I2, dtype=torch.int64, step=1)%(self.racelinetimes.shape[0])
-        positions_global_aug = self.raceline[:,idx]
-        speeds = self.racelinespeeds[idx]
-        distances = self.racelinedists[idx]
-        boundaryflipidx = idx<idx[0]
-        distances[boundaryflipidx]+=(self.racelinedists[-1] + self.dsfinal)
-        tfit = (scipy.interpolate.make_interp_spline(distances.cpu().numpy(), 1.0/speeds.cpu().numpy()).antiderivative())(distances.cpu().numpy())
-        tfit = torch.as_tensor(tfit, dtype=T.dtype, device=T.device)*(1.0 + (-1.5/100.0))
-        tfit = tfit-tfit[0]
-        dt = tfit[-1]
-
-        positions_local = torch.matmul( T, positions_global_aug)[[0,2]].transpose(0,1)
-        sfit = (tfit/dt).unsqueeze(0)
-        fit = mu.bezierLsqfit(positions_local.unsqueeze(0), self.bezier_order, t=sfit)
-        bcurve = fit[1]
-        # Mfit = fit[0]
-        # pfit = torch.matmul(Mfit, bcurve)
-        # print("MSE between bcurve and racingline: %f" % (torch.mean(torch.norm(pfit[0] - positions_local, p=2, dim=1)).item(),) )
-
-        tsamp = torch.linspace(0.0, 1.0, steps=self.sample_indices, dtype=T.dtype, device=T.device).unsqueeze(0)
+        tsamp = torch.linspace(0.0, 1.0, steps=100, dtype=transform.dtype, device=transform.device).unsqueeze(0)
         Msamp = mu.bezierM(tsamp, self.bezier_order)
-        positionsbcurve = torch.matmul(Msamp, bcurve)[0]
-
         _, bcurvderiv = mu.bezierDerivative(bcurve, t=tsamp)
-        velocitiesbcurve = (bcurvderiv[0]/dt)*1.15
-        norms = torch.norm(velocitiesbcurve, p=2, dim=1)
-        unit_tangents = velocitiesbcurve/norms[:,None]
+        _, bcurv2ndderiv = mu.bezierDerivative(bcurve, t=tsamp, order=2)
 
-        diffs = positionsbcurve[1:] - positionsbcurve[:-1]
-        diffnorms = torch.norm(diffs, p=2, dim=1)
-        distances_forward = torch.zeros_like(positionsbcurve[:,0])
-        distances_forward[1:] = torch.cumsum(diffnorms,0)
+
+        positionsbcurve : torch.Tensor = torch.matmul(Msamp, bcurve)[0]
+        velocitiesbcurve : torch.Tensor = (bcurvderiv[0]/dt)
+        accelsbcurve : torch.Tensor = (bcurv2ndderiv[0]/(dt*dt))
+        speedsbcurve : torch.Tensor = torch.norm(velocitiesbcurve, p=2, dim=1)
+        unit_tangents : torch.Tensor = velocitiesbcurve/speedsbcurve[:,None]
+        longitudinal_accels : torch.Tensor = torch.sum(accelsbcurve*unit_tangents, dim=1)
+
+        path_msg : Path = Path(header=Header(frame_id=self.racelineframe, stamp=transformmsg.header.stamp)) 
+        trajectory_msg : Trajectory = Trajectory(header=path_msg.header) 
+        for i in range(positionsbcurve.shape[0]):
+
+            xvec = unit_tangents[i]
+
+            pose : PoseStamped = PoseStamped(header=path_msg.header)
+            pose.pose.position.x=positionsbcurve[i,0].item()
+            pose.pose.position.y=positionsbcurve[i,1].item()
+            pose.pose.position.z=positionsbcurve[i,2].item()
+            path_msg.poses.append(pose)
+
+            trajpoint : TrajectoryPoint = TrajectoryPoint()
+            headingangle = torch.atan2(xvec[2], xvec[0]).item()
+            trajpoint.heading=Complex32(real=math.cos(headingangle), imag=math.sin(headingangle))
+            trajpoint.x=pose.pose.position.x
+            trajpoint.y=pose.pose.position.y
+            trajpoint.z=pose.pose.position.z
+            trajpoint.longitudinal_velocity_mps=speedsbcurve[i].item()
+            trajpoint.acceleration_mps2=longitudinal_accels[i].item()
+            fracpart, intpart = math.modf((tsamp[0,i]*dt).item())
+            trajpoint.time_from_start=Duration(seconds=int(intpart), nanoseconds=int(fracpart*1.0E9)).to_msg()
+            trajectory_msg.points.append(trajpoint)
+
+
+
         
-        return positionsbcurve, velocitiesbcurve, distances_forward
+
+        
+        return bcurve, path_msg, trajectory_msg
