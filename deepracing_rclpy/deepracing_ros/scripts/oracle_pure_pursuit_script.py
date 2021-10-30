@@ -21,7 +21,7 @@ from geometry_msgs.msg import PointStamped, Point
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 from deepracing_ros.controls.pure_puresuit_control_ros import PurePursuitControllerROS
-from deepracing_ros.controls.pure_puresuit_control_oracle_trackfile import OraclePurePursuitControllerROS
+from deepracing_ros.controls.pure_puresuit_control_oracle_raceline import OraclePurePursuitControllerROS
 from deepracing_ros.utils import AsyncSpinner
 from rclpy.executors import MultiThreadedExecutor
 
