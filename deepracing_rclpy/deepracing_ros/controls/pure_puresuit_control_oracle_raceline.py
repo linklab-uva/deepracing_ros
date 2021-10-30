@@ -110,16 +110,20 @@ class OraclePurePursuitControllerROS(PPC):
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
         
         self.rlsub : Subscription = self.create_subscription(PointCloud2, "racingline", self.racelineCB, 1)
+        self.tsamp = torch.linspace(0.0, 1.0, steps=100, dtype=torch.float64, device=self.device).unsqueeze(0)
+        self.Msamp = mu.bezierM(self.tsamp, self.bezier_order)
+        self.Msampderiv = mu.bezierM(self.tsamp, self.bezier_order-1)
+        self.Msamp2ndderiv = mu.bezierM(self.tsamp, self.bezier_order-2)
 
     def racelineCB(self, raceline_pc : PointCloud2):
         numpoints : int = raceline_pc.width 
         rlgenerator : Generator = sensor_msgs_py.point_cloud2.read_points(raceline_pc, field_names=["x","y","z","time","speed"])
-        raceline : torch.Tensor = torch.empty(4, numpoints, dtype=torch.float64, device=self.device)
+        raceline : torch.Tensor = torch.empty(4, numpoints, dtype=self.tsamp.dtype, device=self.device)
         raceline[3]=1.0
-        racelinetimes : torch.Tensor = torch.empty(numpoints, dtype=torch.float64, device=self.device)
-        racelinespeeds : torch.Tensor = torch.empty(numpoints, dtype=torch.float64, device=self.device)
+        racelinetimes : torch.Tensor = torch.empty(numpoints, dtype=self.tsamp.dtype, device=self.device)
+        racelinespeeds : torch.Tensor = torch.empty(numpoints, dtype=self.tsamp.dtype, device=self.device)
         for (i, p) in enumerate(rlgenerator):
-            pt : torch.Tensor = torch.as_tensor(p, dtype=torch.float64, device=self.device)
+            pt : torch.Tensor = torch.as_tensor(p, dtype=self.tsamp.dtype, device=self.device)
             raceline[0:3,i] = pt[0:3]
             racelinetimes[i] = pt[3]
             racelinespeeds[i] = pt[4]
@@ -137,30 +141,36 @@ class OraclePurePursuitControllerROS(PPC):
             self.get_logger().info("Returning None because raceline not yet received")
             return None, None, None
 
-        transformmsg = self.tf2_buffer.lookup_transform("base_link", self.racelineframe, Time(), timeout=Duration(seconds=1))
-        transform = C.transformMsgToTorch(transformmsg.transform, device=self.device, dtype=self.raceline.dtype)
-
-        raceline_base_link = torch.matmul(transform, self.raceline)
-        Imin = torch.argmin(torch.norm(raceline_base_link[0:3],p=2,dim=0))
+        transformmsg = self.tf2_buffer.lookup_transform(self.racelineframe, "base_link", Time(), timeout=Duration(seconds=1))
+        vecmsg = transformmsg.transform.translation
+        pcurr = torch.as_tensor([vecmsg.x, vecmsg.y, vecmsg.z], dtype=self.tsamp.dtype, device=self.device)
+        Imin = torch.argmin(torch.norm(self.raceline[0:3] - pcurr[:,None], p=2, dim=0))
         t0 = self.racelinetimes[Imin]
-        tfit = np.linspace(t0, t0+self.dt, num=self.sample_indices)
-        rlpiece = torch.as_tensor(self.racelinespline(tfit % self.racelinetimes[-1].item()), dtype=transform.dtype, device=transform.device)
-        tfit = torch.as_tensor(tfit, dtype=transform.dtype, device=transform.device)
+        tf = t0+self.dt
+        if tf<=self.racelinetimes[-1]:
+            Imax = torch.argmin(torch.abs(self.racelinetimes - tf))
+            tfit = self.racelinetimes[Imin:Imax]
+            rlpiece = self.raceline[0:3,Imin:Imax].t()
+        else:
+            dsfinal = torch.norm(self.raceline[0:3,0] - self.raceline[0:3,-1], p=2)
+            tfinal = dsfinal/self.racelinespeeds[-1]
+            Imax = torch.argmin(torch.abs(self.racelinetimes - (tf - self.racelinetimes[-1])) )
+            tfit = torch.cat([self.racelinetimes[Imin:], self.racelinetimes[:Imax]+self.racelinetimes[-1]+tfinal], dim=0)
+            rlpiece = torch.cat([self.raceline[0:3,Imin:], self.raceline[0:3,:Imax]], dim=1).t()
+
         dt = tfit[-1]-tfit[0]
         sfit = (tfit-tfit[0])/dt
         _, bcurve = mu.bezierLsqfit(rlpiece.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
-        
-        tsamp = torch.linspace(0.0, 1.0, steps=100, dtype=transform.dtype, device=transform.device).unsqueeze(0)
-        Msamp = mu.bezierM(tsamp, self.bezier_order)
-        _, bcurvderiv = mu.bezierDerivative(bcurve, t=tsamp)
-        _, bcurv2ndderiv = mu.bezierDerivative(bcurve, t=tsamp, order=2)
 
+        positionsbcurve : torch.Tensor = torch.matmul(self.Msamp, bcurve)[0]
 
-        positionsbcurve : torch.Tensor = torch.matmul(Msamp, bcurve)[0]
+        _, bcurvderiv = mu.bezierDerivative(bcurve, M=self.Msampderiv)
         velocitiesbcurve : torch.Tensor = (bcurvderiv[0]/dt)
-        accelsbcurve : torch.Tensor = (bcurv2ndderiv[0]/(dt*dt))
         speedsbcurve : torch.Tensor = torch.norm(velocitiesbcurve, p=2, dim=1)
         unit_tangents : torch.Tensor = velocitiesbcurve/speedsbcurve[:,None]
+
+        _, bcurv2ndderiv = mu.bezierDerivative(bcurve, M=self.Msamp2ndderiv, order=2)
+        accelsbcurve : torch.Tensor = (bcurv2ndderiv[0]/(dt*dt))
         longitudinal_accels : torch.Tensor = torch.sum(accelsbcurve*unit_tangents, dim=1)
 
         path_msg : Path = Path(header=Header(frame_id=self.racelineframe, stamp=transformmsg.header.stamp)) 
@@ -183,7 +193,7 @@ class OraclePurePursuitControllerROS(PPC):
             trajpoint.z=pose.pose.position.z
             trajpoint.longitudinal_velocity_mps=speedsbcurve[i].item()
             trajpoint.acceleration_mps2=longitudinal_accels[i].item()
-            fracpart, intpart = math.modf((tsamp[0,i]*dt).item())
+            fracpart, intpart = math.modf((self.tsamp[0,i]*dt).item())
             trajpoint.time_from_start.sec=int(intpart)
             trajpoint.time_from_start.nanosec=int(fracpart*1.0E9)
             trajectory_msg.points.append(trajpoint)
