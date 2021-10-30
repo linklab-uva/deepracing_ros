@@ -44,9 +44,8 @@ def main(args=None):
         while rclpy.ok():
             rate.sleep()
             bcurve, path_msg, traj_msg = node.getTrajectory()
-            if path_msg is not None:
+            if (path_msg is not None) and (traj_msg is not None):
                 path_pub.publish(path_msg)
-            if traj_msg is not None:
                 trajectory_pub.publish(traj_msg)
                 vel_setpoint_pub.publish(Float64(data=traj_msg.points[5].longitudinal_velocity_mps))
     except KeyboardInterrupt:
