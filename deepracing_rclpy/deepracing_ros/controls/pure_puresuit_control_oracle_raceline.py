@@ -124,8 +124,11 @@ class OraclePurePursuitControllerROS(PPC):
             racelinespeeds[i] = pt[4]
         # racelinetimes[(racelinetimes.shape[0]-20):] *= 0.85
         # racelinetimes[0:20] *= 0.85
-        self.racelineframe=raceline_pc.header.frame_id
-        self.raceline=raceline
+        transformmsg = self.tf2_buffer.lookup_transform("map", raceline_pc.header.frame_id, Time(), timeout=Duration(seconds=1))
+        transform = C.transformMsgToTorch(transformmsg.transform, dtype=raceline.dtype, device=raceline.device)
+        racelinemap = torch.matmul(transform, raceline)
+        self.racelineframe=transformmsg.header.frame_id
+        self.raceline=racelinemap
         self.racelinetimes=racelinetimes
         self.racelinespeeds=racelinespeeds
 
@@ -153,50 +156,23 @@ class OraclePurePursuitControllerROS(PPC):
             tfit = torch.cat([self.racelinetimes[Imin:], self.racelinetimes[:Imax]+self.racelinetimes[-1]+tfinal], dim=0)
             rlpiece = torch.cat([self.raceline[0:3,Imin:], self.raceline[0:3,:Imax]], dim=1)
         
-        ymean = torch.mean(rlpiece[1]).item()
+        zmean = torch.mean(rlpiece[2]).item()
         dt = tfit[-1]-tfit[0]
         sfit = (tfit-tfit[0])/dt
-        _, bcurve = mu.bezierLsqfit(rlpiece[[0,2]].t().unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
+        _, bcurve = mu.bezierLsqfit(rlpiece[0:2].t().unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
 
         positionsbcurve : torch.Tensor = torch.matmul(self.Msamp, bcurve)[0]
 
         _, bcurvderiv = mu.bezierDerivative(bcurve, M=self.Msampderiv)
         velocitiesbcurve : torch.Tensor = (bcurvderiv[0]/dt)
         speedsbcurve : torch.Tensor = torch.norm(velocitiesbcurve, p=2, dim=1)
-        unit_tangents : torch.Tensor = velocitiesbcurve/speedsbcurve[:,None]
-
-        _, bcurv2ndderiv = mu.bezierDerivative(bcurve, M=self.Msamp2ndderiv, order=2)
-        accelsbcurve : torch.Tensor = (bcurv2ndderiv[0]/(dt*dt))
-        longitudinal_accels : torch.Tensor = torch.sum(accelsbcurve*unit_tangents, dim=1)
 
         path_msg : Path = Path(header=Header(frame_id=self.racelineframe, stamp=transformmsg.header.stamp)) 
-        trajectory_msg : Trajectory = Trajectory(header=path_msg.header) 
         for i in range(positionsbcurve.shape[0]):
-
-            xvec = unit_tangents[i]
-
             pose : PoseStamped = PoseStamped(header=path_msg.header)
             pose.pose.position.x=positionsbcurve[i,0].item()
-            pose.pose.position.y=ymean
-            pose.pose.position.z=positionsbcurve[i,1].item()
+            pose.pose.position.y=positionsbcurve[i,1].item()
+            pose.pose.position.z=zmean
             path_msg.poses.append(pose)
 
-            trajpoint : TrajectoryPoint = TrajectoryPoint()
-            headingangle = torch.atan2(xvec[1], xvec[0]).item()
-            trajpoint.heading=Complex32(real=math.cos(headingangle), imag=math.sin(headingangle))
-            trajpoint.x=pose.pose.position.x
-            trajpoint.y=pose.pose.position.y
-            trajpoint.z=pose.pose.position.z
-            trajpoint.longitudinal_velocity_mps=speedsbcurve[i].item()
-            trajpoint.acceleration_mps2=longitudinal_accels[i].item()
-            fracpart, intpart = math.modf((self.tsamp[0,i]*dt).item())
-            trajpoint.time_from_start.sec=int(intpart)
-            trajpoint.time_from_start.nanosec=int(fracpart*1.0E9)
-            trajectory_msg.points.append(trajpoint)
-
-
-
-        
-
-        
-        return bcurve, path_msg, trajectory_msg
+        return bcurve, path_msg, speedsbcurve

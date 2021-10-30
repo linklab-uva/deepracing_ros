@@ -34,7 +34,6 @@ def main(args=None):
     spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor())
     node = OraclePurePursuitControllerROS()
     path_pub : Publisher = node.create_publisher(Path, "localpaths", 1)
-    trajectory_pub : Publisher = node.create_publisher(Trajectory, "localtrajectories", 1)
     vel_setpoint_pub : Publisher = node.create_publisher(Float64, "velsetpoint", 1)
     spinner.add_node(node)
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
@@ -43,11 +42,10 @@ def main(args=None):
     try:
         while rclpy.ok():
             rate.sleep()
-            bcurve, path_msg, traj_msg = node.getTrajectory()
-            if (path_msg is not None) and (traj_msg is not None):
+            bcurve, path_msg, speedsbcurve = node.getTrajectory()
+            if (path_msg is not None) and (speedsbcurve is not None):
                 path_pub.publish(path_msg)
-                trajectory_pub.publish(traj_msg)
-                vel_setpoint_pub.publish(Float64(data=traj_msg.points[5].longitudinal_velocity_mps))
+                vel_setpoint_pub.publish(Float64(data=speedsbcurve[5].item()))
     except KeyboardInterrupt:
         pass
     spinner.shutdown()
