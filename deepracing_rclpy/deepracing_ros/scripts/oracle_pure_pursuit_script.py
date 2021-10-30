@@ -15,7 +15,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from rclpy.publisher import Publisher
-from std_msgs.msg import String
+from std_msgs.msg import String, Float64
 from nav_msgs.msg import Path
 from autoware_auto_msgs.msg import Trajectory
 from deepracing_msgs.msg import TimestampedPacketMotionData, CarMotionData, CarControl
@@ -35,6 +35,7 @@ def main(args=None):
     node = OraclePurePursuitControllerROS()
     path_pub : Publisher = node.create_publisher(Path, "localpaths", 1)
     trajectory_pub : Publisher = node.create_publisher(Trajectory, "localtrajectories", 1)
+    vel_setpoint_pub : Publisher = node.create_publisher(Float64, "velsetpoint", 1)
     spinner.add_node(node)
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     spinner.spin()
@@ -47,6 +48,7 @@ def main(args=None):
                 path_pub.publish(path_msg)
             if traj_msg is not None:
                 trajectory_pub.publish(traj_msg)
+                vel_setpoint_pub.publish(Float64(data=traj_msg.points[5].longitudinal_velocity_mps))
     except KeyboardInterrupt:
         pass
     spinner.shutdown()
