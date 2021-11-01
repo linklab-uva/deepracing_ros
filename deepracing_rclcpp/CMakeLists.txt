@@ -88,31 +88,6 @@ set(nodes_to_install_
 )
 
 
-find_package(PCL QUIET COMPONENTS common)
-find_package(pcl_conversions QUIET)
-find_package(pcl_msgs QUIET)
-find_package(jsoncpp QUIET)
-if (PCL_FOUND AND pcl_conversions_FOUND AND pcl_msgs_FOUND AND jsoncpp_FOUND)
-  add_executable(boundary_publisher src/boundary_publisher.cpp)
-  ament_target_dependencies(boundary_publisher ament_index_cpp deepracing_msgs rclcpp pcl_conversions pcl_msgs sensor_msgs std_msgs)
-  target_include_directories(boundary_publisher
-  PUBLIC
-  ${PCL_COMMON_INCLUDE_DIRS}
-  )
-  target_link_libraries(boundary_publisher
-  #  ${PCL_KDTREE_LIBRARIES}
-  #  ${PCL_SEARCH_LIBRARIES}
-    ${PCL_COMMON_LIBRARIES}
-    # ${PCL_LIBRARIES}
-    utils
-    jsoncpp_lib
-  )
-  list(APPEND nodes_to_install_ boundary_publisher)
-  ament_export_dependencies(pcl_msgs)
-  ament_export_dependencies(pcl_conversions)
-endif()
-
-
 find_package(cv_bridge QUIET)
 find_package(image_transport QUIET)
 if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge_FOUND)
