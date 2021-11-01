@@ -201,12 +201,15 @@ class OraclePurePursuitControllerROS(PPC):
             Rmat[0:3,2]=np.cross(Rmat[0:3,0], Rmat[0:3,1])
             rot : Rot = Rot.from_matrix(Rmat)
             quat : np.ndarray = rot.as_quat()
+            pose.pose.orientation.x=float(quat[0])
+            pose.pose.orientation.y=float(quat[1])
+            pose.pose.orientation.z=traj_point.heading.imag=float(quat[2])
+            pose.pose.orientation.w=traj_point.heading.real=float(quat[3])
 
             fracpart, intpart = math.modf((dt*self.tsamp[0,i]).item())
             traj_point.time_from_start=builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
             traj_point.longitudinal_velocity_mps=speedsbcurve[i].item()
             traj_point.acceleration_mps2=longitudinal_accels[i].item()
-            traj_point.heading=Complex32(real=float(quat[3]), imag=float(quat[2]))
 
             path_msg.poses.append(pose)
             traj_msg.points.append(traj_point)
