@@ -8,13 +8,20 @@ import rclpy.subscription, rclpy.publisher, rclpy.executors
 from rclpy.node import Node
 from ament_index_python import get_package_share_directory
 from ament_index_python import PackageNotFoundError
+import geometry_msgs.msg
+from rclpy.time import Time
+from rclpy.duration import Duration
 import sensor_msgs.msg
 import std_msgs.msg
+import tf2_ros
+
+
 
 import os
 import json
 import numpy as np
 from typing import List
+from scipy.spatial.transform import Rotation
 
 class BoundaryPubNode(Node):
     def __init__(self):
@@ -45,8 +52,13 @@ class BoundaryPubNode(Node):
 
         self.inner_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(sensor_msgs.msg.PointCloud2, "inner_boundary", 1)
         self.outer_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(sensor_msgs.msg.PointCloud2, "outer_boundary", 1)
-        self.racingline_pub : rclpy.publisher.Publisher = self.create_publisher(sensor_msgs.msg.PointCloud2, "racingline", 1)
+        self.racingline_pub : rclpy.publisher.Publisher = self.create_publisher(sensor_msgs.msg.PointCloud2, "optimal_raceline", 1)
         self.session_data_sub : rclpy.subscription.Subscription = self.create_subscription(deepracing_msgs.msg.TimestampedPacketSessionData, "session_data", self.sessionDataCB, 1)
+
+        self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time=Duration(seconds=5))
+        self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
+
+
 
     def sessionDataCB(self, session_data : deepracing_msgs.msg.TimestampedPacketSessionData):
         idx = session_data.udp_packet.track_id
@@ -55,13 +67,22 @@ class BoundaryPubNode(Node):
             racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_racingline.json", self.search_dirs)
             innerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_innerlimit.json", self.search_dirs)
             outerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_outerlimit.json", self.search_dirs)
+            transform_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", deepracing_ros.world_coordinate_name, Time())
+            transform_vec : geometry_msgs.msg.Vector3 = transform_msg.transform.translation
+            transform_quat : geometry_msgs.msg.Quaternion = transform_msg.transform.rotation
+            Tmat : np.ndarray = np.eye(4, dtype=np.float32)
+            Tmat[0:3,0:3] = Rotation.from_quat([transform_quat.x, transform_quat.y, transform_quat.z, transform_quat.w]).as_matrix().astype(np.float32)
+            Tmat[0:3,3] = np.asarray([transform_vec.x, transform_vec.y, transform_vec.z], dtype=np.float32)
+            Tmat=Tmat.transpose()
             with open(racelinefile,"r") as f:
                 d : dict = json.load(f)
-                raceline : np.ndarray = np.column_stack([d["x"], d["y"], d["z"], d["t"], d["speeds"]])
+                raceline : np.ndarray = np.column_stack([d["x"], d["y"], d["z"], np.ones_like(d["z"]), d["speeds"]])
                 raceline = raceline.astype(np.float32)
+                raceline[:,0:4]=np.matmul(raceline[:,0:4], Tmat)
+                raceline[:,3]=np.asarray(d["t"], dtype=np.float32)
                 raceline_msg : sensor_msgs.msg.PointCloud2 = sensor_msgs.msg.PointCloud2()
                 raceline_msg.fields=self.raceline_fields
-                raceline_msg.header=std_msgs.msg.Header(frame_id=deepracing_ros.world_coordinate_name, stamp=now.to_msg())
+                raceline_msg.header=std_msgs.msg.Header(frame_id=transform_msg.header.frame_id, stamp=now.to_msg())
                 raceline_msg.is_bigendian=False
                 raceline_msg.is_dense=True
                 raceline_msg.height=1
@@ -71,11 +92,11 @@ class BoundaryPubNode(Node):
                 raceline_msg.data=raceline.flatten().tobytes()
             with open(innerlimitfile,"r") as f:
                 d : dict = json.load(f)
-                innerboundary : np.ndarray = np.column_stack([d["x"], d["y"], d["z"], d["r"]])
-                innerboundary = innerboundary.astype(np.float32)
+                innerboundary : np.ndarray = np.matmul(np.column_stack([d["x"], d["y"], d["z"], np.ones_like(d["z"])]).astype(np.float32), Tmat)
+                innerboundary[:,3]=np.asarray(d["r"], dtype=np.float32)
                 innerboundary_msg : sensor_msgs.msg.PointCloud2 = sensor_msgs.msg.PointCloud2()
                 innerboundary_msg.fields=self.boundary_fields
-                innerboundary_msg.header=std_msgs.msg.Header(frame_id=deepracing_ros.world_coordinate_name, stamp=raceline_msg.header.stamp)
+                innerboundary_msg.header=raceline_msg.header
                 innerboundary_msg.is_bigendian=False
                 innerboundary_msg.is_dense=True
                 innerboundary_msg.height=1
@@ -85,11 +106,11 @@ class BoundaryPubNode(Node):
                 innerboundary_msg.data=innerboundary.flatten().tobytes()
             with open(outerlimitfile,"r") as f:
                 d : dict = json.load(f)
-                outerboundary : np.ndarray = np.column_stack([d["x"], d["y"], d["z"], d["r"]])
-                outerboundary = outerboundary.astype(np.float32)
+                outerboundary : np.ndarray = np.matmul(np.column_stack([d["x"], d["y"], d["z"], np.ones_like(d["z"])]).astype(np.float32), Tmat)
+                outerboundary[:,3]=np.asarray(d["r"], dtype=np.float32)
                 outerboundary_msg : sensor_msgs.msg.PointCloud2 = sensor_msgs.msg.PointCloud2()
                 outerboundary_msg.fields=self.boundary_fields
-                outerboundary_msg.header=std_msgs.msg.Header(frame_id=deepracing_ros.world_coordinate_name, stamp=raceline_msg.header.stamp)
+                outerboundary_msg.header=raceline_msg.header
                 outerboundary_msg.is_bigendian=False
                 outerboundary_msg.is_dense=True
                 outerboundary_msg.height=1
@@ -101,7 +122,7 @@ class BoundaryPubNode(Node):
             self.current_track_id = idx
             self.current_racingline = raceline_msg
             self.current_innerboundary = innerboundary_msg
-            self.current_outerboundary = outerboundary_msg
+            self.current_outerboundary= outerboundary_msg
 
     def timerCB(self):
         if self.current_racingline is not None:
@@ -118,7 +139,7 @@ def main(args=None):
     rclpy.logging.initialize()
     node = BoundaryPubNode()
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
-    executor : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor(3)
+    executor : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor()
     executor.add_node(node)
     node.create_timer(1.0/5.0, node.timerCB)
     executor.spin()
