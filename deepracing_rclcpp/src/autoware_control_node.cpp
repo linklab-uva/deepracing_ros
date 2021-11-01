@@ -29,7 +29,17 @@ class AutowareControlNode : public rclcpp::Node
     }
     inline void controlLoop(const rclcpp::Duration& dt)
     {
+      double error = m_setpoints.velocity_mps-m_current_speed_;
       double throttlecommand = m_velocity_pid_->computeCommand(m_setpoints.velocity_mps-m_current_speed_, dt);
+      // double throttlecommand;
+      // if (error>0.0)
+      // {
+      //   throttlecommand = 1.0;
+      // }
+      // else
+      // {
+      //   throttlecommand = -1.0;
+      // }
       double steercommand = m_setpoints.front_wheel_angle_rad;
       deepf1::F1ControlCommand cmd;
       if (steercommand>=0.0)
@@ -57,6 +67,7 @@ class AutowareControlNode : public rclcpp::Node
     inline void commandCallback(const autoware_auto_msgs::msg::VehicleControlCommand::SharedPtr new_commands)
     {
       m_setpoints = *new_commands;
+      // m_setpoints.velocity_mps*=0.9;
     }
     
     inline void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom)
@@ -76,7 +87,7 @@ int main(int argc, char *argv[]) {
   std::shared_ptr<AutowareControlNode> node(new AutowareControlNode(rclcpp::NodeOptions()));
   std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> executor( new rclcpp::executors::MultiThreadedExecutor(rclcpp::ExecutorOptions(), 3) );
   executor->add_node(node);
-  rclcpp::Rate rate(node->declare_parameter<double>("frequency", 15.0));
+  rclcpp::Rate rate(node->declare_parameter<double>("frequency", 25.0));
   std::shared_ptr<control_toolbox::PidROS> pid_controller(new control_toolbox::PidROS(node));
   node->init(pid_controller);
   std::thread spinthread = std::thread(std::bind(&rclcpp::executors::MultiThreadedExecutor::spin, executor));
