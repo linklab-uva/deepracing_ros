@@ -13,6 +13,7 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include "deepracing_ros/utils/f1_msg_utils.h"
 #include <tf2_eigen/tf2_eigen.h>
+#include <autoware_auto_msgs/msg/vehicle_kinematic_state.hpp>
 
 
 class NodeWrapperTfUpdater_ 
@@ -65,6 +66,7 @@ class NodeWrapperTfUpdater_
      this->twist_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("/ego_vehicle/velocity", 1);
      this->twist_local_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("/ego_vehicle/velocity_local", 1);
      this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("/ego_vehicle/odom", 1);
+     this->autoware_state_publisher = this->node->create_publisher<autoware_auto_msgs::msg::VehicleKinematicState>("/ego_vehicle/state", 1);
      
      
     }  
@@ -73,6 +75,7 @@ class NodeWrapperTfUpdater_
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_publisher;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_local_publisher;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
+    rclcpp::Publisher<autoware_auto_msgs::msg::VehicleKinematicState>::SharedPtr autoware_state_publisher;
 
     std::shared_ptr<rclcpp::Node> node;
     std::shared_ptr<tf2_ros::TransformBroadcaster> tfbroadcaster;
@@ -133,20 +136,22 @@ class NodeWrapperTfUpdater_
       
       Eigen::Isometry3d trackToCarEigen = tf2::transformToEigen(transformMsg);
       Eigen::Isometry3d trackToBLEigen = trackToCarEigen * carToBaseLinkEigen;
+      Eigen::Isometry3d mapToBLEigen = mapToTrackEigen * trackToBLEigen;
 
-      Eigen::Vector3d trackToBL_translation(trackToBLEigen.translation());
-      Eigen::Quaterniond trackToBL_quaternion(trackToBLEigen.rotation());
+      Eigen::Vector3d mapToBL_translation(mapToBLEigen.translation());
+      Eigen::Quaterniond mapToBL_quaternion(mapToBLEigen.rotation());
 
 
       geometry_msgs::msg::PoseStamped pose;
-      pose.set__header(transformMsg.header);
-      pose.pose.position.set__x(trackToBL_translation.x());
-      pose.pose.position.set__y(trackToBL_translation.y());
-      pose.pose.position.set__z(trackToBL_translation.z());
-      pose.pose.orientation.set__x(trackToBL_quaternion.x());
-      pose.pose.orientation.set__y(trackToBL_quaternion.y());
-      pose.pose.orientation.set__z(trackToBL_quaternion.z());
-      pose.pose.orientation.set__w(trackToBL_quaternion.w());
+      pose.header.set__frame_id("map");
+      pose.header.set__stamp(transformMsg.header.stamp);
+      pose.pose.position.set__x(mapToBL_translation.x());
+      pose.pose.position.set__y(mapToBL_translation.y());
+      pose.pose.position.set__z(mapToBL_translation.z());
+      pose.pose.orientation.set__x(mapToBL_quaternion.x());
+      pose.pose.orientation.set__y(mapToBL_quaternion.y());
+      pose.pose.orientation.set__z(mapToBL_quaternion.z());
+      pose.pose.orientation.set__w(mapToBL_quaternion.w());
 
       
       //Need to come back to this.  It's not clear exactly what angular velocity is coming off the UDP stream. Will follow up with CodeMasters on that.
@@ -183,21 +188,10 @@ class NodeWrapperTfUpdater_
       car_velocity_local.twist.angular.set__y(centroidAngVelEigenLocal.y());
       car_velocity_local.twist.angular.set__z(centroidAngVelEigenLocal.z());
 
-      Eigen::Isometry3d mapToBLEigen = mapToTrackEigen * trackToBLEigen;
       nav_msgs::msg::Odometry odom;
-      odom.header.set__stamp(transformMsg.header.stamp);
-      odom.header.set__frame_id(mapToTrack.header.frame_id);
+      odom.set__header(pose.header);
       odom.set__child_frame_id(car_velocity_local.header.frame_id);
-      Eigen::Vector3d mapToBLTranslation(mapToBLEigen.translation());
-      odom.pose.pose.position.set__x(mapToBLTranslation.x());
-      odom.pose.pose.position.set__y(mapToBLTranslation.y());
-      odom.pose.pose.position.set__z(mapToBLTranslation.z());
-      Eigen::Quaterniond mapToBLQuat(mapToBLEigen.rotation());
-      odom.pose.pose.orientation.set__x(mapToBLQuat.x());
-      odom.pose.pose.orientation.set__y(mapToBLQuat.y());
-      odom.pose.pose.orientation.set__z(mapToBLQuat.z());
-      odom.pose.pose.orientation.set__w(mapToBLQuat.w());
-
+      odom.pose.set__pose(pose.pose);
 
       odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14]=0.0025;
       odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35]=1.0E-4;
@@ -209,12 +203,27 @@ class NodeWrapperTfUpdater_
       carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
       mapToTrack.header.set__stamp(motion_data.world_position.header.stamp);
 
+      autoware_auto_msgs::msg::VehicleKinematicState state;
+      state.set__header(pose.header);
+      state.state.x=pose.pose.position.x;
+      state.state.y=pose.pose.position.y;
+      state.state.z=pose.pose.position.z;
+      state.state.longitudinal_velocity_mps=odom.twist.twist.linear.x;
+      state.state.front_wheel_angle_rad=-motion_data_packet->udp_packet.front_wheels_angle;
+      state.state.rear_wheel_angle_rad=0.0;
+      mapToBL_quaternion.x()=0.0;
+      mapToBL_quaternion.y()=0.0;
+      mapToBL_quaternion.normalize();
+      state.state.heading.imag=mapToBL_quaternion.z();
+      state.state.heading.real=mapToBL_quaternion.w();
+
+      publishStatic();
       this->tfbroadcaster->sendTransform(transformMsg);
       this->twist_publisher->publish(car_velocity);
       this->twist_local_publisher->publish(car_velocity_local);
       this->pose_publisher->publish(pose);
       this->odom_publisher->publish(odom);
-      publishStatic();
+      this->autoware_state_publisher->publish(state);
     }
 };
 int main(int argc, char *argv[]) {

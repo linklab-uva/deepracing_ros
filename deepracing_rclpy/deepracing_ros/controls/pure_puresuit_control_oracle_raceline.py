@@ -179,9 +179,6 @@ class OraclePurePursuitControllerROS(PPC):
         velocitiesbcurve : torch.Tensor = (bcurvderiv[0]/dt)
         speedsbcurve : torch.Tensor = torch.norm(velocitiesbcurve, p=2, dim=1)
         unit_tangents : torch.Tensor = velocitiesbcurve/speedsbcurve[:,None]
-        headingangles : torch.Tensor = torch.atan2(unit_tangents[:,1], unit_tangents[:,0])
-        headingreals : torch.Tensor = torch.cos(headingangles)
-        headingimags : torch.Tensor = torch.sin(headingangles)
 
         _, bcurv2ndderiv = mu.bezierDerivative(bcurve, M=self.Msamp2ndderiv, order=2)
         accelerationsbcurve : torch.Tensor = (bcurv2ndderiv[0]/(dt*dt))
@@ -189,6 +186,7 @@ class OraclePurePursuitControllerROS(PPC):
 
         path_msg : Path = Path(header=Header(frame_id=self.racelineframe, stamp=transformmsg.header.stamp)) 
         traj_msg : Trajectory = Trajectory(header=path_msg.header) 
+        up : np.ndarray = np.asarray( [0.0, 0.0, 1.0] )
         for i in range(positionsbcurve.shape[0]):
             pose : PoseStamped = PoseStamped(header=path_msg.header)
             traj_point : TrajectoryPoint = TrajectoryPoint()
@@ -196,11 +194,19 @@ class OraclePurePursuitControllerROS(PPC):
             pose.pose.position.y=traj_point.y=positionsbcurve[i,1].item()
             pose.pose.position.z=traj_point.z=zmean
 
+            Rmat : np.ndarray = np.eye(3)
+            Rmat[0:2,0]=unit_tangents[i]
+            Rmat[0:3,1]=np.cross(up, Rmat[0:3,0])
+            Rmat[0:3,1]=Rmat[0:3,1]/np.linalg.norm(Rmat[0:3,1], ord=2)
+            Rmat[0:3,2]=np.cross(Rmat[0:3,0], Rmat[0:3,1])
+            rot : Rot = Rot.from_matrix(Rmat)
+            quat : np.ndarray = rot.as_quat()
+
             fracpart, intpart = math.modf((dt*self.tsamp[0,i]).item())
             traj_point.time_from_start=builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
             traj_point.longitudinal_velocity_mps=speedsbcurve[i].item()
             traj_point.acceleration_mps2=longitudinal_accels[i].item()
-            traj_point.heading=Complex32(real=headingreals[i].item(), imag=headingimags[i].item())
+            traj_point.heading=Complex32(real=float(quat[3]), imag=float(quat[2]))
 
             path_msg.poses.append(pose)
             traj_msg.points.append(traj_point)
