@@ -47,7 +47,7 @@ setup(
         'console_scripts': [
             'pure_pursuit_bezier = %s.scripts.admiralnet_bezier_script:main' % (python_pkg_name),
             'pure_pursuit_waypoint = %s.scripts.admiralnet_waypoint_script:main' % (python_pkg_name),
-            'pure_pursuit_oracle = %s.scripts.oracle_pure_pursuit_script:main' % (python_pkg_name),
+            'oracle_path_server = %s.scripts.oracle_path_server:main' % (python_pkg_name),
             'cnnlstm = %s.scripts.cnnlstm_script:main' % (python_pkg_name),
             'admiralnet_e2e = %s.scripts.admiralnet_e2e_script:main' % (python_pkg_name),
             'generate_steering_calibration = %s.scripts.generate_steering_calibration:main' % (python_pkg_name),

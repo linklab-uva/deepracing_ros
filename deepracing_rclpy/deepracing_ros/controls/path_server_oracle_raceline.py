@@ -26,7 +26,7 @@ import scipy.integrate as integrate
 import socket
 import scipy.spatial
 import queue
-from deepracing_ros.controls.pure_puresuit_control_ros import PurePursuitControllerROS as PPC
+from deepracing_ros.controls.path_server_ros import PathServerROS
 import deepracing_models.math_utils as mu
 import torch
 import torch.nn as NN
@@ -51,6 +51,7 @@ from scipy.spatial import KDTree
 from copy import deepcopy
 import json
 import torch
+from deepracing_msgs.msg import BezierCurve
 from deepracing_msgs.srv import SetPurePursuitPath
 import deepracing_ros.convert as C
 import deepracing.raceline_utils as raceline_utils
@@ -61,14 +62,12 @@ import sensor_msgs_py.point_cloud2
 import math
 import builtin_interfaces.msg
 
-class OraclePurePursuitControllerROS(PPC):
+class OraclePathServer(PathServerROS):
     def __init__(self):
-        super(OraclePurePursuitControllerROS, self).__init__()
+        super(OraclePathServer, self).__init__()
         #Say hello to all of the wonderful people
-        self.get_logger().info("Hello Pure Pursuit!")
+        self.get_logger().info("Hello Path Server!")
 
-
-        
         gpu_param_descriptor = ParameterDescriptor(description="Which gpu to use for computation. Any negative number means use CPU")
         gpu_param : Parameter = self.declare_parameter("gpu", value=-1, descriptor=gpu_param_descriptor)
         self.gpu : int = gpu_param.get_parameter_value().integer_value
@@ -103,8 +102,6 @@ class OraclePurePursuitControllerROS(PPC):
         bezier_order_param : Parameter = self.declare_parameter("bezier_order", value=3)
         self.bezier_order : int = bezier_order_param.get_parameter_value().integer_value
 
-        self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = Duration(seconds=5))
-        self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
         
         self.rlsub : Subscription = self.create_subscription(PointCloud2, "optimal_raceline", self.racelineCB, 1)
         self.tsamp = torch.linspace(0.0, 1.0, steps=100, dtype=torch.float64, device=self.device).unsqueeze(0)
@@ -130,8 +127,7 @@ class OraclePurePursuitControllerROS(PPC):
             else:
                 racelinespeeds[i] = pt[3]
             if i>0:
-                dsvec = raceline[0:3,i] - raceline[0:3,i-1]
-                racelinetimes[i] = racelinetimes[i-1] + torch.norm(dsvec, p=2)/racelinespeeds[i-1]
+                racelinetimes[i] = racelinetimes[i-1] + torch.norm(raceline[0:3,i] - raceline[0:3,i-1], p=2, dim=0)/racelinespeeds[i-1]
         if raceline_pc.header.frame_id==self.racelineframe:
             racelinemap = raceline
         else:
@@ -141,17 +137,24 @@ class OraclePurePursuitControllerROS(PPC):
         self.raceline=racelinemap
         self.racelinespeeds=racelinespeeds
         self.racelinetimes=racelinetimes
+        self.destroy_subscription(self.rlsub)
+        self.rlsub=None
         
 
        
         
     def getTrajectory(self):
         if (self.raceline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None):
-            self.get_logger().info("Returning None because raceline not yet received")
+            self.get_logger().error("Returning None because raceline not yet received")
             return None, None, None
-
-        transformmsg = self.tf2_buffer.lookup_transform(self.racelineframe, "base_link", Time(), timeout=Duration(seconds=1))
-        vecmsg = transformmsg.transform.translation
+        if self.current_odom is None:
+            self.get_logger().error("Returning None because odometry not yet received")
+            return None, None, None
+        posemsg = deepcopy(self.current_odom)
+        if not (posemsg.header.frame_id==self.racelineframe):
+            self.get_logger().error("Returning None because current odometry is in the %f frame, but the raceline is in the %f frame" % (posemsg.header.frame_id,self.racelineframe))
+            return None, None, None
+        vecmsg = posemsg.pose.pose.position
         pcurr = torch.as_tensor([vecmsg.x, vecmsg.y, vecmsg.z], dtype=self.tsamp.dtype, device=self.device)
         Imin = torch.argmin(torch.norm(self.raceline[0:3] - pcurr[:,None], p=2, dim=0))
         t0 = self.racelinetimes[Imin]
@@ -164,14 +167,18 @@ class OraclePurePursuitControllerROS(PPC):
             dsfinal = torch.norm(self.raceline[0:3,0] - self.raceline[0:3,-1], p=2)
             tfinal = dsfinal/self.racelinespeeds[-1]
             Imax = torch.argmin(torch.abs(self.racelinetimes - (tf - self.racelinetimes[-1])) )
-            #+tfinal
-            tfit = torch.cat([self.racelinetimes[Imin:], self.racelinetimes[:Imax]+self.racelinetimes[-1]], dim=0)
+            rlspeeds = torch.cat([self.racelinespeeds[Imin:], self.racelinespeeds[:Imax]], dim=0)
             rlpiece = torch.cat([self.raceline[0:3,Imin:], self.raceline[0:3,:Imax]], dim=1)
+            rldeltas = rlpiece[:,1:] - rlpiece[:,:-1]
+            rldeltanorms = torch.norm(rldeltas, p=2, dim=0)
+            rldt = rldeltanorms/rlspeeds[:-1]
+            tfit = torch.zeros_like(rlspeeds)
+            tfit[1:] = torch.cumsum(rldt, 0)
         
         zmean = torch.mean(rlpiece[2]).item()
         dt = tfit[-1]-tfit[0]
         sfit = (tfit-tfit[0])/dt
-        _, bcurve = mu.bezierLsqfit(rlpiece[0:2].t().unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
+        _, bcurve = mu.bezierLsqfit(rlpiece.t().unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
 
         positionsbcurve : torch.Tensor = torch.matmul(self.Msamp, bcurve)[0]
 
@@ -184,7 +191,8 @@ class OraclePurePursuitControllerROS(PPC):
         accelerationsbcurve : torch.Tensor = (bcurv2ndderiv[0]/(dt*dt))
         longitudinal_accels : torch.Tensor = torch.sum(accelerationsbcurve*unit_tangents, dim=1)
 
-        path_msg : Path = Path(header=Header(frame_id=self.racelineframe, stamp=transformmsg.header.stamp)) 
+        bcurve_msg : BezierCurve = C.toBezierCurveMsg(bcurve[0],posemsg.header)
+        path_msg : Path = Path(header=posemsg.header) 
         traj_msg : Trajectory = Trajectory(header=path_msg.header) 
         up : np.ndarray = np.asarray( [0.0, 0.0, 1.0] )
         for i in range(positionsbcurve.shape[0]):
@@ -195,12 +203,14 @@ class OraclePurePursuitControllerROS(PPC):
             pose.pose.position.z=traj_point.z=zmean
 
             Rmat : np.ndarray = np.eye(3)
-            Rmat[0:2,0]=unit_tangents[i]
+            Rmat[0:3,0]=unit_tangents[i]
             Rmat[0:3,1]=np.cross(up, Rmat[0:3,0])
             Rmat[0:3,1]=Rmat[0:3,1]/np.linalg.norm(Rmat[0:3,1], ord=2)
             Rmat[0:3,2]=np.cross(Rmat[0:3,0], Rmat[0:3,1])
             rot : Rot = Rot.from_matrix(Rmat)
             quat : np.ndarray = rot.as_quat()
+            quat[0:2]=0.0
+            quat = quat/np.linalg.norm(quat,ord=2)
             pose.pose.orientation.x=float(quat[0])
             pose.pose.orientation.y=float(quat[1])
             pose.pose.orientation.z=traj_point.heading.imag=float(quat[2])
@@ -217,4 +227,4 @@ class OraclePurePursuitControllerROS(PPC):
 
 
 
-        return bcurve, path_msg, traj_msg
+        return bcurve_msg, path_msg, traj_msg

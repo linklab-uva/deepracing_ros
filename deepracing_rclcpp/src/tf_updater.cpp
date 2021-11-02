@@ -154,39 +154,16 @@ class NodeWrapperTfUpdater_
       pose.pose.orientation.set__w(mapToBL_quaternion.w());
 
       
-      //Need to come back to this.  It's not clear exactly what angular velocity is coming off the UDP stream. Will follow up with CodeMasters on that.
-      // Eigen::Vector3d 
       Eigen::Vector3d centroidVelEigenLocal(motion_data_packet->udp_packet.local_velocity.z, motion_data_packet->udp_packet.local_velocity.x, motion_data_packet->udp_packet.local_velocity.y);
       
-      Eigen::Vector3d centroidAngVelEigenGlobal(motion_data_packet->udp_packet.angular_velocity.x, motion_data_packet->udp_packet.angular_velocity.y, motion_data_packet->udp_packet.angular_velocity.z);
-      Eigen::Vector3d centroidAngVelEigenLocal = trackToBLEigen.rotation().inverse()*centroidAngVelEigenGlobal;
-      // if (centroidAngVelEigenLocal.z()>=0)
-      // {
-      //   centroidAngVelEigenLocal = Eigen::Vector3d(0.0,0.0, centroidAngVelEigenLocal.norm());
-      // }
-      // else
-      // {
-      //   centroidAngVelEigenLocal = Eigen::Vector3d(0.0,0.0, -centroidAngVelEigenLocal.norm());
-      // }
      
-      Eigen::Vector3d baseLinkToCarVec(baseLinkToCarEigen.translation());
-      Eigen::Vector3d localVelEigen = centroidVelEigenLocal - centroidAngVelEigenLocal.cross(baseLinkToCarVec);
-      localVelEigen = Eigen::Vector3d(localVelEigen.norm(), 0.0, 0.0);
-
-      geometry_msgs::msg::TwistStamped car_velocity;
-      car_velocity.set__header(transformMsg.header);
-      car_velocity.twist.set__linear(motion_data.world_velocity.vector);
-      car_velocity.twist.set__angular(motion_data_packet->udp_packet.angular_velocity);
 
       geometry_msgs::msg::TwistStamped car_velocity_local;
       car_velocity_local.header.set__stamp(transformMsg.header.stamp);
       car_velocity_local.header.set__frame_id("base_link");
-      car_velocity_local.twist.linear.set__x(localVelEigen.x());
-      car_velocity_local.twist.linear.set__y(localVelEigen.y());
-      car_velocity_local.twist.linear.set__z(localVelEigen.z());
-      car_velocity_local.twist.angular.set__x(centroidAngVelEigenLocal.x());
-      car_velocity_local.twist.angular.set__y(centroidAngVelEigenLocal.y());
-      car_velocity_local.twist.angular.set__z(centroidAngVelEigenLocal.z());
+      car_velocity_local.twist.linear.set__x(centroidVelEigenLocal.norm());
+      car_velocity_local.twist.linear.set__y(0.0);
+      car_velocity_local.twist.linear.set__z(0.0);
 
       nav_msgs::msg::Odometry odom;
       odom.set__header(pose.header);
@@ -219,9 +196,6 @@ class NodeWrapperTfUpdater_
 
       publishStatic();
       this->tfbroadcaster->sendTransform(transformMsg);
-      this->twist_publisher->publish(car_velocity);
-      this->twist_local_publisher->publish(car_velocity_local);
-      this->pose_publisher->publish(pose);
       this->odom_publisher->publish(odom);
       this->autoware_state_publisher->publish(state);
     }

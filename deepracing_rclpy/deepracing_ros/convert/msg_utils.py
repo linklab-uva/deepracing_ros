@@ -169,7 +169,7 @@ def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
    q = extractOrientation(packet, car_index=idx)
    return ( p, q )
 
-def toBezierCurveMsg(control_points, header: Header, covars = None):
+def toBezierCurveMsg(control_points : torch.Tensor, header: Header, covars = None):
    ptsnp = control_points.detach().cpu().numpy()
    if covars is not None:
       assert(ptsnp.shape[0]==covars.shape[0])
