@@ -223,8 +223,6 @@ class OraclePathServer(PathServerROS):
 
             path_msg.poses.append(pose)
             traj_msg.points.append(traj_point)
-
-
-
-
+        final_point : TrajectoryPoint = traj_msg.points[-1]
+        bcurve_msg.delta_t = final_point.time_from_start
         return bcurve_msg, path_msg, traj_msg

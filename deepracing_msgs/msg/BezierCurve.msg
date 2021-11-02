@@ -6,3 +6,5 @@ CovariancePoint[] control_point_covariances
 #or control_point_covariances should be empty to indicate no covariance information is available
 #Header containing a timestamp and the frame_id of all control points
 std_msgs/Header header
+#How long of a timestamp the curve represents
+builtin_interfaces/Duration delta_t 
