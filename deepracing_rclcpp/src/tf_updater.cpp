@@ -153,15 +153,15 @@ class NodeWrapperTfUpdater_
       pose.pose.orientation.set__z(mapToBL_quaternion.z());
       pose.pose.orientation.set__w(mapToBL_quaternion.w());
 
-      
-      Eigen::Vector3d centroidVelEigenLocal(motion_data_packet->udp_packet.local_velocity.z, motion_data_packet->udp_packet.local_velocity.x, motion_data_packet->udp_packet.local_velocity.y);
+      Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.z, velocityROS.vector.x, velocityROS.vector.y);
+      // Eigen::Vector3d centroidVelEigenLocal(motion_data_packet->udp_packet.local_velocity.z, motion_data_packet->udp_packet.local_velocity.x, motion_data_packet->udp_packet.local_velocity.y);
       
      
 
       geometry_msgs::msg::TwistStamped car_velocity_local;
       car_velocity_local.header.set__stamp(transformMsg.header.stamp);
       car_velocity_local.header.set__frame_id("base_link");
-      car_velocity_local.twist.linear.set__x(centroidVelEigenLocal.norm());
+      car_velocity_local.twist.linear.set__x(centroidVelEigenGlobal.norm());
       car_velocity_local.twist.linear.set__y(0.0);
       car_velocity_local.twist.linear.set__z(0.0);
 

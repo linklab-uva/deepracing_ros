@@ -18,7 +18,7 @@ class AutowareControlNode : public rclcpp::Node
     }
     void init(std::shared_ptr<control_toolbox::PidROS> pid)
     {
-      m_safe_vel_ = declare_parameter<double>("safe_vel", 24.0);
+      m_safe_vel_ = declare_parameter<double>("safe_vel", 20.0);
       m_safe_steer_max_ = declare_parameter<double>("safe_steer_max", 0.135);
       m_safe_steer_min_ = declare_parameter<double>("safe_steer_min", -0.1125);
 
@@ -35,9 +35,9 @@ class AutowareControlNode : public rclcpp::Node
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
       command_listener = create_subscription<autoware_auto_msgs::msg::VehicleControlCommand>("ctrl_cmd", rclcpp::QoS{1},
         std::bind(&AutowareControlNode::commandCallback, this, std::placeholders::_1), listner_options);
-      status_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarStatusData>("/ego_vehicle/status_data", rclcpp::QoS{1},
+      status_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarStatusData>("/f1_game/status_data", rclcpp::QoS{1},
         std::bind(&AutowareControlNode::statusCallback, this, std::placeholders::_1), listner_options);
-      telemetry_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>("/ego_vehicle/telemetry_data", rclcpp::QoS{1},
+      telemetry_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>("/f1_game/telemetry_data", rclcpp::QoS{1},
         std::bind(&AutowareControlNode::telemetryCallback, this, std::placeholders::_1), listner_options);
       odom_listener = create_subscription<nav_msgs::msg::Odometry>("/ego_vehicle/odom", rclcpp::QoS{1},
         std::bind(&AutowareControlNode::odomCallback, this, std::placeholders::_1));
@@ -78,7 +78,7 @@ class AutowareControlNode : public rclcpp::Node
         cmd.brake=-throttlecommand;
       }
       m_game_interface_->setCommands(cmd);
-      if (m_drs_allowed_ && (!m_drs_enabled_))
+      if( (!m_drs_enabled_) && m_drs_allowed_ )
       {
         m_game_interface_->pushDRS();
       }

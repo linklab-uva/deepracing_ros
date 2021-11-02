@@ -46,6 +46,8 @@ class BezierCurvePurePursuit(Node):
         wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.85)
         self.wheelbase : float = wheelbase_param.get_parameter_value().double_value
 
+        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 100, dtype=torch.float32).unsqueeze(0)
+
 
 
     def curveCB(self, curve_msg : BezierCurve):
@@ -73,27 +75,27 @@ class BezierCurvePurePursuit(Node):
             bcurve_global[i,2]=current_curve.control_points[i].z
         bcurve_local = torch.matmul(bcurve_global, transform[0:3].t()).unsqueeze(0)
         dt : float = float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9
-        tsamp : torch.Tensor = torch.linspace(0.0, dt, 100, dtype=torch.float32).unsqueeze(0)
-        Msamp : torch.Tensor = mu.bezierM(tsamp, bcurve_local.shape[1]-1)
+        
+        Msamp : torch.Tensor = mu.bezierM(self.tsamp, bcurve_local.shape[1]-1)
         Psamp : torch.Tensor = torch.matmul(Msamp, bcurve_local)
         Psamp=Psamp[0]
-        arclengths : torch.Tensor = torch.zeros_like(tsamp[0])
+        arclengths : torch.Tensor = torch.zeros_like(self.tsamp[0])
         arclengths[1:]=torch.cumsum(torch.norm(Psamp[1:] - Psamp[:-1], p=2, dim=1), 0)
 
-        _, _vsamp = mu.bezierDerivative(bcurve_local, t=tsamp)
+        _, _vsamp = mu.bezierDerivative(bcurve_local, t=self.tsamp)
         vsamp : torch.Tensor = _vsamp[0]/dt
         speedsamp : torch.Tensor = torch.norm(vsamp, p=2, dim=1)
 
         idx = Psamp[:,0]>=0.0
-        tsamp = tsamp[:,idx]
+        # tsamp = self.tsamp[:,idx]
         vsamp = vsamp[idx]
         speedsamp = speedsamp[idx]
         Psamp = Psamp[idx]
         arclengths = arclengths[idx]
         arclengths = arclengths - arclengths[0]
 
-        lookahead_distance = max(self.lookahead_gain*odom_msg.twist.twist.linear.x, 10.0)
-        lookahead_distance_vel = max(self.velocity_lookahead_gain*odom_msg.twist.twist.linear.x, 10.0)
+        lookahead_distance = max(self.lookahead_gain*odom_msg.twist.twist.linear.x, 15.0)
+        lookahead_distance_vel = self.velocity_lookahead_gain*odom_msg.twist.twist.linear.x
 
         lookahead_index = torch.argmin(torch.abs(arclengths-lookahead_distance))
         lookahead_index_vel = torch.argmin(torch.abs(arclengths-lookahead_distance_vel))

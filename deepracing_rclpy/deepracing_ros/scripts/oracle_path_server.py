@@ -37,7 +37,7 @@ def main(args=None):
     spinner.add_node(node)
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     spinner.spin()
-    rate : rclpy.timer.Rate = node.create_rate(3.0)
+    rate : rclpy.timer.Rate = node.create_rate(20.0)
     try:
         while rclpy.ok():
             rate.sleep()

@@ -1,4 +1,5 @@
 f1_tf_updater:
     ros__parameters:
+        # centroid_to_base_translation: [0.0, 0.0, 0.0]
         centroid_to_base_translation: [-1.85, 0.0, 0.0]
-        use_sim_time: True
+        # use_sim_time: True
