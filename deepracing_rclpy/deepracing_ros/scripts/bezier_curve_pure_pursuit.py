@@ -46,7 +46,7 @@ class BezierCurvePurePursuit(Node):
         wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.85)
         self.wheelbase : float = wheelbase_param.get_parameter_value().double_value
 
-        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 100, dtype=torch.float32).unsqueeze(0)
+        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 125, dtype=torch.float32).unsqueeze(0)
 
 
 
@@ -86,12 +86,12 @@ class BezierCurvePurePursuit(Node):
         vsamp : torch.Tensor = _vsamp[0]/dt
         speedsamp : torch.Tensor = torch.norm(vsamp, p=2, dim=1)
 
-        idx = Psamp[:,0]>=0.0
-        # tsamp = self.tsamp[:,idx]
-        vsamp = vsamp[idx]
-        speedsamp = speedsamp[idx]
-        Psamp = Psamp[idx]
-        arclengths = arclengths[idx]
+        idx = torch.argmin(torch.norm(Psamp, p=2, dim=1))
+        tsamp = self.tsamp[:,idx:]
+        vsamp = vsamp[idx:]
+        speedsamp = speedsamp[idx:]
+        Psamp = Psamp[idx:]
+        arclengths = arclengths[idx:]
         arclengths = arclengths - arclengths[0]
 
         lookahead_distance = max(self.lookahead_gain*odom_msg.twist.twist.linear.x, 15.0)
