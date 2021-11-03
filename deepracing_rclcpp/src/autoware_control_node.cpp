@@ -19,11 +19,11 @@ class AutowareControlNode : public rclcpp::Node
     void init(std::shared_ptr<control_toolbox::PidROS> pid)
     {
       m_safe_vel_ = declare_parameter<double>("safe_vel", 20.0);
-      m_safe_steer_max_ = declare_parameter<double>("safe_steer_max", 0.135);
-      m_safe_steer_min_ = declare_parameter<double>("safe_steer_min", -0.1125);
 
       m_full_lock_left_ = declare_parameter<double>("full_lock_left", 0.2986730635166168);
       m_full_lock_right_ = declare_parameter<double>("full_lock_right", -0.26346784830093384);
+      m_safe_steer_max_ = declare_parameter<double>("safe_steer_max", m_full_lock_left_);
+      m_safe_steer_min_ = declare_parameter<double>("safe_steer_min", m_full_lock_right_);
 
       m_velocity_pid_ = pid;
       m_velocity_pid_->initPid(0.5, 0.05, 0.00, 1.0, -1.0, true);
