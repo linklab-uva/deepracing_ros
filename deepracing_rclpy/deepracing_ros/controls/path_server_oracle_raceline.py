@@ -114,7 +114,7 @@ class OraclePathServer(PathServerROS):
 
     def racelineCB(self, raceline_pc : PointCloud2):
         numpoints : int = raceline_pc.width 
-        rlgenerator : Generator = sensor_msgs_py.point_cloud2.read_points(raceline_pc, field_names=["x","y","z","speed"])
+        rlgenerator : Generator = sensor_msgs_py.point_cloud2.read_points(raceline_pc, field_names=["x","y","z","time","speed"])
         raceline : torch.Tensor = torch.empty(4, numpoints, dtype=self.tsamp.dtype, device=self.device)
         raceline[3]=1.0
         racelinespeeds : torch.Tensor = torch.empty(numpoints, dtype=self.tsamp.dtype, device=self.device)
@@ -122,12 +122,14 @@ class OraclePathServer(PathServerROS):
         for (i, p) in enumerate(rlgenerator):
             pt : torch.Tensor = torch.as_tensor(p, dtype=self.tsamp.dtype, device=self.device)
             raceline[0:3,i] = pt[0:3]
-            if (i<80) or (i>(racelinespeeds.shape[0]-83)):
-                racelinespeeds[i] = 92.0
-            else:
-                racelinespeeds[i] = pt[3]
-            if i>0:
-                racelinetimes[i] = racelinetimes[i-1] + torch.norm(raceline[0:3,i] - raceline[0:3,i-1], p=2, dim=0)/racelinespeeds[i-1]
+            # if (i<80) or (i>(racelinespeeds.shape[0]-83)):
+            #     racelinespeeds[i] = 92.0
+            # else:
+            #     racelinespeeds[i] = pt[3]
+            # if i>0:
+            #     racelinetimes[i] = racelinetimes[i-1] + torch.norm(raceline[0:3,i] - raceline[0:3,i-1], p=2, dim=0)/racelinespeeds[i-1]
+            racelinetimes[i] = pt[3]
+            racelinespeeds[i] = pt[4]
         if raceline_pc.header.frame_id==self.racelineframe:
             racelinemap = raceline
         else:
@@ -165,15 +167,11 @@ class OraclePathServer(PathServerROS):
             rlpiece = self.raceline[0:3,Imin:Imax]
         else:
             dsfinal = torch.norm(self.raceline[0:3,0] - self.raceline[0:3,-1], p=2)
-            tfinal = dsfinal/self.racelinespeeds[-1]
+            dtfinal = dsfinal/self.racelinespeeds[-1]
             Imax = torch.argmin(torch.abs(self.racelinetimes - (tf - self.racelinetimes[-1])) )
-            rlspeeds = torch.cat([self.racelinespeeds[Imin:], self.racelinespeeds[:Imax]], dim=0)
+            tfit = torch.cat([self.racelinetimes[Imin:], self.racelinetimes[:Imax]+self.racelinetimes[-1]+dtfinal], dim=0)
             rlpiece = torch.cat([self.raceline[0:3,Imin:], self.raceline[0:3,:Imax]], dim=1)
-            rldeltas = rlpiece[:,1:] - rlpiece[:,:-1]
-            rldeltanorms = torch.norm(rldeltas, p=2, dim=0)
-            rldt = rldeltanorms/rlspeeds[:-1]
-            tfit = torch.zeros_like(rlspeeds)
-            tfit[1:] = torch.cumsum(rldt, 0)
+            
         
         zmean = torch.mean(rlpiece[2]).item()
         dt = tfit[-1]-tfit[0]
@@ -223,6 +221,7 @@ class OraclePathServer(PathServerROS):
 
             path_msg.poses.append(pose)
             traj_msg.points.append(traj_point)
+
         final_point : TrajectoryPoint = traj_msg.points[-1]
         bcurve_msg.delta_t = final_point.time_from_start
         return bcurve_msg, path_msg, traj_msg
