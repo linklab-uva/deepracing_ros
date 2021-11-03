@@ -29,6 +29,7 @@ class BoundaryPubNode(Node):
         search_dirs_param : rclpy.Parameter = self.declare_parameter("track_search_dirs", value=[])
         self.search_dirs = search_dirs_param.get_parameter_value().string_array_value
         try:
+            self.search_dirs.append(os.path.join(get_package_share_directory("f1_datalogger"), "f1_tracks", "minimumcurvature"))
             self.search_dirs.append(os.path.join(get_package_share_directory("f1_datalogger"), "f1_tracks"))
         except PackageNotFoundError as ex:
             pass
@@ -64,7 +65,9 @@ class BoundaryPubNode(Node):
         idx = session_data.udp_packet.track_id
         if not (idx==self.current_track_id):
             now = self.get_clock().now()
-            racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_racingline.json", self.search_dirs)
+            # racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_minimumcurvaturebaseline.json", self.search_dirs)
+            # racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_minimumcurvaturemoderate.json", self.search_dirs)
+            racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_minimumcurvaturelowbraking.json", self.search_dirs)
             innerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_innerlimit.json", self.search_dirs)
             outerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_outerlimit.json", self.search_dirs)
             transform_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", deepracing_ros.world_coordinate_name, Time())
