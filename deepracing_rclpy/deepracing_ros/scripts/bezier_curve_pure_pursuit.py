@@ -46,7 +46,18 @@ class BezierCurvePurePursuit(Node):
         wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.85)
         self.wheelbase : float = wheelbase_param.get_parameter_value().double_value
 
-        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 125, dtype=torch.float32).unsqueeze(0)
+        gpu_param : Parameter = self.declare_parameter("gpu", value=-1)
+        gpu : int = gpu_param.get_parameter_value().integer_value
+
+        if torch.has_cuda and gpu>=0:
+            self.get_logger().info("Running on GPU %d" %(gpu,))
+            self.device : torch.device = torch.device("cuda:%d" % (gpu,))
+        else:
+            self.get_logger().info("Running on the CPU")
+            self.device : torch.device = torch.device("cpu")
+
+
+        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 125, dtype=torch.float32, device=self.device).unsqueeze(0)
 
 
 
@@ -58,17 +69,17 @@ class BezierCurvePurePursuit(Node):
         current_curve : BezierCurve = deepcopy(self.current_curve_msg)
 
         pin : Point = odom_msg.pose.pose.position
-        ptransform : torch.Tensor = -torch.as_tensor([pin.x, pin.y, pin.z], dtype=torch.float32)
+        ptransform : torch.Tensor = -torch.as_tensor([pin.x, pin.y, pin.z], dtype=torch.float32, device=self.device)
 
         qin : Quaternion = odom_msg.pose.pose.orientation
-        qtransform : np.ndarray = np.asarray([qin.x, qin.y, qin.z, -qin.w], dtype=np.float32)
+        qtransform : np.ndarray = np.asarray([qin.x, qin.y, qin.z, -qin.w], dtype=np.float64)
         rot : Rotation = Rotation.from_quat(qtransform)
         rotmat : np.ndarray = rot.as_matrix()
 
-        transform : torch.Tensor = torch.eye(4, dtype=torch.float32)
-        transform[0:3,0:3] = torch.from_numpy(rotmat.astype(np.float32))
+        transform : torch.Tensor = torch.eye(4, dtype=torch.float32, device=self.device)
+        transform[0:3,0:3] = torch.from_numpy(rotmat.astype(np.float32)).to(self.device)
         transform[0:3,3] = torch.matmul(transform[0:3,0:3], ptransform)
-        bcurve_global : torch.Tensor = torch.ones(len(current_curve.control_points), 4, dtype=torch.float32 )
+        bcurve_global : torch.Tensor = torch.ones(len(current_curve.control_points), 4, dtype=torch.float32, device=self.device )
         for i in range(bcurve_global.shape[0]):
             bcurve_global[i,0]=current_curve.control_points[i].x
             bcurve_global[i,1]=current_curve.control_points[i].y
