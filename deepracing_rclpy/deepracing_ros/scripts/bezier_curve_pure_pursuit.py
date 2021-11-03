@@ -82,14 +82,22 @@ class BezierCurvePurePursuit(Node):
         arclengths : torch.Tensor = torch.zeros_like(self.tsamp[0])
         arclengths[1:]=torch.cumsum(torch.norm(Psamp[1:] - Psamp[:-1], p=2, dim=1), 0)
 
-        _, _vsamp = mu.bezierDerivative(bcurve_local, t=self.tsamp)
-        vsamp : torch.Tensor = _vsamp[0]/dt
-        speedsamp : torch.Tensor = torch.norm(vsamp, p=2, dim=1)
+        _, _velocities = mu.bezierDerivative(bcurve_local, t=self.tsamp)
+        velocities : torch.Tensor = _velocities[0]/dt
+        speeds : torch.Tensor = torch.norm(velocities, p=2, dim=1)
+        unit_tangents : torch.Tensor = velocities/speeds[:,None]
+
+        _, _accelerations = mu.bezierDerivative(bcurve_local, t=self.tsamp, order=2)
+        accelerations : torch.Tensor = _accelerations[0]/(dt*dt)
+        longitudinal_accelerations : torch.Tensor = torch.sum(accelerations*unit_tangents, dim=1)
+
+
 
         idx = torch.argmin(torch.norm(Psamp, p=2, dim=1))
         tsamp = self.tsamp[:,idx:]
-        vsamp = vsamp[idx:]
-        speedsamp = speedsamp[idx:]
+        velocities = velocities[idx:]
+        longitudinal_accelerations = longitudinal_accelerations[idx:]
+        speeds = speeds[idx:]
         Psamp = Psamp[idx:]
         arclengths = arclengths[idx:]
         arclengths = arclengths - arclengths[0]
@@ -107,7 +115,8 @@ class BezierCurvePurePursuit(Node):
 
         control_out : VehicleControlCommand = VehicleControlCommand(stamp=odom_msg.header.stamp)
         control_out.front_wheel_angle_rad = torch.atan((2 * self.wheelbase * torch.sin(alpha)) / D).item()
-        control_out.velocity_mps=speedsamp[lookahead_index_vel].item()
+        control_out.velocity_mps=speeds[lookahead_index_vel].item()
+        control_out.long_accel_mps2=longitudinal_accelerations[lookahead_index_vel].item()
 
         self.setpoint_pub.publish(control_out)
 
