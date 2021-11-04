@@ -18,7 +18,7 @@ from rclpy.publisher import Publisher
 from rclpy.node import Node
 from deepracing_msgs.msg import BezierCurve
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Quaternion, Point
+from geometry_msgs.msg import Quaternion, Point, TransformStamped, Transform
 from autoware_auto_msgs.msg import VehicleControlCommand
 import numpy as np
 import rclpy.executors
@@ -28,6 +28,10 @@ import deepracing_ros, deepracing_ros.convert as C
 from typing import List
 import torch
 import deepracing_models.math_utils as mu
+import tf2_ros
+import rclpy.time
+import rclpy.duration
+
 
 class BezierCurvePurePursuit(Node):
     def __init__(self,):
@@ -36,6 +40,9 @@ class BezierCurvePurePursuit(Node):
         self.curve_sub : Subscription = self.create_subscription(BezierCurve, "localbeziercurves", self.curveCB, 1)
         self.odom_sub : Subscription = self.create_subscription(Odometry, "/ego_vehicle/odom", self.odomCB, 1)
         self.current_curve_msg : BezierCurve = None
+
+        self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = rclpy.duration.Duration(seconds=5))
+        self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
         lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain", value=0.3)
         self.lookahead_gain : float = lookahead_gain_param.get_parameter_value().double_value
@@ -57,7 +64,7 @@ class BezierCurvePurePursuit(Node):
             self.device : torch.device = torch.device("cpu")
 
 
-        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 125, dtype=torch.float32, device=self.device).unsqueeze(0)
+        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 200, dtype=torch.float32, device=self.device).unsqueeze(0)
 
 
 
@@ -67,25 +74,25 @@ class BezierCurvePurePursuit(Node):
         if self.current_curve_msg is None:
             return
         current_curve : BezierCurve = deepcopy(self.current_curve_msg)
+        
+        map_to_car : torch.Tensor = C.poseMsgToTorch(odom_msg.pose.pose, dtype=self.tsamp.dtype, device=self.device)
 
-        pin : Point = odom_msg.pose.pose.position
-        ptransform : torch.Tensor = -torch.as_tensor([pin.x, pin.y, pin.z], dtype=torch.float32, device=self.device)
+        if not odom_msg.child_frame_id=="base_link":
+            car_to_base_link_msg : TransformStamped = self.tf2_buffer.lookup_transform(odom_msg.child_frame_id, "base_link", rclpy.time.Time.from_msg(odom_msg.header.stamp), rclpy.duration.Duration(seconds=2))
+            car_to_base_link : torch.Tensor = C.transformMsgToTorch(car_to_base_link_msg.transform, dtype=self.tsamp.dtype, device=self.device)
+            pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
+        else:
+            pose_curr : torch.Tensor = map_to_car
 
-        qin : Quaternion = odom_msg.pose.pose.orientation
-        qtransform : np.ndarray = np.asarray([qin.x, qin.y, qin.z, -qin.w], dtype=np.float64)
-        rot : Rotation = Rotation.from_quat(qtransform)
-        rotmat : np.ndarray = rot.as_matrix()
+        transform : torch.Tensor = torch.inverse(pose_curr)
 
-        transform : torch.Tensor = torch.eye(4, dtype=torch.float32, device=self.device)
-        transform[0:3,0:3] = torch.from_numpy(rotmat.astype(np.float32)).to(self.device)
-        transform[0:3,3] = torch.matmul(transform[0:3,0:3], ptransform)
         bcurve_global : torch.Tensor = torch.ones(len(current_curve.control_points), 4, dtype=torch.float32, device=self.device )
         for i in range(bcurve_global.shape[0]):
             bcurve_global[i,0]=current_curve.control_points[i].x
             bcurve_global[i,1]=current_curve.control_points[i].y
             bcurve_global[i,2]=current_curve.control_points[i].z
         bcurve_local = torch.matmul(bcurve_global, transform[0:3].t()).unsqueeze(0)
-        dt : float = float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9
+        dt : float = 1.0*(float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9)
         
         Msamp : torch.Tensor = mu.bezierM(self.tsamp, bcurve_local.shape[1]-1)
         Psamp : torch.Tensor = torch.matmul(Msamp, bcurve_local)
@@ -113,8 +120,10 @@ class BezierCurvePurePursuit(Node):
         arclengths = arclengths[idx:]
         arclengths = arclengths - arclengths[0]
 
-        lookahead_distance = max(self.lookahead_gain*odom_msg.twist.twist.linear.x, 15.0)
-        lookahead_distance_vel = self.velocity_lookahead_gain*odom_msg.twist.twist.linear.x
+        vel_local = odom_msg.twist.twist.linear
+        current_speed : float = torch.norm(torch.as_tensor([vel_local.x, vel_local.y, vel_local.z]), p=2).item()
+        lookahead_distance = max(self.lookahead_gain*current_speed, 15.0)
+        lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
 
         lookahead_index = torch.argmin(torch.abs(arclengths-lookahead_distance))
         lookahead_index_vel = torch.argmin(torch.abs(arclengths-lookahead_distance_vel))

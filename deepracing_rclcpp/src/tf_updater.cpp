@@ -135,8 +135,8 @@ class NodeWrapperTfUpdater_
 
       
       Eigen::Isometry3d trackToCarEigen = tf2::transformToEigen(transformMsg);
-      Eigen::Isometry3d trackToBLEigen = trackToCarEigen * carToBaseLinkEigen;
-      Eigen::Isometry3d mapToBLEigen = mapToTrackEigen * trackToBLEigen;
+      Eigen::Isometry3d mapToCarEigen = mapToTrackEigen * trackToCarEigen;
+      Eigen::Isometry3d mapToBLEigen = mapToCarEigen * carToBaseLinkEigen;
 
       Eigen::Vector3d mapToBL_translation(mapToBLEigen.translation());
       Eigen::Quaterniond mapToBL_quaternion(mapToBLEigen.rotation());
@@ -154,21 +154,24 @@ class NodeWrapperTfUpdater_
       pose.pose.orientation.set__w(mapToBL_quaternion.w());
 
       Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.z, velocityROS.vector.x, velocityROS.vector.y);
-      // Eigen::Vector3d centroidVelEigenLocal(motion_data_packet->udp_packet.local_velocity.z, motion_data_packet->udp_packet.local_velocity.x, motion_data_packet->udp_packet.local_velocity.y);
+      Eigen::Vector3d centroidVelEigenLocal(velocityROS.vector.z, motion_data_packet->udp_packet.local_velocity.x, motion_data_packet->udp_packet.local_velocity.y);
       
      
 
       geometry_msgs::msg::TwistStamped car_velocity_local;
       car_velocity_local.header.set__stamp(transformMsg.header.stamp);
-      car_velocity_local.header.set__frame_id("base_link");
-      car_velocity_local.twist.linear.set__x(centroidVelEigenGlobal.norm());
-      car_velocity_local.twist.linear.set__y(0.0);
-      car_velocity_local.twist.linear.set__z(0.0);
+      car_velocity_local.header.set__frame_id(transformMsg.child_frame_id);
+      car_velocity_local.twist.linear.set__x(motion_data_packet->udp_packet.local_velocity.z);
+      car_velocity_local.twist.linear.set__y(motion_data_packet->udp_packet.local_velocity.x);
+      car_velocity_local.twist.linear.set__z(motion_data_packet->udp_packet.local_velocity.y);
+      car_velocity_local.twist.angular.set__x(motion_data_packet->udp_packet.angular_velocity.z);
+      car_velocity_local.twist.angular.set__y(motion_data_packet->udp_packet.angular_velocity.x);
+      car_velocity_local.twist.angular.set__z(motion_data_packet->udp_packet.angular_velocity.y);
 
       nav_msgs::msg::Odometry odom;
       odom.set__header(pose.header);
       odom.set__child_frame_id(car_velocity_local.header.frame_id);
-      odom.pose.set__pose(pose.pose);
+      odom.pose.set__pose(tf2::toMsg(mapToCarEigen));
 
       odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14]=0.0025;
       odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35]=1.0E-4;

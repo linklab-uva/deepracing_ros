@@ -32,7 +32,7 @@ import torch
 import torch.nn as NN
 import torch.utils.data as data_utils
 from sensor_msgs.msg import PointCloud2
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Transform, TransformStamped
 from std_msgs.msg import Float64, Header
 from nav_msgs.msg import Path
 from autoware_auto_msgs.msg import Trajectory, TrajectoryPoint, Complex32
@@ -53,6 +53,7 @@ import json
 import torch
 from deepracing_msgs.msg import BezierCurve
 from deepracing_msgs.srv import SetPurePursuitPath
+import deepracing_ros
 import deepracing_ros.convert as C
 import deepracing.raceline_utils as raceline_utils
 import pickle as pkl
@@ -122,12 +123,6 @@ class OraclePathServer(PathServerROS):
         for (i, p) in enumerate(rlgenerator):
             pt : torch.Tensor = torch.as_tensor(p, dtype=self.tsamp.dtype, device=self.device)
             raceline[0:3,i] = pt[0:3]
-            # if (i<80) or (i>(racelinespeeds.shape[0]-83)):
-            #     racelinespeeds[i] = 92.0
-            # else:
-            #     racelinespeeds[i] = pt[3]
-            # if i>0:
-            #     racelinetimes[i] = racelinetimes[i-1] + torch.norm(raceline[0:3,i] - raceline[0:3,i-1], p=2, dim=0)/racelinespeeds[i-1]
             racelinetimes[i] = pt[3]
             racelinespeeds[i] = pt[4]
         if raceline_pc.header.frame_id==self.racelineframe:
@@ -156,11 +151,21 @@ class OraclePathServer(PathServerROS):
         if not (posemsg.header.frame_id==self.racelineframe):
             self.get_logger().error("Returning None because current odometry is in the %f frame, but the raceline is in the %f frame" % (posemsg.header.frame_id,self.racelineframe))
             return None, None, None
-        vecmsg = posemsg.pose.pose.position
-        pcurr = torch.as_tensor([vecmsg.x, vecmsg.y, vecmsg.z], dtype=self.tsamp.dtype, device=self.device)
-        Imin = torch.argmin(torch.norm(self.raceline[0:3] - pcurr[:,None], p=2, dim=0))
+        
+        map_to_car : torch.Tensor = C.poseMsgToTorch(posemsg.pose.pose, dtype=self.tsamp.dtype, device=self.device)
+
+        if not posemsg.child_frame_id=="base_link":
+            car_to_base_link_msg : TransformStamped = self.tf2_buffer.lookup_transform(posemsg.child_frame_id, "base_link", Time.from_msg(posemsg.header.stamp), Duration(seconds=2))
+            car_to_base_link : torch.Tensor = C.transformMsgToTorch(car_to_base_link_msg.transform, dtype=self.tsamp.dtype, device=self.device)
+            pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
+        else:
+            pose_curr : torch.Tensor = map_to_car
+
+        raceline_base_link : torch.Tensor = torch.matmul(torch.inverse(pose_curr), self.raceline)
+        Imin = torch.argmin(torch.norm(raceline_base_link[0:3], p=2, dim=0))
         t0 = self.racelinetimes[Imin]
         tf = t0+self.dt
+        
         if tf<=self.racelinetimes[-1]:
             Imax = torch.argmin(torch.abs(self.racelinetimes - tf))
             tfit = self.racelinetimes[Imin:Imax]
