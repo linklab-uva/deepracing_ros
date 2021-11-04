@@ -195,24 +195,23 @@ class NodeWrapperTfUpdater_
       double extra_position_noise=0.15;
       double extra_rot_noise=0.0001;
       double extra_vel_noise=0.05;      
-      Eigen::Quaterniond random_quat = Eigen::Quaterniond::UnitRandom();
       odom.pose.pose.position.x+=extra_position_noise*m_rng_.gaussian01();
       odom.pose.pose.position.y+=extra_position_noise*m_rng_.gaussian01();
       odom.pose.pose.position.z+=extra_position_noise*m_rng_.gaussian01();
-      odom.pose.pose.orientation.x+=extra_rot_noise*random_quat.x();
-      odom.pose.pose.orientation.y+=extra_rot_noise*random_quat.y();
-      odom.pose.pose.orientation.z+=extra_rot_noise*random_quat.z();
-      odom.pose.pose.orientation.w+=extra_rot_noise*random_quat.w();
+      odom.pose.pose.orientation.x+=extra_rot_noise*m_rng_.gaussian01();
+      odom.pose.pose.orientation.y+=extra_rot_noise*m_rng_.gaussian01();
+      odom.pose.pose.orientation.z+=extra_rot_noise*m_rng_.gaussian01();
+      odom.pose.pose.orientation.w+=extra_rot_noise*m_rng_.gaussian01();
 
-      odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14]=0.0025 + extra_position_noise;
-      odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35]=1.0E-4 + extra_rot_noise;
+      odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14] = 0.0025 + extra_position_noise;
+      odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35] = 1.0E-4 + extra_rot_noise;
 
       odom.twist.set__twist(car_velocity_local.twist);
       odom.twist.twist.linear.x+=extra_vel_noise*m_rng_.gaussian01();
       odom.twist.twist.linear.y+=extra_vel_noise*m_rng_.gaussian01();
       odom.twist.twist.linear.z+=extra_vel_noise*m_rng_.gaussian01();
-      odom.twist.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14]=0.000225+extra_vel_noise;
-      odom.twist.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35]=2.0E-5;
+      odom.twist.covariance[0]=odom.twist.covariance[7]=odom.twist.covariance[14]=0.000225+extra_vel_noise;
+      odom.twist.covariance[21]=odom.twist.covariance[28]=odom.twist.covariance[35]=2.0E-5;
 
       carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
       mapToTrack.header.set__stamp(motion_data.world_position.header.stamp);
