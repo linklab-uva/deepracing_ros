@@ -38,7 +38,7 @@ class BezierCurvePurePursuit(Node):
         super(BezierCurvePurePursuit,self).__init__('bezier_pure_pursuit')
         self.setpoint_pub : Publisher = self.create_publisher(VehicleControlCommand, "ctrl_cmd", 1)
         self.curve_sub : Subscription = self.create_subscription(BezierCurve, "localbeziercurves", self.curveCB, 1)
-        self.odom_sub : Subscription = self.create_subscription(Odometry, "/ego_vehicle/odom", self.odomCB, 1)
+        self.odom_sub : Subscription = self.create_subscription(Odometry, "odom", self.odomCB, 1)
         self.current_curve_msg : BezierCurve = None
 
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = rclpy.duration.Duration(seconds=5))
