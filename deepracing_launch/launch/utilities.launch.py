@@ -8,7 +8,7 @@ from launch.substitutions import LaunchConfiguration, Command
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    config_dir = os.path.join(get_package_share_directory("deepracing_rclcpp"),"config")
+    config_dir = os.path.join(get_package_share_directory("deepracing_launch"),"config")
     config_file = DeclareLaunchArgument("config_file", default_value=os.path.join(config_dir, "tf_updater.yaml"))
     use_sim_time = DeclareLaunchArgument("use_sim_time", default_value="false")
     

@@ -8,7 +8,7 @@ from launch.substitutions import LaunchConfiguration, Command
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    config_dir = os.path.join(get_package_share_directory("deepracing_rclcpp"),"config")
+    config_dir = os.path.join(get_package_share_directory("deepracing_launch"),"config")
     config_file = DeclareLaunchArgument("config_file", default_value=os.path.join(config_dir, "velocity_pid.yaml"))
     frequency = DeclareLaunchArgument("frequency", default_value="20.0")
     with_acceleration = DeclareLaunchArgument("with_acceleration", default_value="false")
