@@ -131,10 +131,13 @@ class BoundaryPubNode(Node):
 
     def timerCB(self):
         if self.current_racingline is not None:
+            self.current_racingline.header.stamp=self.get_clock().now().to_msg()
             self.racingline_pub.publish(self.current_racingline)
         if self.current_innerboundary is not None:
+            self.current_innerboundary.header.stamp=self.get_clock().now().to_msg()
             self.inner_boundary_pub.publish(self.current_innerboundary)
         if self.current_outerboundary is not None:
+            self.current_outerboundary.header.stamp=self.get_clock().now().to_msg()
             self.outer_boundary_pub.publish(self.current_outerboundary)
     
 
