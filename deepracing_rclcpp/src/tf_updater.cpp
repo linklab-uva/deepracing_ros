@@ -25,6 +25,7 @@ class NodeWrapperTfUpdater_
       )
     {
      node = rclcpp::Node::make_shared("f1_tf_updater");//,"",options);
+     m_tf_from_odom_ = node->declare_parameter<bool>("tf_from_odom", false);
      statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node));
      tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node));
      mapToTrack.header.frame_id = "map";
@@ -68,8 +69,13 @@ class NodeWrapperTfUpdater_
      this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("/ego_vehicle/odom", 1);
      this->autoware_state_publisher = this->node->create_publisher<autoware_auto_msgs::msg::VehicleKinematicState>("/ego_vehicle/state", 1);
      
+     if( m_tf_from_odom_ )
+     {
+       odom_listener = this->node->create_subscription<nav_msgs::msg::Odometry>("/odometry/filtered", 1, std::bind(&NodeWrapperTfUpdater_::odomCallback, this, std::placeholders::_1));
+     }
      
     }  
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_listener;
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketMotionData>::SharedPtr listener;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_publisher;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_publisher;
@@ -88,6 +94,18 @@ class NodeWrapperTfUpdater_
       this->statictfbroadcaster->sendTransform(mapToTrack);
     }
   private:
+    bool m_tf_from_odom_;
+    void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_msg)
+    {
+      geometry_msgs::msg::TransformStamped transformMsg;
+      transformMsg.set__header(odom_msg->header);
+      transformMsg.set__child_frame_id(odom_msg->child_frame_id);
+      transformMsg.transform.translation.set__x(odom_msg->pose.pose.position.x);
+      transformMsg.transform.translation.set__y(odom_msg->pose.pose.position.y);
+      transformMsg.transform.translation.set__z(odom_msg->pose.pose.position.z);
+      transformMsg.transform.set__rotation(odom_msg->pose.pose.orientation);
+      this->tfbroadcaster->sendTransform(transformMsg);
+    }
     void packetCallback(const deepracing_msgs::msg::TimestampedPacketMotionData::SharedPtr motion_data_packet)
     {
      // std::cout << "Got some data" << std::endl;
@@ -198,7 +216,10 @@ class NodeWrapperTfUpdater_
       state.state.heading.real=mapToBL_quaternion.w();
 
       publishStatic();
-      this->tfbroadcaster->sendTransform(transformMsg);
+      if (!m_tf_from_odom_)
+      {
+        this->tfbroadcaster->sendTransform(transformMsg);
+      }
       this->odom_publisher->publish(odom);
       this->autoware_state_publisher->publish(state);
     }
