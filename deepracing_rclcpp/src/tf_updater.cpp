@@ -192,9 +192,9 @@ class NodeWrapperTfUpdater_
       odom.set__child_frame_id(car_velocity_local.header.frame_id);
       odom.pose.set__pose(tf2::toMsg(mapToCarEigen));
 
-      double extra_position_noise=0.15;
+      double extra_position_noise=0.1;
       double extra_rot_noise=0.0001;
-      double extra_vel_noise=0.05;      
+      double extra_vel_noise=0.025;      
       odom.pose.pose.position.x+=extra_position_noise*m_rng_.gaussian01();
       odom.pose.pose.position.y+=extra_position_noise*m_rng_.gaussian01();
       odom.pose.pose.position.z+=extra_position_noise*m_rng_.gaussian01();
