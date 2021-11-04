@@ -28,12 +28,14 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(autoware_auto_msgs REQUIRED)
+find_package(Boost REQUIRED COMPONENTS date_time random thread)
 find_package(control_toolbox REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)
 find_package(laser_geometry REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(random_numbers REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosidl_default_runtime REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -71,7 +73,7 @@ if(NOT HAS_STDCXXFS)
 endif()
 
 add_executable(tf_updater src/tf_updater.cpp)
-ament_target_dependencies(tf_updater autoware_auto_msgs deepracing_msgs geometry_msgs nav_msgs rclcpp tf2 tf2_eigen tf2_ros tf2_sensor_msgs)
+ament_target_dependencies(tf_updater autoware_auto_msgs deepracing_msgs geometry_msgs nav_msgs random_numbers rclcpp tf2 tf2_eigen tf2_ros tf2_sensor_msgs)
 target_link_libraries(tf_updater
  utils
  Eigen3::Eigen

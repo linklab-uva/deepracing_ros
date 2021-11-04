@@ -14,6 +14,7 @@
 #include "deepracing_ros/utils/f1_msg_utils.h"
 #include <tf2_eigen/tf2_eigen.h>
 #include <autoware_auto_msgs/msg/vehicle_kinematic_state.hpp>
+#include <random_numbers/random_numbers.h>
 
 
 class NodeWrapperTfUpdater_ 
@@ -94,6 +95,7 @@ class NodeWrapperTfUpdater_
       this->statictfbroadcaster->sendTransform(mapToTrack);
     }
   private:
+    random_numbers::RandomNumberGenerator m_rng_;
     bool m_tf_from_odom_;
     void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_msg)
     {
@@ -159,13 +161,13 @@ class NodeWrapperTfUpdater_
       Eigen::Vector3d mapToBL_translation(mapToBLEigen.translation());
       Eigen::Quaterniond mapToBL_quaternion(mapToBLEigen.rotation());
 
-
       geometry_msgs::msg::PoseStamped pose;
       pose.header.set__frame_id("map");
       pose.header.set__stamp(transformMsg.header.stamp);
       pose.pose.position.set__x(mapToBL_translation.x());
       pose.pose.position.set__y(mapToBL_translation.y());
       pose.pose.position.set__z(mapToBL_translation.z());
+
       pose.pose.orientation.set__x(mapToBL_quaternion.x());
       pose.pose.orientation.set__y(mapToBL_quaternion.y());
       pose.pose.orientation.set__z(mapToBL_quaternion.z());
@@ -175,7 +177,6 @@ class NodeWrapperTfUpdater_
       Eigen::Vector3d centroidVelEigenLocal(velocityROS.vector.z, motion_data_packet->udp_packet.local_velocity.x, motion_data_packet->udp_packet.local_velocity.y);
       
      
-
       geometry_msgs::msg::TwistStamped car_velocity_local;
       car_velocity_local.header.set__stamp(transformMsg.header.stamp);
       car_velocity_local.header.set__frame_id(transformMsg.child_frame_id);
@@ -191,11 +192,26 @@ class NodeWrapperTfUpdater_
       odom.set__child_frame_id(car_velocity_local.header.frame_id);
       odom.pose.set__pose(tf2::toMsg(mapToCarEigen));
 
-      odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14]=0.0025;
-      odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35]=1.0E-4;
+      double extra_position_noise=0.15;
+      double extra_rot_noise=0.0001;
+      double extra_vel_noise=0.05;      
+      Eigen::Quaterniond random_quat = Eigen::Quaterniond::UnitRandom();
+      odom.pose.pose.position.x+=extra_position_noise*m_rng_.gaussian01();
+      odom.pose.pose.position.y+=extra_position_noise*m_rng_.gaussian01();
+      odom.pose.pose.position.z+=extra_position_noise*m_rng_.gaussian01();
+      odom.pose.pose.orientation.x+=extra_rot_noise*random_quat.x();
+      odom.pose.pose.orientation.y+=extra_rot_noise*random_quat.y();
+      odom.pose.pose.orientation.z+=extra_rot_noise*random_quat.z();
+      odom.pose.pose.orientation.w+=extra_rot_noise*random_quat.w();
+
+      odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14]=0.0025 + extra_position_noise;
+      odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35]=1.0E-4 + extra_rot_noise;
 
       odom.twist.set__twist(car_velocity_local.twist);
-      odom.twist.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14]=0.000225;
+      odom.twist.twist.linear.x+=extra_vel_noise*m_rng_.gaussian01();
+      odom.twist.twist.linear.y+=extra_vel_noise*m_rng_.gaussian01();
+      odom.twist.twist.linear.z+=extra_vel_noise*m_rng_.gaussian01();
+      odom.twist.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14]=0.000225+extra_vel_noise;
       odom.twist.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35]=2.0E-5;
 
       carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
