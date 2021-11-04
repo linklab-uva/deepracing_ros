@@ -65,9 +65,7 @@ class BoundaryPubNode(Node):
         idx = session_data.udp_packet.track_id
         if not (idx==self.current_track_id):
             now = self.get_clock().now()
-            # racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_minimumcurvaturebaseline.json", self.search_dirs)
-            # racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_minimumcurvaturemoderate.json", self.search_dirs)
-            racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_minimumcurvaturelowbraking.json", self.search_dirs)
+            racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_minimumcurvaturelowca.json", self.search_dirs)
             innerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_innerlimit.json", self.search_dirs)
             outerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_outerlimit.json", self.search_dirs)
             transform_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", deepracing_ros.world_coordinate_name, Time())
