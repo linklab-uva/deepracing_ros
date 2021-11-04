@@ -103,7 +103,9 @@ class AutowareControlNode : public rclcpp::Node
     
     inline void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom)
     {
-      m_current_speed_ = odom->twist.twist.linear.x;
+      m_current_speed_ = std::sqrt( odom->twist.twist.linear.x*odom->twist.twist.linear.x + 
+                                    odom->twist.twist.linear.y*odom->twist.twist.linear.y +
+                                    odom->twist.twist.linear.z*odom->twist.twist.linear.z );
     }
     double m_current_speed_, m_safe_steer_max_, m_safe_steer_min_, m_safe_vel_, m_full_lock_left_, m_full_lock_right_;
     bool m_drs_allowed_, m_drs_enabled_;
