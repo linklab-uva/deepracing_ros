@@ -33,6 +33,10 @@ class BoundaryPubNode(Node):
             self.search_dirs.append(os.path.join(get_package_share_directory("f1_datalogger"), "f1_tracks"))
         except PackageNotFoundError as ex:
             pass
+        searchdirs_string : str = ""
+        for searchdir in self.search_dirs:
+            searchdirs_string = searchdirs_string+searchdir+","
+        self.get_logger().info("Looking for track files in %s." % (searchdirs_string[0:-1]))
         self.current_track_id=-1
         self.current_innerboundary : sensor_msgs.msg.PointCloud2 = None
         self.current_outerboundary : sensor_msgs.msg.PointCloud2 = None
