@@ -44,7 +44,7 @@ class BezierCurvePurePursuit(Node):
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = rclpy.duration.Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
-        lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain", value=0.3)
+        lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain", value=0.5)
         self.lookahead_gain : float = lookahead_gain_param.get_parameter_value().double_value
 
         velocity_lookahead_gain_param : Parameter = self.declare_parameter("velocity_lookahead_gain", value=0.1)
@@ -129,12 +129,12 @@ class BezierCurvePurePursuit(Node):
         lookahead_index_vel = torch.argmin(torch.abs(arclengths-lookahead_distance_vel))
 
         lookaheadVector = Psamp[lookahead_index]
-        D = torch.norm(lookaheadVector, p=2)
-        lookaheadDirection = lookaheadVector/D
+        ld = torch.norm(lookaheadVector, p=2)
+        lookaheadDirection = lookaheadVector/ld
         alpha = torch.atan2(lookaheadDirection[1],lookaheadDirection[0])
 
         control_out : VehicleControlCommand = VehicleControlCommand(stamp=odom_msg.header.stamp)
-        control_out.front_wheel_angle_rad = torch.atan((2 * self.wheelbase * torch.sin(alpha)) / D).item()
+        control_out.front_wheel_angle_rad = torch.atan((2 * self.wheelbase * torch.sin(alpha)) / ld).item()
         control_out.velocity_mps=speeds[lookahead_index_vel].item()
         control_out.long_accel_mps2=longitudinal_accelerations[lookahead_index_vel].item()
 
