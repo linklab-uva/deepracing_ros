@@ -198,6 +198,7 @@ class OraclePathServer(PathServerROS):
         path_msg : Path = Path(header=posemsg.header) 
         traj_msg : Trajectory = Trajectory(header=path_msg.header) 
         up : np.ndarray = np.asarray( [0.0, 0.0, 1.0] )
+        unit_tangents_np : np.ndarray = unit_tangents.cpu().numpy()
         for i in range(positionsbcurve.shape[0]):
             pose : PoseStamped = PoseStamped(header=path_msg.header)
             traj_point : TrajectoryPoint = TrajectoryPoint()
@@ -206,7 +207,7 @@ class OraclePathServer(PathServerROS):
             pose.pose.position.z=traj_point.z=zmean
 
             Rmat : np.ndarray = np.eye(3)
-            Rmat[0:3,0]=unit_tangents[i]
+            Rmat[0:3,0]=unit_tangents_np[i]
             Rmat[0:3,1]=np.cross(up, Rmat[0:3,0])
             Rmat[0:3,1]=Rmat[0:3,1]/np.linalg.norm(Rmat[0:3,1], ord=2)
             Rmat[0:3,2]=np.cross(Rmat[0:3,0], Rmat[0:3,1])
