@@ -44,10 +44,10 @@ class BezierCurvePurePursuit(Node):
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = rclpy.duration.Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
-        lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain", value=0.5)
+        lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain", value=0.4)
         self.lookahead_gain : float = lookahead_gain_param.get_parameter_value().double_value
 
-        velocity_lookahead_gain_param : Parameter = self.declare_parameter("velocity_lookahead_gain", value=0.1)
+        velocity_lookahead_gain_param : Parameter = self.declare_parameter("velocity_lookahead_gain", value=0.175)
         self.velocity_lookahead_gain : float = velocity_lookahead_gain_param.get_parameter_value().double_value
 
         wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.85)
