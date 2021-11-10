@@ -35,13 +35,19 @@ class AutowareControlNode : public rclcpp::Node
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
       command_listener = create_subscription<autoware_auto_msgs::msg::VehicleControlCommand>("ctrl_cmd", rclcpp::QoS{1},
         std::bind(&AutowareControlNode::commandCallback, this, std::placeholders::_1), listner_options);
+      listner_options = rclcpp::SubscriptionOptions();
+      listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
       status_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarStatusData>("/f1_game/status_data", rclcpp::QoS{1},
         std::bind(&AutowareControlNode::statusCallback, this, std::placeholders::_1), listner_options);
+      listner_options = rclcpp::SubscriptionOptions();
+      listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
       telemetry_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>("/f1_game/telemetry_data", rclcpp::QoS{1},
         std::bind(&AutowareControlNode::telemetryCallback, this, std::placeholders::_1), listner_options);
-      odom_listener = create_subscription<nav_msgs::msg::Odometry>("/ego_vehicle/odom", rclcpp::QoS{1},
-        std::bind(&AutowareControlNode::odomCallback, this, std::placeholders::_1));
-      
+      listner_options = rclcpp::SubscriptionOptions();
+      listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+      odom_listener = create_subscription<nav_msgs::msg::Odometry>("odom", rclcpp::QoS{1},
+        std::bind(&AutowareControlNode::odomCallback, this, std::placeholders::_1), listner_options);
+
     }
     inline void controlLoop(const rclcpp::Duration& dt)
     {
@@ -96,8 +102,6 @@ class AutowareControlNode : public rclcpp::Node
     inline void commandCallback(const autoware_auto_msgs::msg::VehicleControlCommand::SharedPtr new_commands)
     {
       autoware_auto_msgs::msg::VehicleControlCommand newsetpoints(*new_commands);
-      // newsetpoints.front_wheel_angle_rad*=2.0;
-      // newsetpoints.velocity_mps*=0.95;
       m_setpoints = newsetpoints;
     }
     
