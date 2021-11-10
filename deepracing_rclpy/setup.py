@@ -44,12 +44,13 @@ setup(
     #],
     entry_points={
         'console_scripts': [
-            'pure_pursuit_bezier = %s.scripts.admiralnet_bezier_script:main' % (python_pkg_name),
-            'pure_pursuit_waypoint = %s.scripts.admiralnet_waypoint_script:main' % (python_pkg_name),
+            # 'pure_pursuit_bezier = %s.scripts.admiralnet_bezier_script:main' % (python_pkg_name),
+            # 'pure_pursuit_waypoint = %s.scripts.admiralnet_waypoint_script:main' % (python_pkg_name),
+            # 'cnnlstm = %s.scripts.cnnlstm_script:main' % (python_pkg_name),
+            # 'admiralnet_e2e = %s.scripts.admiralnet_e2e_script:main' % (python_pkg_name),
+            # 'generate_steering_calibration = %s.scripts.generate_steering_calibration:main' % (python_pkg_name),
+            'admiralnet_path_server = %s.scripts.admiralnet_path_server:main' % (python_pkg_name),
             'oracle_path_server = %s.scripts.oracle_path_server:main' % (python_pkg_name),
-            'cnnlstm = %s.scripts.cnnlstm_script:main' % (python_pkg_name),
-            'admiralnet_e2e = %s.scripts.admiralnet_e2e_script:main' % (python_pkg_name),
-            'generate_steering_calibration = %s.scripts.generate_steering_calibration:main' % (python_pkg_name),
             'vehicle_state_publisher = %s.scripts.vehicle_state_publisher:main' % (python_pkg_name),
             'bezier_curve_pure_pursuit = %s.scripts.bezier_curve_pure_pursuit:main' % (python_pkg_name),
             'boundary_publisher = %s.scripts.boundary_publisher:main' % (python_pkg_name),
