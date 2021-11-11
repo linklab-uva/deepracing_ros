@@ -224,21 +224,21 @@ class BezierPredictionPathServerROS(PathServerROS):
             
             bezier_global = torch.matmul(bezier_control_points_aug, carpose[0:3].t()).unsqueeze(0)
 
-            positionsbcurve : torch.Tensor = torch.matmul(self.bezierM, bezier_global)[0]
-
-            _, bcurvderiv = mu.bezierDerivative(bezier_global, M=self.bezierMderiv)
-            velocitiesbcurve : torch.Tensor = (bcurvderiv[0]/self.deltaT)
-            speedsbcurve : torch.Tensor = torch.norm(velocitiesbcurve, p=2, dim=1)
-            unit_tangents : torch.Tensor = velocitiesbcurve/speedsbcurve[:,None]
-
-            _, bcurv2ndderiv = mu.bezierDerivative(bezier_global, M=self.bezierM2ndderiv, order=2)
-            accelerationsbcurve : torch.Tensor = (bcurv2ndderiv[0]/(self.deltaT*self.deltaT))
-            longitudinal_accels : torch.Tensor = torch.sum(accelerationsbcurve*unit_tangents, dim=1)
-
             bcurve_msg : BezierCurve = C.toBezierCurveMsg(bezier_global[0], Header(frame_id="map", stamp=imagestamp))
             fracpart, intpart = math.modf(self.deltaT)
             bcurve_msg.delta_t = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
             return bcurve_msg, None, None
+
+            # positionsbcurve : torch.Tensor = torch.matmul(self.bezierM, bezier_global)[0]
+
+            # _, bcurvderiv = mu.bezierDerivative(bezier_global, M=self.bezierMderiv)
+            # velocitiesbcurve : torch.Tensor = (bcurvderiv[0]/self.deltaT)
+            # speedsbcurve : torch.Tensor = torch.norm(velocitiesbcurve, p=2, dim=1)
+            # unit_tangents : torch.Tensor = velocitiesbcurve/speedsbcurve[:,None]
+
+            # _, bcurv2ndderiv = mu.bezierDerivative(bezier_global, M=self.bezierM2ndderiv, order=2)
+            # accelerationsbcurve : torch.Tensor = (bcurv2ndderiv[0]/(self.deltaT*self.deltaT))
+            # longitudinal_accels : torch.Tensor = torch.sum(accelerationsbcurve*unit_tangents, dim=1)
             # path_msg : Path = Path(header=bcurve_msg.header) 
             # traj_msg : Trajectory = Trajectory(header=path_msg.header) 
             # up : np.ndarray = np.asarray( [0.0, 0.0, 1.0] )
