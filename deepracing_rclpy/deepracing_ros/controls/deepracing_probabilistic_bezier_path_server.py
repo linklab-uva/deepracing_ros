@@ -211,17 +211,15 @@ class BezierPredictionPathServerROS(PathServerROS):
         
 
         with torch.no_grad():
+            bezier_control_points, _, _ = self.net(imtorch.unsqueeze(0))
+            bezier_control_points = bezier_control_points.flip(dims=[2])
+            bezier_control_points_aug = torch.cat([bezier_control_points[0],  self.zero_ones], dim=1)
             try:
                 transform_msg : TransformStamped = self.tf2_buffer.lookup_transform("map", "car", Time.from_msg(imagestamp), Duration(seconds=0, nanoseconds=int(0.5*1E9)))
             except:
                 self.get_logger().error("Unable to acquire transform from map to car.")
                 return None, None, None
-
             carpose = C.transformMsgToTorch(transform_msg.transform, dtype=self.dtype, device=self.device)
-            bezier_control_points, _, _ = self.net(imtorch.unsqueeze(0))
-            bezier_control_points = bezier_control_points.flip(dims=[2])
-            bezier_control_points_aug = torch.cat([bezier_control_points[0],  self.zero_ones], dim=1)
-            
             bezier_global = torch.matmul(bezier_control_points_aug, carpose[0:3].t()).unsqueeze(0)
 
             bcurve_msg : BezierCurve = C.toBezierCurveMsg(bezier_global[0], Header(frame_id="map", stamp=imagestamp))

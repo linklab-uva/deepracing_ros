@@ -113,6 +113,9 @@ if(TARGET f1_datalogger::f1_datalogger_controllers)
   utils
   f1_datalogger::f1_datalogger_controllers
   )
+  if(WIN32)
+    target_compile_definitions(autoware_control_node PUBLIC "_USE_MATH_DEFINES" "NOGDI")
+  endif()
   list(APPEND nodes_to_install_ autoware_control_node)
 endif()
 
