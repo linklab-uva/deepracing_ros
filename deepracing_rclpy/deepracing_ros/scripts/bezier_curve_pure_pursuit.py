@@ -37,7 +37,7 @@ class BezierCurvePurePursuit(Node):
     def __init__(self,):
         super(BezierCurvePurePursuit,self).__init__('bezier_pure_pursuit')
         self.setpoint_pub : Publisher = self.create_publisher(VehicleControlCommand, "ctrl_cmd", 1)
-        self.curve_sub : Subscription = self.create_subscription(BezierCurve, "localbeziercurves", self.curveCB, 1)
+        self.curve_sub : Subscription = self.create_subscription(BezierCurve, "beziercurves_in", self.curveCB, 1)
         self.odom_sub : Subscription = self.create_subscription(Odometry, "odom", self.odomCB, 1)
         self.current_curve_msg : BezierCurve = None
 
@@ -64,7 +64,7 @@ class BezierCurvePurePursuit(Node):
             self.device : torch.device = torch.device("cpu")
 
 
-        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 200, dtype=torch.float32, device=self.device).unsqueeze(0)
+        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 300, dtype=torch.float32, device=self.device).unsqueeze(0)
 
 
 
@@ -75,18 +75,18 @@ class BezierCurvePurePursuit(Node):
             return
         current_curve : BezierCurve = deepcopy(self.current_curve_msg)
         
-        map_to_car : torch.Tensor = C.poseMsgToTorch(odom_msg.pose.pose, dtype=self.tsamp.dtype, device=self.device)
+        map_to_car : torch.Tensor = C.poseMsgToTorch(odom_msg.pose.pose, dtype=self.tsamp.dtype, device=self.tsamp.device)
 
         if not odom_msg.child_frame_id=="base_link":
             car_to_base_link_msg : TransformStamped = self.tf2_buffer.lookup_transform(odom_msg.child_frame_id, "base_link", rclpy.time.Time.from_msg(odom_msg.header.stamp), rclpy.duration.Duration(seconds=2))
-            car_to_base_link : torch.Tensor = C.transformMsgToTorch(car_to_base_link_msg.transform, dtype=self.tsamp.dtype, device=self.device)
+            car_to_base_link : torch.Tensor = C.transformMsgToTorch(car_to_base_link_msg.transform, dtype=map_to_car.dtype, device=map_to_car.device)
             pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
         else:
             pose_curr : torch.Tensor = map_to_car
 
         transform : torch.Tensor = torch.inverse(pose_curr)
 
-        bcurve_global : torch.Tensor = torch.ones(len(current_curve.control_points), 4, dtype=torch.float32, device=self.device )
+        bcurve_global : torch.Tensor = torch.ones(len(current_curve.control_points), 4, dtype=map_to_car.dtype, device=map_to_car.device )
         for i in range(bcurve_global.shape[0]):
             bcurve_global[i,0]=current_curve.control_points[i].x
             bcurve_global[i,1]=current_curve.control_points[i].y
