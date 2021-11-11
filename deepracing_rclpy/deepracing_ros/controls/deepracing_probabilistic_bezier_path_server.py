@@ -232,44 +232,46 @@ class BezierPredictionPathServerROS(PathServerROS):
             longitudinal_accels : torch.Tensor = torch.sum(accelerationsbcurve*unit_tangents, dim=1)
 
             bcurve_msg : BezierCurve = C.toBezierCurveMsg(bezier_global[0], Header(frame_id="map", stamp=imagestamp))
-            # path_msg : Path = Path(header=bcurve_msg.header) 
-            # traj_msg : Trajectory = Trajectory(header=path_msg.header) 
-            # up : np.ndarray = np.asarray( [0.0, 0.0, 1.0] )
-            # unit_tangents_np : np.ndarray = unit_tangents.cpu().numpy()
-            # zmean : float = torch.mean(bezier_global[0,:,2]).item()
-            # for i in range(positionsbcurve.shape[0]):
-            #     pose : PoseStamped = PoseStamped(header=path_msg.header)
-            #     traj_point : TrajectoryPoint = TrajectoryPoint()
-            #     pose.pose.position.x=traj_point.x=positionsbcurve[i,0].item()
-            #     pose.pose.position.y=traj_point.y=positionsbcurve[i,1].item()
-            #     pose.pose.position.z=traj_point.z=zmean
+            path_msg : Path = Path(header=bcurve_msg.header) 
+            traj_msg : Trajectory = Trajectory(header=path_msg.header) 
+            up : np.ndarray = np.asarray( [0.0, 0.0, 1.0] )
+            unit_tangents_np : np.ndarray = unit_tangents.cpu().numpy()
+            zmean : float = torch.mean(bezier_global[0,:,2]).item()
+            for i in range(positionsbcurve.shape[0]):
+                pose : PoseStamped = PoseStamped(header=path_msg.header)
+                traj_point : TrajectoryPoint = TrajectoryPoint()
+                pose.pose.position.x=traj_point.x=positionsbcurve[i,0].item()
+                pose.pose.position.y=traj_point.y=positionsbcurve[i,1].item()
+                pose.pose.position.z=traj_point.z=zmean
 
-            #     Rmat : np.ndarray = np.eye(3)
-            #     Rmat[0:3,0]=unit_tangents_np[i]
-            #     Rmat[0:3,1]=np.cross(up, Rmat[0:3,0])
-            #     Rmat[0:3,1]=Rmat[0:3,1]/np.linalg.norm(Rmat[0:3,1], ord=2)
-            #     Rmat[0:3,2]=np.cross(Rmat[0:3,0], Rmat[0:3,1])
-            #     rot : Rot = Rot.from_matrix(Rmat)
-            #     quat : np.ndarray = rot.as_quat()
-            #     quat[0:2]=0.0
-            #     quat = quat/np.linalg.norm(quat,ord=2)
-            #     pose.pose.orientation.x=float(quat[0])
-            #     pose.pose.orientation.y=float(quat[1])
-            #     pose.pose.orientation.z=traj_point.heading.imag=float(quat[2])
-            #     pose.pose.orientation.w=traj_point.heading.real=float(quat[3])
+                Rmat : np.ndarray = np.eye(3)
+                Rmat[0:3,0]=unit_tangents_np[i]
+                Rmat[0:3,1]=np.cross(up, Rmat[0:3,0])
+                Rmat[0:3,1]=Rmat[0:3,1]/np.linalg.norm(Rmat[0:3,1], ord=2)
+                Rmat[0:3,2]=np.cross(Rmat[0:3,0], Rmat[0:3,1])
+                rot : Rot = Rot.from_matrix(Rmat)
+                quat : np.ndarray = rot.as_quat()
+                quat[0:2]=0.0
+                quat = quat/np.linalg.norm(quat,ord=2)
+                pose.pose.orientation.x=float(quat[0])
+                pose.pose.orientation.y=float(quat[1])
+                pose.pose.orientation.z=traj_point.heading.imag=float(quat[2])
+                pose.pose.orientation.w=traj_point.heading.real=float(quat[3])
 
-            #     fracpart, intpart = math.modf((self.deltaT*self.s_torch[0,i]).item())
-            #     traj_point.time_from_start=builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
-            #     traj_point.longitudinal_velocity_mps=speedsbcurve[i].item()
-            #     traj_point.acceleration_mps2=longitudinal_accels[i].item()
+                fracpart, intpart = math.modf((self.deltaT*self.s_torch[0,i]).item())
+                traj_point.time_from_start=builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
+                traj_point.longitudinal_velocity_mps=speedsbcurve[i].item()
+                traj_point.acceleration_mps2=longitudinal_accels[i].item()
 
-            #     path_msg.poses.append(pose)
-            #     traj_msg.points.append(traj_point)
-            # final_point : TrajectoryPoint = traj_msg.points[-1]
-            fracpart, intpart = math.modf(self.deltaT)
-            bcurve_msg.delta_t = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
+                path_msg.poses.append(pose)
+                traj_msg.points.append(traj_point)
+            final_point : TrajectoryPoint = traj_msg.points[-1]
+            bcurve_msg.delta_t = final_point.time_from_start
+           # fracpart, intpart = math.modf(self.deltaT)
+            # bcurve_msg.delta_t = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
                 
-            return bcurve_msg, None, None
+            # return bcurve_msg, None, None
+            return bcurve_msg, path_msg, traj_msg
 
             # self.bc_pub.publish(deepracing_ros.convert.toBezierCurveMsg(bezier_control_points_global, current_pose_msg.header))
 
