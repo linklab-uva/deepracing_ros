@@ -32,23 +32,9 @@ setup(
     tests_require=['pytest'],
     packages=list(set(find_packages(exclude=['test'])+[
                 python_pkg_name
-                # os.path.join(python_pkg_name,"controls"),
-                # os.path.join(python_pkg_name,"convert"),
               ])),
-   # data_files=[
-       # ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
-        # Include our package.xml file
-       # (os.path.join('share', package_name), ['package.xml']),
-        # Include all launch files.
-      #  (os.path.join('share', package_name, 'launch'), glob('*.launch.py'))
-    #],
     entry_points={
         'console_scripts': [
-            # 'pure_pursuit_bezier = %s.scripts.admiralnet_bezier_script:main' % (python_pkg_name),
-            # 'pure_pursuit_waypoint = %s.scripts.admiralnet_waypoint_script:main' % (python_pkg_name),
-            # 'cnnlstm = %s.scripts.cnnlstm_script:main' % (python_pkg_name),
-            # 'admiralnet_e2e = %s.scripts.admiralnet_e2e_script:main' % (python_pkg_name),
-            # 'generate_steering_calibration = %s.scripts.generate_steering_calibration:main' % (python_pkg_name),
             'admiralnet_path_server = %s.scripts.admiralnet_path_server:main' % (python_pkg_name),
             'oracle_path_server = %s.scripts.oracle_path_server:main' % (python_pkg_name),
             'vehicle_state_publisher = %s.scripts.vehicle_state_publisher:main' % (python_pkg_name),

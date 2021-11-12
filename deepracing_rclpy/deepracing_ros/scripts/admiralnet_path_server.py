@@ -32,8 +32,6 @@ def main(args=None):
     spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor())
     node = BezierPredictionPathServerROS()
     bcurve_pub : Publisher = node.create_publisher(BezierCurve, "admiralnetbeziercurves", 1)
-    path_pub : Publisher = node.create_publisher(Path, "admiralnetlocalpaths", 1)
-    traj_pub : Publisher = node.create_publisher(Trajectory, "admiralnetlocaltrajectories", 1)
     spinner.add_node(node)
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     spinner.spin()
@@ -41,13 +39,9 @@ def main(args=None):
     try:
         while rclpy.ok():
             rate.sleep()
-            bcurve_msg, path_msg, traj_msg = node.getTrajectory()
+            bcurve_msg = node.getTrajectory()
             if (bcurve_msg is not None):
                 bcurve_pub.publish(bcurve_msg)
-            if (path_msg is not None):
-                path_pub.publish(path_msg)
-            if (traj_msg is not None):
-                traj_pub.publish(traj_msg)
     except KeyboardInterrupt:
         pass
     spinner.shutdown()

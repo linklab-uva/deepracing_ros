@@ -46,7 +46,10 @@ class BoundaryPubNode(Node):
         self.boundary_fields.append(sensor_msgs.msg.PointField(name="x", offset=0, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
         self.boundary_fields.append(sensor_msgs.msg.PointField(name="y", offset=4, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
         self.boundary_fields.append(sensor_msgs.msg.PointField(name="z", offset=8, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-        self.boundary_fields.append(sensor_msgs.msg.PointField(name="r", offset=12, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
+        self.boundary_fields.append(sensor_msgs.msg.PointField(name="nx", offset=12, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
+        self.boundary_fields.append(sensor_msgs.msg.PointField(name="ny", offset=16, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
+        self.boundary_fields.append(sensor_msgs.msg.PointField(name="nz", offset=20, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
+        self.boundary_fields.append(sensor_msgs.msg.PointField(name="r", offset=24, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
 
         self.raceline_fields : List[sensor_msgs.msg.PointField] = []
         self.raceline_fields.append(sensor_msgs.msg.PointField(name="x", offset=0, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
@@ -78,7 +81,7 @@ class BoundaryPubNode(Node):
             Tmat : np.ndarray = np.eye(4, dtype=np.float32)
             Tmat[0:3,0:3] = Rotation.from_quat([transform_quat.x, transform_quat.y, transform_quat.z, transform_quat.w]).as_matrix().astype(np.float32)
             Tmat[0:3,3] = np.asarray([transform_vec.x, transform_vec.y, transform_vec.z], dtype=np.float32)
-            Tmat=Tmat.transpose()
+            Rmat = Tmat[0:3,0:3].copy()
             with open(racelinefile,"r") as f:
                 d : dict = json.load(f)
                 raceline : np.ndarray = np.column_stack([d["x"], d["y"], d["z"], np.ones_like(d["z"]), d["speeds"]])
@@ -97,8 +100,11 @@ class BoundaryPubNode(Node):
                 raceline_msg.data=raceline.flatten().tobytes()
             with open(innerlimitfile,"r") as f:
                 d : dict = json.load(f)
-                innerboundary : np.ndarray = np.matmul(np.column_stack([d["x"], d["y"], d["z"], np.ones_like(d["z"])]).astype(np.float32), Tmat)
-                innerboundary[:,3]=np.asarray(d["r"], dtype=np.float32)
+                innerboundarypoints : np.ndarray = np.matmul(  Tmat, np.row_stack([ d["x"],  d["y"],  d["z"], np.ones_like(d["z"]) ]).astype(np.float32) )[0:3].transpose()
+                innerboundarynormals : np.ndarray = np.matmul( Rmat, np.row_stack([ d["nx"], d["ny"], d["nz"] ]).astype(np.float32) ).transpose()
+                innerboundary_r : np.ndarray = np.asarray(d["r"], dtype=np.float32)
+                innerboundary : np.ndarray = np.column_stack([innerboundarypoints, innerboundarynormals, innerboundary_r])
+
                 innerboundary_msg : sensor_msgs.msg.PointCloud2 = sensor_msgs.msg.PointCloud2()
                 innerboundary_msg.fields=self.boundary_fields
                 innerboundary_msg.header=raceline_msg.header
@@ -111,8 +117,11 @@ class BoundaryPubNode(Node):
                 innerboundary_msg.data=innerboundary.flatten().tobytes()
             with open(outerlimitfile,"r") as f:
                 d : dict = json.load(f)
-                outerboundary : np.ndarray = np.matmul(np.column_stack([d["x"], d["y"], d["z"], np.ones_like(d["z"])]).astype(np.float32), Tmat)
-                outerboundary[:,3]=np.asarray(d["r"], dtype=np.float32)
+                outerboundarypoints : np.ndarray = np.matmul(  Tmat, np.row_stack([ d["x"],  d["y"],  d["z"], np.ones_like(d["z"]) ]).astype(np.float32))[0:3].transpose()
+                outerboundarynormals : np.ndarray = np.matmul( Rmat, np.row_stack([ d["nx"], d["ny"], d["nz"] ]).astype(np.float32) ).transpose()
+                outerboundary_r : np.ndarray = np.asarray(d["r"], dtype=np.float32)
+                outerboundary : np.ndarray = np.column_stack([outerboundarypoints, outerboundarynormals, outerboundary_r])
+
                 outerboundary_msg : sensor_msgs.msg.PointCloud2 = sensor_msgs.msg.PointCloud2()
                 outerboundary_msg.fields=self.boundary_fields
                 outerboundary_msg.header=raceline_msg.header

@@ -1,19 +1,23 @@
+from torch.functional import Tensor
 import deepracing_msgs.msg as drmsgs # BezierCurve, TimestampedPacketMotionData, PacketMotionData, CarMotionData, PacketHeader
 import geometry_msgs.msg as geo_msgs#  Point, PointStamped, Vector3, Vector3Stamped
+import autoware_auto_msgs.msg as autoware_msgs
+import nav_msgs.msg as nav_msgs
 import tf2_msgs.msg as tf2_msgs
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header
-from builtin_interfaces.msg import Time
+from builtin_interfaces.msg import Time, Duration
 import numpy as np
 import numpy.linalg as la
 import scipy.spatial.transform
 import math
 import struct
-from typing import List, Union
+from typing import List, Union, Tuple
 from scipy.spatial.transform import Rotation as Rot
 import deepracing
 import torch
 import sys
+
 # _DATATYPES = {
 # PointField.INT8    : ('b', 1),\
 # PointField.UINT8  : ('B', 1),\
@@ -105,6 +109,7 @@ def pointCloud2ToNumpy(cloud: PointCloud2, field_names=None, skip_nans=False, uv
                   yield unpack_from(data, offset)
                   offset += point_step
 
+
 def arrayToPointCloud2(pointsarray : Union[torch.Tensor, np.ndarray], field_names : List[str], header : Header, is_bigendian = False):
    if isinstance(pointsarray, torch.Tensor):
       points = pointsarray.detach().cpu().numpy()
@@ -169,12 +174,12 @@ def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
    q = extractOrientation(packet, car_index=idx)
    return ( p, q )
 
-def toBezierCurveMsg(control_points : torch.Tensor, header: Header, covars = None):
+def toBezierCurveMsg(control_points : torch.Tensor, header: Header, covars = None, delta_t : Duration = Duration()):
    ptsnp = control_points.detach().cpu().numpy()
    if covars is not None:
       assert(ptsnp.shape[0]==covars.shape[0])
       covarmatsnp = covars.view(covars.shape[0],9).detach().cpu().numpy()
-   rtn : drmsgs.BezierCurve = drmsgs.BezierCurve(header=header)
+   rtn : drmsgs.BezierCurve = drmsgs.BezierCurve(header=header, delta_t=delta_t)
    for i in range(ptsnp.shape[0]):
       rtn.control_points.append(geo_msgs.Point(x=float(ptsnp[i,0]), y=float(ptsnp[i,1]), z=float(ptsnp[i,2])))
       if covars is not None: 

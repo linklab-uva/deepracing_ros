@@ -20,6 +20,7 @@
 
 
 #include <cv_bridge/cv_bridge.h>
+#include <sensor_msgs/distortion_models.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <image_transport/camera_publisher.hpp>
 #include <image_transport/image_transport.h>
@@ -43,11 +44,11 @@ inline rclcpp::Time fromDouble(const double& ts, rcl_clock_type_t clock_type = r
   uint32_t nanosec =(uint32_t)(fractpart*1E9);
   return rclcpp::Time(sec, nanosec, clock_type);
 }
-template < typename FloatType = double, class RatioType = std::ratio<1,1> >
 inline rclcpp::Time fromDeepf1Timestamp(const deepf1::TimePoint& timestamp, const deepf1::TimePoint& begin = deepf1::TimePoint())
 {
-  std::chrono::duration<FloatType, RatioType> dt = timestamp - begin;
-  return fromDouble((double)dt.count(), rcl_clock_type_t::RCL_STEADY_TIME);
+  std::chrono::duration<uint64_t, std::nano> dt = std::chrono::duration_cast< std::chrono::duration<uint64_t, std::nano> >(timestamp - begin);
+  uint64_t dtnsec = dt.count();
+  return rclcpp::Time((int32_t)(dtnsec/static_cast<uint64_t>(1E9)), (uint32_t)(dtnsec%static_cast<uint64_t>(1E9)), rcl_clock_type_t::RCL_STEADY_TIME);
 }
 }
 class ROSRebroadcaster_2018DataGrabHandler : public deepf1::IF12018DataGrabHandler
@@ -297,8 +298,8 @@ public:
     sensor_msgs::msg::CameraInfo camera_info;
     camera_info.distortion_model="plumbob";
     camera_info.header = header;
-    camera_info.height=static_cast<sensor_msgs::msg::CameraInfo::_height_type>(imin.rows);
-    camera_info.width=static_cast<sensor_msgs::msg::CameraInfo::_width_type>(imin.cols);
+    camera_info.height=static_cast<sensor_msgs::msg::CameraInfo::_height_type>(rgbimage.rows);
+    camera_info.width=static_cast<sensor_msgs::msg::CameraInfo::_width_type>(rgbimage.cols);
     sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info_ptr = std::make_shared<sensor_msgs::msg::CameraInfo const>(camera_info);
     this->it_publisher_.publish( bridge_image.toImageMsg(), camera_info_ptr);
 
