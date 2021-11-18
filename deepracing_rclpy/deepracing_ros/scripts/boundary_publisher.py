@@ -72,7 +72,7 @@ class BoundaryPubNode(Node):
         idx = session_data.udp_packet.track_id
         if not (idx==self.current_track_id):
             now = self.get_clock().now()
-            racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_minimumcurvaturebaseline.json", self.search_dirs)
+            racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_minimumcurvaturelowca.json", self.search_dirs)
             innerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_innerlimit.json", self.search_dirs)
             outerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_outerlimit.json", self.search_dirs)
             transform_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", deepracing_ros.world_coordinate_name, Time())
@@ -84,20 +84,20 @@ class BoundaryPubNode(Node):
             Rmat = Tmat[0:3,0:3].copy()
             with open(racelinefile,"r") as f:
                 d : dict = json.load(f)
-                raceline : np.ndarray = np.column_stack([d["x"], d["y"], d["z"], np.ones_like(d["z"]), d["speeds"]])
+                raceline : np.ndarray = np.row_stack([d["x"], d["y"], d["z"], np.ones_like(d["z"]), d["speeds"]])
                 raceline = raceline.astype(np.float32)
-                raceline[:,0:4]=np.matmul(raceline[:,0:4], Tmat)
-                raceline[:,3]=np.asarray(d["t"], dtype=np.float32)
+                raceline[0:3]=np.matmul(Tmat[0:3], raceline[0:4])
+                raceline[3]=np.asarray(d["t"], dtype=np.float32)
                 raceline_msg : sensor_msgs.msg.PointCloud2 = sensor_msgs.msg.PointCloud2()
                 raceline_msg.fields=self.raceline_fields
                 raceline_msg.header=std_msgs.msg.Header(frame_id=transform_msg.header.frame_id, stamp=now.to_msg())
                 raceline_msg.is_bigendian=False
                 raceline_msg.is_dense=True
                 raceline_msg.height=1
-                raceline_msg.width=raceline.shape[0]
+                raceline_msg.width=raceline.shape[1]
                 raceline_msg.point_step=4*len(raceline_msg.fields)
                 raceline_msg.row_step=raceline_msg.point_step*raceline_msg.width
-                raceline_msg.data=raceline.flatten().tobytes()
+                raceline_msg.data=raceline.transpose().flatten().tobytes()
             with open(innerlimitfile,"r") as f:
                 d : dict = json.load(f)
                 innerboundarypoints : np.ndarray = np.matmul(  Tmat, np.row_stack([ d["x"],  d["y"],  d["z"], np.ones_like(d["z"]) ]).astype(np.float32) )[0:3].transpose()
@@ -139,14 +139,15 @@ class BoundaryPubNode(Node):
             self.current_outerboundary= outerboundary_msg
 
     def timerCB(self):
+        now = self.get_clock().now()
         if self.current_racingline is not None:
-            self.current_racingline.header.stamp=self.get_clock().now().to_msg()
+            self.current_racingline.header.stamp=now.to_msg()
             self.racingline_pub.publish(self.current_racingline)
         if self.current_innerboundary is not None:
-            self.current_innerboundary.header.stamp=self.get_clock().now().to_msg()
+            self.current_innerboundary.header.stamp=now.to_msg()
             self.inner_boundary_pub.publish(self.current_innerboundary)
         if self.current_outerboundary is not None:
-            self.current_outerboundary.header.stamp=self.get_clock().now().to_msg()
+            self.current_outerboundary.header.stamp=now.to_msg()
             self.outer_boundary_pub.publish(self.current_outerboundary)
     
 
@@ -158,5 +159,5 @@ def main(args=None):
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     executor : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor()
     executor.add_node(node)
-    node.create_timer(1.0/30.0, node.timerCB)
+    node.create_timer(1.0/120.0, node.timerCB)
     executor.spin()
