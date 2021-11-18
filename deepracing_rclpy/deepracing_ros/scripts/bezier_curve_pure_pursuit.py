@@ -64,7 +64,7 @@ class BezierCurvePurePursuit(Node):
             self.device : torch.device = torch.device("cpu")
 
 
-        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 300, dtype=torch.float32, device=self.device).unsqueeze(0)
+        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 600, dtype=torch.float32, device=self.device).unsqueeze(0)
 
 
 
