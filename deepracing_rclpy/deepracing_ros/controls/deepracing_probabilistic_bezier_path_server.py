@@ -312,7 +312,7 @@ class BezierPredictionPathServerROS(PathServerROS):
                 # average_speeds = torch.mean(speeds,dim=1)
                 # max_average_speed = torch.max(average_speeds)
                 # speed_scores = average_speeds/max_average_speed
-                # speed_scores = torch.clip(F.softmax(0.0125*average_speeds.double(), dim=0), 1E-24, 1.0)
+                # speed_scores = torch.clip(F.softmax(0.*average_speeds.double(), dim=0), 1E-24, 1.0)
                 # speed_scores[speed_scores!=speed_scores] = 0.0
                 # speed_scores=speed_scores/torch.max(speed_scores)
                 speed_scores = torch.ones_like(particle_points[:,0,0])
@@ -326,10 +326,10 @@ class BezierPredictionPathServerROS(PathServerROS):
                 centripetal_accel_vecs = a_t - linear_accel_vecs
 
                 
-                braking = -linear_accels
-                braking_deltas = torch.relu(braking - self.max_braking)
-                max_braking_deltas, _ = torch.max(braking_deltas, dim=1)
-                braking_scores = torch.clip(torch.exp(-0.5*max_braking_deltas.double()), 1E-24, 1.0)
+                minaccels, _ =  torch.min(linear_accels, dim=1)
+                braking_deltas = minaccels + self.max_braking
+                braking_deltas_scaled = ((braking_deltas<0.0).type_as(linear_accels))*braking_deltas
+                braking_scores = torch.clip(torch.exp(0.75*braking_deltas_scaled.double()), 1E-24, 1.0)
                 
 
                 centripetal_accels = torch.norm(centripetal_accel_vecs, p=2, dim=2)
@@ -340,17 +340,17 @@ class BezierPredictionPathServerROS(PathServerROS):
 
                 _, ib_distances = self.boundary_loss(particle_points, innerboundary.expand(particle_points.shape[0], -1, -1), innerboundary_normals.expand(particle_points.shape[0], -1, -1))
                 ib_max_distances, _ = torch.max(ib_distances, dim=1)
-                ib_max_distances=F.relu(ib_max_distances + 0.25)
+                ib_max_distances=F.relu(ib_max_distances + 1.0)
 
                 _, ob_distances = self.boundary_loss(particle_points, outerboundary.expand(particle_points.shape[0], -1, -1), outerboundary_normals.expand(particle_points.shape[0], -1, -1))
                 ob_max_distances, _ = torch.max(ob_distances, dim=1)
-                ob_max_distances=F.relu(ob_max_distances + 0.25)
+                ob_max_distances=F.relu(ob_max_distances + 1.0)
 
                 all_distances = torch.stack([ib_max_distances, ob_max_distances], dim=0)
 
                 overall_max_distances, _ = torch.max(all_distances, dim=0)
 
-                boundary_scores = torch.clip( torch.exp(-1.0*overall_max_distances.double()), 1E-24, 1.0)
+                boundary_scores = torch.clip( torch.exp(-1.5*overall_max_distances.double()), 1E-24, 1.0)
                 score_products = ca_scores*speed_scores*boundary_scores*braking_scores
 
                 probs = (score_products/torch.sum(score_products))
