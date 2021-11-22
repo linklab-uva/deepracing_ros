@@ -171,7 +171,7 @@ class BezierPredictionPathServerROS(PathServerROS):
         
         
         self.scale_tril =  torch.zeros(self.net.bezier_order+1, 2, 2, dtype = self.bezierM.dtype, device = self.device)
-        self.scale_tril[:,0,0] = self.scale_tril[:,1,1] = 1.0
+        self.scale_tril[:,0,0] = self.scale_tril[:,1,1] = 1.25
             
         
         self.inner_boundary : torch.Tensor = None
@@ -310,11 +310,12 @@ class BezierPredictionPathServerROS(PathServerROS):
                 unit_tangents = v_t/speeds[:,:,None]
                 
                 average_speeds = torch.mean(speeds,dim=1)
-                max_average_speed = torch.max(average_speeds)
-                speed_scores = average_speeds/max_average_speed
-                speed_scores = torch.clip(F.softmax(1.75*average_speeds.double(), dim=0), 1E-24, 1.0)
+                # max_average_speed = torch.max(average_speeds)
+                # average_speeds_scaled = average_speeds/max_average_speed
+                # speed_scores = torch.clip(F.softmax(1.5*average_speeds_scaled.double(), dim=0), 1E-24, 1.0)
+                speed_scores = torch.clip(F.softmax(1.25*average_speeds.double(), dim=0), 1E-24, 1.0)
                 speed_scores[speed_scores!=speed_scores] = 0.0
-                #speed_scores=speed_scores/torch.max(speed_scores)
+                speed_scores=speed_scores/torch.max(speed_scores)
                 # speed_scores = torch.ones_like(particle_points[:,0,0])
 
 
@@ -329,14 +330,14 @@ class BezierPredictionPathServerROS(PathServerROS):
                 minaccels, _ =  torch.min(linear_accels, dim=1)
                 braking_deltas = minaccels + self.max_braking
                 braking_deltas_scaled = ((braking_deltas<0.0).type_as(linear_accels))*braking_deltas
-                braking_scores = torch.clip(torch.exp(0.2*braking_deltas_scaled.double()), 1E-24, 1.0)
+                braking_scores = torch.clip(torch.exp(0.25*braking_deltas_scaled.double()), 1E-24, 1.0)
                 
 
                 centripetal_accels = torch.norm(centripetal_accel_vecs, p=2, dim=2)
                 centripetal_accels[centripetal_accels!=centripetal_accels] = 0.0
                 ca_deltas = torch.relu(centripetal_accels - self.max_centripetal_acceleration)
                 max_ca_deltas, _ = torch.max(ca_deltas, dim=1)
-                ca_scores = torch.clip(torch.exp(-0.2*max_ca_deltas.double()), 1E-24, 1.0)
+                ca_scores = torch.clip(torch.exp(-0.25*max_ca_deltas.double()), 1E-24, 1.0)
 
                 _, ib_distances = self.boundary_loss(particle_points, innerboundary.expand(particle_points.shape[0], -1, -1), innerboundary_normals.expand(particle_points.shape[0], -1, -1))
                 ib_max_distances, _ = torch.max(ib_distances, dim=1)
