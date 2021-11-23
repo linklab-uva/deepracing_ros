@@ -90,7 +90,7 @@ class OraclePathServer(PathServerROS):
         plot_param : Parameter = self.declare_parameter("plot", value=False)
         self.plot : bool = plot_param.get_parameter_value().bool_value
 
-        dt_param : Parameter = self.declare_parameter("dt", value=2.75)
+        dt_param : Parameter = self.declare_parameter("dt", value=2.5)
         self.dt : float = dt_param.get_parameter_value().double_value
 
         sample_indices_descriptor : ParameterDescriptor = ParameterDescriptor()
@@ -179,8 +179,9 @@ class OraclePathServer(PathServerROS):
             
         
         zmean = torch.mean(rlpiece[2]).item()
-        dt = tfit[-1]-tfit[0]
-        sfit = (tfit-tfit[0])/dt
+        tfit = tfit-tfit[0]
+        dt = tfit[-1]
+        sfit = tfit/dt
         _, bcurve = mu.bezierLsqfit(rlpiece.t().unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
 
         positionsbcurve : torch.Tensor = torch.matmul(self.Msamp, bcurve)[0]
