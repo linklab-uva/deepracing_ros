@@ -64,7 +64,7 @@ class BezierCurvePurePursuit(Node):
             self.device : torch.device = torch.device("cpu")
 
 
-        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 600, dtype=torch.float32, device=self.device).unsqueeze(0)
+        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 400, dtype=torch.float32, device=self.device).unsqueeze(0)
 
 
 
@@ -92,7 +92,7 @@ class BezierCurvePurePursuit(Node):
             bcurve_global[i,1]=current_curve.control_points[i].y
             bcurve_global[i,2]=current_curve.control_points[i].z
         bcurve_local = torch.matmul(bcurve_global, transform[0:3].t()).unsqueeze(0)
-        dt : float = 1.0*(float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9)
+        dt : float = (float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9)
         
         Msamp : torch.Tensor = mu.bezierM(self.tsamp, bcurve_local.shape[1]-1)
         Psamp : torch.Tensor = torch.matmul(Msamp, bcurve_local)
@@ -123,6 +123,10 @@ class BezierCurvePurePursuit(Node):
         vel_local = odom_msg.twist.twist.linear
         current_speed : float = torch.norm(torch.as_tensor([vel_local.x, vel_local.y, vel_local.z]), p=2).item()
         lookahead_distance = max(self.lookahead_gain*current_speed, 15.0)
+        # if current_speed>22.5:
+        #     lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
+        # else:
+        #     lookahead_distance_vel=0.0
         lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
 
         lookahead_index = torch.argmin(torch.abs(arclengths-lookahead_distance))
