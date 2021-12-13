@@ -57,6 +57,7 @@ from rclpy.clock import Clock, ROSClock
 import deepracing_models.nn_models.Models as M
 import deepracing_models.nn_models.VariationalModels as VM
 from deepracing_models.math_utils.interpolate import LinearInterpolator
+from deepracing_models.math_utils.bayesian_filtering import BayesianFilter
 from scipy.spatial.transform import Rotation as Rot
 import torch.nn.functional as F
 from scipy.spatial.kdtree import KDTree
@@ -103,17 +104,10 @@ class BezierPredictionPathServerROS(PathServerROS):
 
 
         deltaT_param : Parameter = self.declare_parameter("deltaT", value=float(config.get("lookahead_time", 2.0)))
-        self.deltaT : float = 0.885*(deltaT_param.get_parameter_value().double_value)
+        self.deltaT : float = 0.8675*(deltaT_param.get_parameter_value().double_value)
         fracpart, intpart = math.modf(self.deltaT)
         self.deltaT_msg : builtin_interfaces.msg.Duration = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
 
-        
-
-        # x_scale_factor_param : Parameter = self.declare_parameter("x_scale_factor", value=1.0)
-        # self.xscale_factor : float = x_scale_factor_param.get_parameter_value().double_value
-
-        # z_offset_param : Parameter = self.declare_parameter("z_offset", value=self.L/2.0)
-        # self.z_offset : float = z_offset_param.get_parameter_value().double_value
 
         velocity_scale_param : Parameter = self.declare_parameter("velocity_scale_factor", value=1.0)
         self.velocity_scale_factor : float = velocity_scale_param.get_parameter_value().double_value
@@ -172,7 +166,7 @@ class BezierPredictionPathServerROS(PathServerROS):
         
         
         self.scale_tril =  torch.zeros(self.net.bezier_order+1, 2, 2, dtype = self.bezierM.dtype, device = self.device)
-        self.scale_tril[:,0,0] = self.scale_tril[:,1,1] = 1.0
+        self.scale_tril[:,0,0] = self.scale_tril[:,1,1] = 1.25
         # self.scale_tril[0,0,0] = self.scale_tril[0,1,1] = 1E-4
             
         
@@ -198,6 +192,8 @@ class BezierPredictionPathServerROS(PathServerROS):
         speeds = torch.as_tensor([                  0.0,  25.0,  30.0,  40.0,  60.0,  84.0,   max_speed,     1000000.0], dtype=self.dtype, device=self.device)
         braking_limits = (-factor)*torch.as_tensor([9.5,  9.5,   18.0,  22.0,  36.0,  41.25,  41.25,         41.25], dtype=self.dtype, device=self.device)
         self.braking_limit_interp : LinearInterpolator = LinearInterpolator(speeds, braking_limits).eval().type(self.dtype).to(self.device)
+
+        self.filter : BayesianFilter = None
 
     def innerBoundaryCB(self, innerboundary_msg : PointCloud2):
         fullarray : np.ndarray = np.asarray(read_points_list(innerboundary_msg, field_names=["x","y","nx","ny"]))
@@ -340,7 +336,7 @@ class BezierPredictionPathServerROS(PathServerROS):
                 # worst_braking_violations, _ = torch.min(braking_constraint_violations, dim=1)
                 # braking_scores = torch.clip(torch.exp(2.0*worst_braking_violations.double()), 0.0, 1.0)
                 mean_braking_violations = torch.mean(braking_constraint_violations, dim=1)
-                braking_scores = torch.clip(torch.exp(2.0*(mean_braking_violations.double())), 0.0, 1.0)
+                braking_scores = torch.clip(torch.exp(2.25*(mean_braking_violations.double())), 0.0, 1.0)
                 # braking_scores = torch.clip(torch.exp(0.0*mean_braking_violations.double()), 0.0, 1.0)
                 
 
@@ -349,12 +345,12 @@ class BezierPredictionPathServerROS(PathServerROS):
                 ca_maxes, _ = torch.max(centripetal_accels, dim=1)
                 max_ca_deltas = torch.relu(ca_maxes - self.max_centripetal_acceleration)
                # max_ca_deltas, _ = torch.max(ca_deltas, dim=1)
-                ca_scores = torch.clip(torch.exp(-1.0*(max_ca_deltas.double())), 0.0, 1.0)
+                ca_scores = torch.clip(torch.exp(-1.125*(max_ca_deltas.double())), 0.0, 1.0)
                 # ca_scores = torch.clip(torch.exp(0.0*max_ca_deltas.double()), 0.0, 1.0)
 
 
 
-                boundary_allowance = -0.75
+                boundary_allowance = -0.875
 
                 _, ib_distances = self.boundary_loss(particle_points, innerboundary.expand(particle_points.shape[0], -1, -1), innerboundary_normals.expand(particle_points.shape[0], -1, -1))
                 ib_max_distances, _ = torch.max(ib_distances, dim=1)
@@ -368,8 +364,8 @@ class BezierPredictionPathServerROS(PathServerROS):
 
                 overall_max_distances, _ = torch.max(all_distances, dim=0)
 
-                # boundary_scores = torch.clip( torch.exp(-10.0*overall_max_distances.double()), 1E-32, 1.0)
-                boundary_scores = torch.clip( torch.exp(10.0*(overall_max_distances.double())), 1E-32, 1.0)
+                boundary_scores = torch.clip( torch.exp(-3.0*overall_max_distances.double()), 1E-32, 1.0)
+                # boundary_scores = torch.clip( torch.exp(10.0*(overall_max_distances.double())), 1E-32, 1.0)
                 score_products = ca_scores*boundary_scores*braking_scores#*speed_scores
 
                 probs = (score_products/torch.sum(score_products))
