@@ -135,6 +135,15 @@ def arrayToPointCloud2(pointsarray : Union[torch.Tensor, np.ndarray], field_name
    pc2out.data = points.flatten().tobytes()
    return pc2out
 
+def extractVelocity(packet : drmsgs.PacketMotionData , car_index = None) -> np.ndarray:
+   if car_index is None:
+      idx = packet.header.player_car_index
+   else:
+      idx = car_index
+   motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
+   velocity = np.array( (motion_data.world_velocity.vector.x, motion_data.world_velocity.vector.y, motion_data.world_velocity.vector.z), dtype=np.float64)
+   return velocity 
+
 def extractPosition(packet : drmsgs.PacketMotionData , car_index = None) -> np.ndarray:
    if car_index is None:
       idx = packet.header.player_car_index
