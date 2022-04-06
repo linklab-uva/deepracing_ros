@@ -18,7 +18,7 @@ class AutowareControlNode : public rclcpp::Node
     }
     void init(std::shared_ptr<control_toolbox::PidROS> pid)
     {
-      m_safe_vel_ = declare_parameter<double>("safe_vel", 20.0);
+      m_safe_vel_ = declare_parameter<double>("safe_vel", 23.0);
 
       m_full_lock_left_ = declare_parameter<double>("full_lock_left", 0.2986730635166168);
       m_full_lock_right_ = declare_parameter<double>("full_lock_right", -0.26346784830093384);

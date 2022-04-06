@@ -22,11 +22,15 @@ import json
 import numpy as np
 from typing import List
 from scipy.spatial.transform import Rotation
+import rcl_interfaces.msg
 
 class BoundaryPubNode(Node):
     def __init__(self):
         super(BoundaryPubNode, self).__init__('boundary_pub_node')
-        search_dirs_param : rclpy.Parameter = self.declare_parameter("track_search_dirs", value=[])
+        search_dirs_descriptor : rcl_interfaces.msg.ParameterDescriptor = rcl_interfaces.msg.ParameterDescriptor()
+        search_dirs_descriptor.name="track_search_dirs"
+        search_dirs_descriptor.type=rcl_interfaces.msg.ParameterType.PARAMETER_STRING_ARRAY
+        search_dirs_param : rclpy.Parameter = self.declare_parameter(search_dirs_descriptor.name, descriptor=search_dirs_descriptor)
         self.search_dirs = search_dirs_param.get_parameter_value().string_array_value
         try:
             self.search_dirs.append(os.path.join(get_package_share_directory("f1_datalogger"), "f1_tracks", "minimumcurvature"))
@@ -69,6 +73,7 @@ class BoundaryPubNode(Node):
 
 
     def sessionDataCB(self, session_data : deepracing_msgs.msg.TimestampedPacketSessionData):
+        # self.get_logger().info("Got some session data")
         idx = session_data.udp_packet.track_id
         if not (idx==self.current_track_id):
             now = self.get_clock().now()

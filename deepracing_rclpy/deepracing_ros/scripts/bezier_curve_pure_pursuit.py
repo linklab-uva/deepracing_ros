@@ -50,8 +50,8 @@ class BezierCurvePurePursuit(Node):
         velocity_lookahead_gain_param : Parameter = self.declare_parameter("velocity_lookahead_gain", value=0.175)
         self.velocity_lookahead_gain : float = velocity_lookahead_gain_param.get_parameter_value().double_value
 
-        wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.85)
-        self.wheelbase : float = wheelbase_param.get_parameter_value().double_value
+        wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.05)
+        wheelbase : float = wheelbase_param.get_parameter_value().double_value
 
         gpu_param : Parameter = self.declare_parameter("gpu", value=-1)
         gpu : int = gpu_param.get_parameter_value().integer_value
@@ -65,6 +65,7 @@ class BezierCurvePurePursuit(Node):
 
 
         self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 400, dtype=torch.float32, device=self.device).unsqueeze(0)
+        self.twoL : torch.Tensor = torch.as_tensor(2.0*wheelbase, dtype=self.tsamp.dtype, device=self.tsamp.device)
 
 
 
@@ -122,11 +123,11 @@ class BezierCurvePurePursuit(Node):
 
         vel_local = odom_msg.twist.twist.linear
         current_speed : float = torch.norm(torch.as_tensor([vel_local.x, vel_local.y, vel_local.z]), p=2).item()
-        lookahead_distance = max(self.lookahead_gain*current_speed, 15.0)
-        # if current_speed>22.5:
-        #     lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
-        # else:
-        #     lookahead_distance_vel=0.0
+        lookahead_distance = max(self.lookahead_gain*current_speed, 10.0)
+        if current_speed>55.0:
+            lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
+        else:
+            lookahead_distance_vel=0.00
         lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
 
         lookahead_index = torch.argmin(torch.abs(arclengths-lookahead_distance))
@@ -138,7 +139,7 @@ class BezierCurvePurePursuit(Node):
         alpha = torch.atan2(lookaheadDirection[1],lookaheadDirection[0])
 
         control_out : VehicleControlCommand = VehicleControlCommand(stamp=odom_msg.header.stamp)
-        control_out.front_wheel_angle_rad = torch.atan((2 * self.wheelbase * torch.sin(alpha)) / ld).item()
+        control_out.front_wheel_angle_rad = torch.atan((self.twoL * torch.sin(alpha)) / ld).item()
         control_out.velocity_mps=speeds[lookahead_index_vel].item()
         control_out.long_accel_mps2=longitudinal_accelerations[lookahead_index_vel].item()
 

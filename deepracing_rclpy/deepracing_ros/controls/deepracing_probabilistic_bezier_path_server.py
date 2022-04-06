@@ -9,7 +9,7 @@ import logging
 import lmdb
 import json
 import deepracing.backend
-from numpy_ringbuffer import RingBuffer as RB
+# from numpy_ringbuffer import RingBuffer as RB
 import yaml
 import torch
 import torchvision
@@ -104,7 +104,7 @@ class BezierPredictionPathServerROS(PathServerROS):
 
 
         deltaT_param : Parameter = self.declare_parameter("deltaT", value=float(config.get("lookahead_time", 2.0)))
-        self.deltaT : float = 0.8675*(deltaT_param.get_parameter_value().double_value)
+        self.deltaT : float = 0.850*(deltaT_param.get_parameter_value().double_value)
         fracpart, intpart = math.modf(self.deltaT)
         self.deltaT_msg : builtin_interfaces.msg.Duration = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
 
@@ -151,7 +151,7 @@ class BezierPredictionPathServerROS(PathServerROS):
         self.net = self.net.eval()
 
         self.get_logger().info('Moved model params to device %s' % (str(self.device),))
-        self.image_buffer = RB(self.net.context_length,dtype=(float,(3,66,200)))
+        # self.image_buffer = RB(self.net.context_length,dtype=(float,(3,66,200)))
         self.s_torch = torch.linspace(0.0,1.0,steps=self.num_sample_points, dtype=self.dtype, device=self.device).unsqueeze(0)
         self.image_tensor = torch.zeros((context_length, 3, 66, 200), dtype=self.dtype, device=self.device)
 
@@ -159,14 +159,22 @@ class BezierPredictionPathServerROS(PathServerROS):
         self.bezierMderiv = mu.bezierM(self.s_torch, self.net.bezier_order-1)
         self.bezierM2ndderiv = mu.bezierM(self.s_torch, self.net.bezier_order-2)
         self.bezierM.requires_grad = False
+
+        self.bezierM_order5 = mu.bezierM(self.s_torch, 5)
+        print("self.bezierM_order5.shape: %s" %(str(self.bezierM_order5.shape)))
+        self.bezierMderiv_order5 = mu.bezierM(self.s_torch, self.bezierM_order5.shape[2]-2)
+        self.bezierM2ndderiv_order5 = mu.bezierM(self.s_torch, self.bezierM_order5.shape[2]-3)
+        self.bezierConversionM = torch.matmul(torch.pinverse(self.bezierM_order5[0]), self.bezierM[0])
+
         if use_compressed_images:
             self.image_sub = self.create_subscription( CompressedImage, '/f1_game/images/compressed', self.addToBuffer, 1)
         else:
             self.image_sub = self.create_subscription( Image, '/f1_game/images', self.addToBuffer, 1)
         
         
-        self.scale_tril =  torch.zeros(self.net.bezier_order+1, 2, 2, dtype = self.bezierM.dtype, device = self.device)
-        self.scale_tril[:,0,0] = self.scale_tril[:,1,1] = 1.25
+        self.scale_tril =  torch.zeros(self.bezierM_order5.shape[2], 2, 2, dtype = self.bezierM.dtype, device = self.device)
+        # self.scale_tril =  torch.zeros(self.net.bezier_order+1, 2, 2, dtype = self.bezierM.dtype, device = self.device)
+        self.scale_tril[:,0,0] = self.scale_tril[:,1,1] = 0.875
         # self.scale_tril[0,0,0] = self.scale_tril[0,1,1] = 1E-4
             
         
@@ -187,7 +195,7 @@ class BezierPredictionPathServerROS(PathServerROS):
         self.inner_boundary_sub : Subscription = self.create_subscription(PointCloud2, "/inner_boundary", self.innerBoundaryCB, 1)
         self.outer_boundary_sub : Subscription = self.create_subscription(PointCloud2, "/outer_boundary", self.outerBoundaryCB, 1)
 
-        factor = .95
+        factor = 0.95
         max_speed = 88.5
         speeds = torch.as_tensor([                  0.0,  25.0,  30.0,  40.0,  60.0,  84.0,   max_speed,     1000000.0], dtype=self.dtype, device=self.device)
         braking_limits = (-factor)*torch.as_tensor([9.5,  9.5,   18.0,  22.0,  36.0,  41.25,  41.25,         41.25], dtype=self.dtype, device=self.device)
@@ -199,7 +207,7 @@ class BezierPredictionPathServerROS(PathServerROS):
         fullarray : np.ndarray = np.asarray(read_points_list(innerboundary_msg, field_names=["x","y","nx","ny"]))
         fullarray[:,2:] = fullarray[:,2:]/(np.linalg.norm(fullarray[:,2:], ord=2, axis=1)[:,np.newaxis])
         self.inner_boundary : torch.Tensor = torch.from_numpy(fullarray[:,0:2]).type_as(self.bezierM).to(self.device)
-        self.inner_boundary_normals : torch.Tensor = torch.from_numpy(fullarray[:,2:]).type_as(self.bezierM).to(self.device)
+        self.inner_boundary_normals : torch.Tensor = torch.from_numpy(fullarray[:,2:]/(np.linalg.norm(fullarray[:,2:], ord=2, axis=1)[:,np.newaxis])).type_as(self.bezierM).to(self.device)
         print("Got an inner boundary")
         print(self.inner_boundary)
         print(self.inner_boundary_normals)
@@ -213,7 +221,7 @@ class BezierPredictionPathServerROS(PathServerROS):
         fullarray : np.ndarray = np.asarray(read_points_list(outerboundary_msg, field_names=["x","y","nx","ny"]))
         fullarray[:,2:] = fullarray[:,2:]/(np.linalg.norm(fullarray[:,2:], ord=2, axis=1)[:,np.newaxis])
         self.outer_boundary : torch.Tensor = torch.from_numpy(fullarray[:,0:2]).type_as(self.bezierM).to(self.device)
-        self.outer_boundary_normals : torch.Tensor = torch.from_numpy(fullarray[:,2:]).type_as(self.bezierM).to(self.device)
+        self.outer_boundary_normals : torch.Tensor = torch.from_numpy(fullarray[:,2:]/(np.linalg.norm(fullarray[:,2:], ord=2, axis=1)[:,np.newaxis])).type_as(self.bezierM).to(self.device)
         print("Got an outer boundary")
         print(self.outer_boundary)
         print(self.outer_boundary_normals)
@@ -265,7 +273,12 @@ class BezierPredictionPathServerROS(PathServerROS):
                 self.get_logger().error("Unable to acquire transform from map to car.")
                 return None
             carpose = C.transformMsgToTorch(transform_msg.transform, dtype=self.dtype, device=self.device)
-            bezier_global = torch.matmul(bezier_control_points_aug, carpose[0:3].t()).unsqueeze(0)
+            bezier_global : torch.Tensor = torch.matmul(bezier_control_points_aug, carpose[0:3].t()).unsqueeze(0)
+            bezier_global = torch.matmul(self.bezierConversionM, bezier_global[0]).unsqueeze(0)
+            #bezier_global_points : torch.Tensor = torch.matmul(self.bezierM, bezier_global)
+           # _, bezier_global = mu.bezierLsqfit(bezier_global_points, self.bezierM_order5.shape[2]-1, M=self.bezierM_order5)
+
+            # bezierM = self.bezierM
 
             if self.gaussian_filtering_steps<=0:
                 return C.toBezierCurveMsg(bezier_global[0], Header(frame_id="map", stamp=imagestamp), delta_t=self.deltaT_msg)
@@ -309,22 +322,18 @@ class BezierPredictionPathServerROS(PathServerROS):
 
                 curve_distribution : dist.MultivariateNormal = dist.MultivariateNormal(bezier_global[0], scale_tril=self.scale_tril, validate_args=False)
                 current_particles = curve_distribution.sample((self.num_particles,)).clone()
-                particle_points = torch.matmul(self.bezierM[0], current_particles)
-                _, v_s = mu.bezierDerivative(current_particles, M=self.bezierMderiv[0])
+                particle_points = torch.matmul(self.bezierM_order5[0], current_particles)
+                _, v_s = mu.bezierDerivative(current_particles, M=self.bezierMderiv_order5[0])
                 v_t=v_s/self.deltaT
                 speeds = torch.norm(v_t,dim=2,p=2)
                 unit_tangents = v_t/speeds[:,:,None]
                 
                 # average_speeds = torch.mean(speeds,dim=1)
-                # max_average_speed = torch.max(average_speeds)
-                # initial_speeds = speeds[:,0]
-                # max_initial_speed = torch.max(initial_speeds)
-               # speed_scores = torch.exp(-12.5*(1.0-(average_speeds/max_average_speed)))
-                # speed_scores = F.softmax(0.5*average_speeds, dim=0)
-                #speed_scores = speed_scores/torch.max(speed_scores)
+                # speed_scores = F.softmax(3.5*average_speeds, dim=0)
+                # speed_scores = speed_scores/torch.max(speed_scores)
 
 
-                _, a_s = mu.bezierDerivative(current_particles, M=self.bezierM2ndderiv.expand(current_particles.shape[0],-1,-1), order=2)
+                _, a_s = mu.bezierDerivative(current_particles, M=self.bezierM2ndderiv_order5.expand(current_particles.shape[0],-1,-1), order=2)
                 a_t=a_s/(self.deltaT*self.deltaT)
 
                 linear_accels = torch.sum(a_t*unit_tangents, dim=2)
@@ -336,7 +345,7 @@ class BezierPredictionPathServerROS(PathServerROS):
                 # worst_braking_violations, _ = torch.min(braking_constraint_violations, dim=1)
                 # braking_scores = torch.clip(torch.exp(2.0*worst_braking_violations.double()), 0.0, 1.0)
                 mean_braking_violations = torch.mean(braking_constraint_violations, dim=1)
-                braking_scores = torch.clip(torch.exp(2.25*(mean_braking_violations.double())), 0.0, 1.0)
+                braking_scores = torch.clip(torch.exp(3.5*(mean_braking_violations.double())), 0.0, 1.0)
                 # braking_scores = torch.clip(torch.exp(0.0*mean_braking_violations.double()), 0.0, 1.0)
                 
 
@@ -345,12 +354,12 @@ class BezierPredictionPathServerROS(PathServerROS):
                 ca_maxes, _ = torch.max(centripetal_accels, dim=1)
                 max_ca_deltas = torch.relu(ca_maxes - self.max_centripetal_acceleration)
                # max_ca_deltas, _ = torch.max(ca_deltas, dim=1)
-                ca_scores = torch.clip(torch.exp(-1.125*(max_ca_deltas.double())), 0.0, 1.0)
+                ca_scores = torch.clip(torch.exp(-1.25*(max_ca_deltas.double())), 0.0, 1.0)
                 # ca_scores = torch.clip(torch.exp(0.0*max_ca_deltas.double()), 0.0, 1.0)
 
 
 
-                boundary_allowance = -0.875
+                boundary_allowance = -1.25
 
                 _, ib_distances = self.boundary_loss(particle_points, innerboundary.expand(particle_points.shape[0], -1, -1), innerboundary_normals.expand(particle_points.shape[0], -1, -1))
                 ib_max_distances, _ = torch.max(ib_distances, dim=1)
@@ -364,11 +373,13 @@ class BezierPredictionPathServerROS(PathServerROS):
 
                 overall_max_distances, _ = torch.max(all_distances, dim=0)
 
-                boundary_scores = torch.clip( torch.exp(-3.0*overall_max_distances.double()), 1E-32, 1.0)
+                boundary_scores = torch.abs(torch.clip( torch.exp(-4.0*overall_max_distances.double()), 0.0, 1.0))
                 # boundary_scores = torch.clip( torch.exp(10.0*(overall_max_distances.double())), 1E-32, 1.0)
-                score_products = ca_scores*boundary_scores*braking_scores#*speed_scores
+                #*speed_scores
+                score_products = torch.clip(ca_scores*boundary_scores*braking_scores, 1E-16, 1.0)
 
-                probs = (score_products/torch.sum(score_products))
+                probs = torch.clip(score_products/torch.sum(score_products), 1E-17, 1.0)
+                # probs = torch.clip(score_products/torch.sum(score_products), 1E-64, 1.0)
                # sampledist : dist.Multinomial = dist.Multinomial(probs.shape[0]-1, probs)
                # idx = sampledist.sample().type(torch.int64).clone()
                # print(idx)
