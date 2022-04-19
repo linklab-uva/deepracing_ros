@@ -215,36 +215,16 @@ class NodeWrapperTfUpdater_
       Eigen::Vector3d mapToBL_translation(mapToBLEigen.translation());
       Eigen::Quaterniond mapToBL_quaternion(mapToBLEigen.rotation());
 
-      geometry_msgs::msg::PoseStamped pose;
-      pose.header.set__frame_id("map");
-      pose.header.set__stamp(transformMsg.header.stamp);
-      pose.pose.position.set__x(mapToBL_translation.x());
-      pose.pose.position.set__y(mapToBL_translation.y());
-      pose.pose.position.set__z(mapToBL_translation.z());
-
-      pose.pose.orientation.set__x(mapToBL_quaternion.x());
-      pose.pose.orientation.set__y(mapToBL_quaternion.y());
-      pose.pose.orientation.set__z(mapToBL_quaternion.z());
-      pose.pose.orientation.set__w(mapToBL_quaternion.w());
-
-      Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.z, velocityROS.vector.x, velocityROS.vector.y);
-      Eigen::Vector3d centroidVelEigenLocal(velocityROS.vector.z, motion_data_packet->udp_packet.local_velocity.x, motion_data_packet->udp_packet.local_velocity.y);
-      
-     
-      geometry_msgs::msg::TwistStamped car_velocity_local;
-      car_velocity_local.header.set__stamp(transformMsg.header.stamp);
-      car_velocity_local.header.set__frame_id(transformMsg.child_frame_id);
-      car_velocity_local.twist.linear.set__x(motion_data_packet->udp_packet.local_velocity.z);
-      car_velocity_local.twist.linear.set__y(motion_data_packet->udp_packet.local_velocity.x);
-      car_velocity_local.twist.linear.set__z(motion_data_packet->udp_packet.local_velocity.y);
-      car_velocity_local.twist.angular.set__x(motion_data_packet->udp_packet.angular_velocity.z);
-      car_velocity_local.twist.angular.set__y(motion_data_packet->udp_packet.angular_velocity.x);
-      car_velocity_local.twist.angular.set__z(motion_data_packet->udp_packet.angular_velocity.y);
-
+      Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.x, velocityROS.vector.y, velocityROS.vector.z);
+      Eigen::Vector3d centroidVelEigenLocal = trackToCarEigen.rotation().inverse()*centroidVelEigenGlobal;
+      Eigen::Vector3d centroidAngVelWeird(motion_data_packet->udp_packet.angular_velocity.x, motion_data_packet->udp_packet.angular_velocity.y, motion_data_packet->udp_packet.angular_velocity.z);
+      Eigen::Vector3d centroidAngVel = trackToCarEigen.rotation().inverse()*centroidAngVelWeird;
+    
       nav_msgs::msg::Odometry odom;
-      odom.set__header(pose.header);
-      odom.set__child_frame_id(car_velocity_local.header.frame_id);
-      odom.pose.set__pose(tf2::toMsg(mapToCarEigen));
+      odom.header.set__frame_id("map");
+      odom.header.set__stamp(transformMsg.header.stamp);
+      odom.set__child_frame_id(transformMsg.child_frame_id);
+      odom.pose.pose = tf2::toMsg(mapToCarEigen);
       geometry_msgs::msg::Quaternion& quat_in = odom.pose.pose.orientation;
       Eigen::Quaterniond noisy_quaterion(quat_in.w + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.x + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.y + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.z + m_extra_rot_noise*m_rng_.gaussian01());
       noisy_quaterion.normalize();
@@ -262,14 +242,12 @@ class NodeWrapperTfUpdater_
 
       odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14] = 0.0025 + extra_position_variance;
       odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35] = 1.0E-4 + extra_rot_variance;
-
-      odom.twist.set__twist(car_velocity_local.twist);
-      odom.twist.twist.linear.x+=m_extra_vel_noise*m_rng_.gaussian01();
-      odom.twist.twist.linear.y+=m_extra_vel_noise*m_rng_.gaussian01();
-      odom.twist.twist.linear.z+=m_extra_vel_noise*m_rng_.gaussian01();
-      odom.twist.twist.angular.x+=m_extra_angvel_noise*m_rng_.gaussian01();
-      odom.twist.twist.angular.y+=m_extra_angvel_noise*m_rng_.gaussian01();
-      odom.twist.twist.angular.z+=m_extra_angvel_noise*m_rng_.gaussian01();
+      odom.twist.twist.linear.x=centroidVelEigenLocal.x() + m_extra_vel_noise*m_rng_.gaussian01();
+      odom.twist.twist.linear.y=centroidVelEigenLocal.y() + m_extra_vel_noise*m_rng_.gaussian01();
+      odom.twist.twist.linear.z=centroidVelEigenLocal.z() + m_extra_vel_noise*m_rng_.gaussian01();
+      odom.twist.twist.angular.x=centroidAngVel.x() + m_extra_angvel_noise*m_rng_.gaussian01();
+      odom.twist.twist.angular.y=centroidAngVel.y() + m_extra_angvel_noise*m_rng_.gaussian01();
+      odom.twist.twist.angular.z=centroidAngVel.z() + m_extra_angvel_noise*m_rng_.gaussian01();
       odom.twist.covariance[0]=odom.twist.covariance[7]=odom.twist.covariance[14]=0.000225+extra_vel_variance;
       odom.twist.covariance[21]=odom.twist.covariance[28]=odom.twist.covariance[35]=2.0E-5+extra_angvel_variance;
 
@@ -277,10 +255,10 @@ class NodeWrapperTfUpdater_
       mapToTrack.header.set__stamp(motion_data.world_position.header.stamp);
 
       autoware_auto_msgs::msg::VehicleKinematicState state;
-      state.set__header(pose.header);
-      state.state.x=pose.pose.position.x;
-      state.state.y=pose.pose.position.y;
-      state.state.z=pose.pose.position.z;
+      state.set__header(odom.header);
+      state.state.x=odom.pose.pose.position.x;
+      state.state.y=odom.pose.pose.position.y;
+      state.state.z=odom.pose.pose.position.z;
       state.state.longitudinal_velocity_mps=odom.twist.twist.linear.x;
       state.state.front_wheel_angle_rad=-motion_data_packet->udp_packet.front_wheels_angle;
       state.state.rear_wheel_angle_rad=0.0;
