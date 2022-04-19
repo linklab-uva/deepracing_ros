@@ -4,6 +4,7 @@
 #include <tf2/buffer_core.h>
 #include <functional>
 #include <deepracing_msgs/msg/timestamped_packet_motion_data.hpp>
+#include <deepracing_msgs/msg/timestamped_packet_session_data.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include "tf2_ros/static_transform_broadcaster.h"
 #include <tf2/LinearMath/Quaternion.h>
@@ -13,8 +14,14 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include "deepracing_ros/utils/f1_msg_utils.h"
 #include <tf2_eigen/tf2_eigen.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <autoware_auto_msgs/msg/vehicle_kinematic_state.hpp>
 #include <random_numbers/random_numbers.h>
+#include <json/json.h>
+#include <deepracing_ros/utils/f1_msg_utils.h>
+#include <deepracing_ros/utils/file_utils.h>
+#include <fstream>
+#include <iostream>
 
 
 class NodeWrapperTfUpdater_ 
@@ -25,6 +32,7 @@ class NodeWrapperTfUpdater_
       rclcpp::NodeOptions()
       )
     {
+     current_track_id = -1;
      node = rclcpp::Node::make_shared("f1_tf_updater");//,"",options);
      m_tf_from_odom_ = node->declare_parameter<bool>("tf_from_odom", false);
      statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node));
@@ -35,15 +43,11 @@ class NodeWrapperTfUpdater_
      carToBaseLink.header.frame_id = deepracing_ros::F1MsgUtils::car_coordinate_name;
      carToBaseLink.child_frame_id = "base_link";
 
+
      tf2::Quaternion quat;
      quat.setRPY( boost::math::constants::half_pi<double>(), 0.0, 0.0 );
-     mapToTrack.transform.translation.x = 0.0;
-     mapToTrack.transform.translation.y = 0.0;
-     mapToTrack.transform.translation.z = 0.0;
-     mapToTrack.transform.rotation.x = quat.x();
-     mapToTrack.transform.rotation.y = quat.y();
-     mapToTrack.transform.rotation.z = quat.z();
-     mapToTrack.transform.rotation.w = quat.w();
+     tf2::Transform t(quat, tf2::Vector3(0.0,0.0,0.0));
+     mapToTrack.transform = tf2::toMsg(t);
 
      std::vector<double> car_to_base_translation = node->declare_parameter< std::vector<double> >("centroid_to_base_translation", std::vector<double>{-1.85, 0.0, 0.0});
      
@@ -67,9 +71,8 @@ class NodeWrapperTfUpdater_
      mapToTrackEigen = tf2::transformToEigen(mapToTrack);
      baseLinkToCarEigen = carToBaseLinkEigen.inverse();
 
-
+     this->session_listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>("session_data", 1, std::bind(&NodeWrapperTfUpdater_::sessionCallback, this, std::placeholders::_1));
      this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("motion_data", 1, std::bind(&NodeWrapperTfUpdater_::packetCallback, this, std::placeholders::_1));
-     this->pose_publisher = this->node->create_publisher<geometry_msgs::msg::PoseStamped>("/ego_vehicle/pose", 1);
      this->twist_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("/ego_vehicle/velocity", 1);
      this->twist_local_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("/ego_vehicle/velocity_local", 1);
      this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("/ego_vehicle/odom", 1);
@@ -83,7 +86,7 @@ class NodeWrapperTfUpdater_
     }  
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_listener;
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketMotionData>::SharedPtr listener;
-    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_publisher;
+    rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketSessionData>::SharedPtr session_listener;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_publisher;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_local_publisher;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
@@ -106,7 +109,48 @@ class NodeWrapperTfUpdater_
     double m_extra_position_noise;
     double m_extra_rot_noise;
     double m_extra_vel_noise;   
-    double m_extra_angvel_noise;  
+    double m_extra_angvel_noise; 
+    int8_t current_track_id;
+    void sessionCallback(const deepracing_msgs::msg::TimestampedPacketSessionData::SharedPtr session_msg)
+    {
+      if((session_msg->udp_packet.track_id>=0) && (session_msg->udp_packet.track_id!=current_track_id))
+      {
+        std::vector<std::string> search_dirs = deepracing_ros::FileUtils::split(std::string(std::getenv("F1_TRACK_DIRS")));
+        std::array<std::string, 25> tracknames = deepracing_ros::F1MsgUtils::track_names();
+        std::string trackname = tracknames[session_msg->udp_packet.track_id];
+        std::string starting_pose_filepath = deepracing_ros::FileUtils::findFile(trackname+"_startingpose.json", search_dirs);
+        if (starting_pose_filepath.empty())
+        {
+          RCLCPP_ERROR(node->get_logger(), "Could not find starting pose file for track: %s", trackname.c_str());
+          return;
+        }
+        Json::Value root;
+        Json::CharReaderBuilder builder;
+        builder["collectComments"] = true;
+        JSONCPP_STRING errs;
+        std::ifstream ifs;
+        ifs.open(starting_pose_filepath);
+        bool success = parseFromStream(builder, ifs, &root, &errs);
+        ifs.close();
+        if(!success)
+        {
+          RCLCPP_ERROR(node->get_logger(), "Unable to parse json file at %s. Error message: %s", starting_pose_filepath.c_str(), errs.c_str());
+          return;
+        }
+        Json::Value position_dict = root["position"];
+        Json::Value quaternion_dict = root["quaternion"];
+
+        tf2::Vector3 eigen_position(position_dict["x"].asDouble(), position_dict["y"].asDouble(), position_dict["z"].asDouble());
+        tf2::Quaternion eigen_quaternion(quaternion_dict["x"].asDouble(), quaternion_dict["y"].asDouble(), quaternion_dict["z"].asDouble(), quaternion_dict["w"].asDouble());
+        
+        mapToTrack.transform = tf2::toMsg(tf2::Transform(eigen_quaternion, eigen_position).inverse());
+        mapToTrackEigen = tf2::transformToEigen(mapToTrack);
+
+        current_track_id = session_msg->udp_packet.track_id;
+      }
+      publishStatic();
+
+    }  
     void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_msg)
     {
       geometry_msgs::msg::TransformStamped transformMsg;
@@ -121,7 +165,7 @@ class NodeWrapperTfUpdater_
     void packetCallback(const deepracing_msgs::msg::TimestampedPacketMotionData::SharedPtr motion_data_packet)
     {
      // std::cout << "Got some data" << std::endl;
-     // RCLCPP_INFO(node->get_logger(), "Got some data");
+      // RCLCPP_INFO(node->get_logger(), "Got some data");
       uint8_t idx;
       if( motion_data_packet->udp_packet.header.player_car_index<20 )
       {
@@ -246,7 +290,6 @@ class NodeWrapperTfUpdater_
       state.state.heading.imag=mapToBL_quaternion.z();
       state.state.heading.real=mapToBL_quaternion.w();
 
-      publishStatic();
       if (!m_tf_from_odom_)
       {
         this->tfbroadcaster->sendTransform(transformMsg);
