@@ -32,7 +32,7 @@ find_package(Boost REQUIRED COMPONENTS date_time random thread)
 find_package(control_toolbox REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)
-find_package(jsoncpp REQUIRED)
+find_package(jsoncpp CONFIG REQUIRED)
 find_package(laser_geometry REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -78,10 +78,12 @@ ament_target_dependencies(tf_updater autoware_auto_msgs deepracing_msgs geometry
 target_link_libraries(tf_updater
  utils
  Eigen3::Eigen
- jsoncpp_lib
- jsoncpp_object
- JsonCpp::JsonCpp
 )
+if(TARGET JsonCpp::JsonCpp)
+  target_link_libraries(tf_updater JsonCpp::JsonCpp)
+else()
+  target_link_libraries(tf_updater jsoncpp_lib)
+endif()
 
 add_executable(velocity_control_node src/velocity_control_node.cpp)
 ament_target_dependencies(velocity_control_node control_toolbox deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
