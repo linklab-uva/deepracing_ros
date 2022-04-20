@@ -216,40 +216,44 @@ class NodeWrapperTfUpdater_
       Eigen::Quaterniond mapToBL_quaternion(mapToBLEigen.rotation());
 
       Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.x, velocityROS.vector.y, velocityROS.vector.z);
-      Eigen::Vector3d centroidVelEigenLocal = trackToCarEigen.rotation().inverse()*centroidVelEigenGlobal;
+      Eigen::Vector3d centroidVelEigenLocal = trackToCarEigen.rotation().inverse()*centroidVelEigenGlobal;    
+
       Eigen::Vector3d centroidAngVelWeird(motion_data_packet->udp_packet.angular_velocity.x, motion_data_packet->udp_packet.angular_velocity.y, motion_data_packet->udp_packet.angular_velocity.z);
       Eigen::Vector3d centroidAngVel = trackToCarEigen.rotation().inverse()*centroidAngVelWeird;
+      
+      Eigen::Vector3d centroidAngAccelWeird(motion_data_packet->udp_packet.angular_acceleration.x, motion_data_packet->udp_packet.angular_acceleration.y, motion_data_packet->udp_packet.angular_acceleration.z);
+      Eigen::Vector3d centroidAngAccel = trackToCarEigen.rotation().inverse()*centroidAngAccelWeird;
     
       nav_msgs::msg::Odometry odom;
       odom.header.set__frame_id("map");
       odom.header.set__stamp(transformMsg.header.stamp);
       odom.set__child_frame_id(transformMsg.child_frame_id);
       odom.pose.pose = tf2::toMsg(mapToCarEigen);
-      geometry_msgs::msg::Quaternion& quat_in = odom.pose.pose.orientation;
-      Eigen::Quaterniond noisy_quaterion(quat_in.w + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.x + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.y + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.z + m_extra_rot_noise*m_rng_.gaussian01());
-      noisy_quaterion.normalize();
-      double extra_position_variance=m_extra_position_noise*m_extra_position_noise;
-      double extra_rot_variance=m_extra_rot_noise*m_extra_rot_noise;
-      double extra_vel_variance=m_extra_vel_noise*m_extra_vel_noise;      
-      double extra_angvel_variance=m_extra_angvel_noise*m_extra_angvel_noise;      
-      odom.pose.pose.position.x+=m_extra_position_noise*m_rng_.gaussian01();
-      odom.pose.pose.position.y+=m_extra_position_noise*m_rng_.gaussian01();
-      odom.pose.pose.position.z+=m_extra_position_noise*m_rng_.gaussian01();
-      odom.pose.pose.orientation.x=noisy_quaterion.x();
-      odom.pose.pose.orientation.y=noisy_quaterion.y();
-      odom.pose.pose.orientation.z=noisy_quaterion.z();
-      odom.pose.pose.orientation.w=noisy_quaterion.w();
+      // geometry_msgs::msg::Quaternion& quat_in = odom.pose.pose.orientation;
+      // Eigen::Quaterniond noisy_quaterion(quat_in.w + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.x + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.y + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.z + m_extra_rot_noise*m_rng_.gaussian01());
+      // noisy_quaterion.normalize();
+      // double extra_position_variance=m_extra_position_noise*m_extra_position_noise;
+      // double extra_rot_variance=m_extra_rot_noise*m_extra_rot_noise;
+      // double extra_vel_variance=m_extra_vel_noise*m_extra_vel_noise;      
+      // double extra_angvel_variance=m_extra_angvel_noise*m_extra_angvel_noise;      
+      // odom.pose.pose.position.x+=m_extra_position_noise*m_rng_.gaussian01();
+      // odom.pose.pose.position.y+=m_extra_position_noise*m_rng_.gaussian01();
+      // odom.pose.pose.position.z+=m_extra_position_noise*m_rng_.gaussian01();
+      // odom.pose.pose.orientation.x=noisy_quaterion.x();
+      // odom.pose.pose.orientation.y=noisy_quaterion.y();
+      // odom.pose.pose.orientation.z=noisy_quaterion.z();
+      // odom.pose.pose.orientation.w=noisy_quaterion.w();
 
-      odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14] = 0.0025 + extra_position_variance;
-      odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35] = 1.0E-4 + extra_rot_variance;
-      odom.twist.twist.linear.x=centroidVelEigenLocal.x() + m_extra_vel_noise*m_rng_.gaussian01();
-      odom.twist.twist.linear.y=centroidVelEigenLocal.y() + m_extra_vel_noise*m_rng_.gaussian01();
-      odom.twist.twist.linear.z=centroidVelEigenLocal.z() + m_extra_vel_noise*m_rng_.gaussian01();
-      odom.twist.twist.angular.x=centroidAngVel.x() + m_extra_angvel_noise*m_rng_.gaussian01();
-      odom.twist.twist.angular.y=centroidAngVel.y() + m_extra_angvel_noise*m_rng_.gaussian01();
-      odom.twist.twist.angular.z=centroidAngVel.z() + m_extra_angvel_noise*m_rng_.gaussian01();
-      odom.twist.covariance[0]=odom.twist.covariance[7]=odom.twist.covariance[14]=0.000225+extra_vel_variance;
-      odom.twist.covariance[21]=odom.twist.covariance[28]=odom.twist.covariance[35]=2.0E-5+extra_angvel_variance;
+      odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14] = 0.0025;// + extra_position_variance;
+      odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35] = 1.0E-4;// + extra_rot_variance;
+      odom.twist.twist.linear.x=centroidVelEigenLocal.x();// + m_extra_vel_noise*m_rng_.gaussian01();
+      odom.twist.twist.linear.y=centroidVelEigenLocal.y();// + m_extra_vel_noise*m_rng_.gaussian01();
+      odom.twist.twist.linear.z=centroidVelEigenLocal.z();// + m_extra_vel_noise*m_rng_.gaussian01();
+      odom.twist.twist.angular.x=centroidAngVel.x();// + m_extra_angvel_noise*m_rng_.gaussian01();
+      odom.twist.twist.angular.y=centroidAngVel.y();// + m_extra_angvel_noise*m_rng_.gaussian01();
+      odom.twist.twist.angular.z=centroidAngVel.z();// + m_extra_angvel_noise*m_rng_.gaussian01();
+      odom.twist.covariance[0]=odom.twist.covariance[7]=odom.twist.covariance[14]=0.000225;//+extra_vel_variance;
+      odom.twist.covariance[21]=odom.twist.covariance[28]=odom.twist.covariance[35]=2.0E-5;//+extra_angvel_variance;
 
       carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
       mapToTrack.header.set__stamp(motion_data.world_position.header.stamp);
@@ -260,6 +264,8 @@ class NodeWrapperTfUpdater_
       state.state.y=odom.pose.pose.position.y;
       state.state.z=odom.pose.pose.position.z;
       state.state.longitudinal_velocity_mps=odom.twist.twist.linear.x;
+      state.state.lateral_velocity_mps=odom.twist.twist.linear.y;
+      state.state.heading_rate_rps=odom.twist.twist.angular.z;
       state.state.front_wheel_angle_rad=-motion_data_packet->udp_packet.front_wheels_angle;
       state.state.rear_wheel_angle_rad=0.0;
       mapToBL_quaternion.x()=0.0;
