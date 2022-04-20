@@ -1,3 +1,4 @@
+from requests import head
 import deepracing
 import deepracing_msgs.msg
 import deepracing_ros
@@ -12,16 +13,19 @@ import geometry_msgs.msg
 from rclpy.time import Time
 from rclpy.duration import Duration
 import sensor_msgs.msg
+import nav_msgs.msg
 import std_msgs.msg
 import tf2_ros
 
 
 
+import math
 import os
 import json
 import numpy as np
 from typing import List
 from scipy.spatial.transform import Rotation
+import scipy.interpolate
 import rcl_interfaces.msg
 
 class BoundaryPubNode(Node):
@@ -42,29 +46,11 @@ class BoundaryPubNode(Node):
             searchdirs_string = searchdirs_string+searchdir+","
         self.get_logger().info("Looking for track files in %s." % (searchdirs_string[0:-1]))
         self.current_track_id=-1
-        self.current_innerboundary : sensor_msgs.msg.PointCloud2 = None
-        self.current_outerboundary : sensor_msgs.msg.PointCloud2 = None
-        self.current_racingline : sensor_msgs.msg.PointCloud2 = None
+        self.current_innerboundary : nav_msgs.msg.Path = None
+        self.current_outerboundary : nav_msgs.msg.Path = None
 
-        self.boundary_fields : List[sensor_msgs.msg.PointField] = []
-        self.boundary_fields.append(sensor_msgs.msg.PointField(name="x", offset=0, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-        self.boundary_fields.append(sensor_msgs.msg.PointField(name="y", offset=4, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-        self.boundary_fields.append(sensor_msgs.msg.PointField(name="z", offset=8, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-        self.boundary_fields.append(sensor_msgs.msg.PointField(name="nx", offset=12, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-        self.boundary_fields.append(sensor_msgs.msg.PointField(name="ny", offset=16, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-        self.boundary_fields.append(sensor_msgs.msg.PointField(name="nz", offset=20, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-        self.boundary_fields.append(sensor_msgs.msg.PointField(name="r", offset=24, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-
-        self.raceline_fields : List[sensor_msgs.msg.PointField] = []
-        self.raceline_fields.append(sensor_msgs.msg.PointField(name="x", offset=0, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-        self.raceline_fields.append(sensor_msgs.msg.PointField(name="y", offset=4, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-        self.raceline_fields.append(sensor_msgs.msg.PointField(name="z", offset=8, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-        self.raceline_fields.append(sensor_msgs.msg.PointField(name="time", offset=12, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-        self.raceline_fields.append(sensor_msgs.msg.PointField(name="speed", offset=16, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
-
-        self.inner_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(sensor_msgs.msg.PointCloud2, "inner_boundary", 1)
-        self.outer_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(sensor_msgs.msg.PointCloud2, "outer_boundary", 1)
-        self.racingline_pub : rclpy.publisher.Publisher = self.create_publisher(sensor_msgs.msg.PointCloud2, "optimal_raceline", 1)
+        self.inner_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(nav_msgs.msg.Path, "inner_boundary", 1)
+        self.outer_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(nav_msgs.msg.Path, "outer_boundary", 1)
         self.session_data_sub : rclpy.subscription.Subscription = self.create_subscription(deepracing_msgs.msg.TimestampedPacketSessionData, "session_data", self.sessionDataCB, 1)
 
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time=Duration(seconds=5))
@@ -76,78 +62,111 @@ class BoundaryPubNode(Node):
         # self.get_logger().info("Got some session data")
         idx = session_data.udp_packet.track_id
         if not (idx==self.current_track_id):
-            now = self.get_clock().now()
-            racelinefile = deepracing.searchForFile(deepracing.trackNames[idx] + "_minimumcurvaturelowca.json", self.search_dirs)
             innerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_innerlimit.json", self.search_dirs)
             outerlimitfile = deepracing.searchForFile(deepracing.trackNames[idx] + "_outerlimit.json", self.search_dirs)
             transform_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", deepracing_ros.world_coordinate_name, Time())
             transform_vec : geometry_msgs.msg.Vector3 = transform_msg.transform.translation
             transform_quat : geometry_msgs.msg.Quaternion = transform_msg.transform.rotation
-            Tmat : np.ndarray = np.eye(4, dtype=np.float32)
-            Tmat[0:3,0:3] = Rotation.from_quat([transform_quat.x, transform_quat.y, transform_quat.z, transform_quat.w]).as_matrix().astype(np.float32)
-            Tmat[0:3,3] = np.asarray([transform_vec.x, transform_vec.y, transform_vec.z], dtype=np.float32)
+            Tmat : np.ndarray = np.eye(4, dtype=np.float64)
+            Tmat[0:3,0:3] = Rotation.from_quat([transform_quat.x, transform_quat.y, transform_quat.z, transform_quat.w]).as_matrix().astype(Tmat.dtype)
+            Tmat[0:3,3] = np.asarray([transform_vec.x, transform_vec.y, transform_vec.z], dtype=Tmat.dtype)
             Rmat = Tmat[0:3,0:3].copy()
-            with open(racelinefile,"r") as f:
-                d : dict = json.load(f)
-                raceline : np.ndarray = np.row_stack([d["x"], d["y"], d["z"], np.ones_like(d["z"]), d["speeds"]])
-                raceline = raceline.astype(np.float32)
-                raceline[0:3]=np.matmul(Tmat[0:3], raceline[0:4])
-                raceline[3]=np.asarray(d["t"], dtype=np.float32)
-                raceline_msg : sensor_msgs.msg.PointCloud2 = sensor_msgs.msg.PointCloud2()
-                raceline_msg.fields=self.raceline_fields
-                raceline_msg.header=std_msgs.msg.Header(frame_id=transform_msg.header.frame_id, stamp=now.to_msg())
-                raceline_msg.is_bigendian=False
-                raceline_msg.is_dense=True
-                raceline_msg.height=1
-                raceline_msg.width=raceline.shape[1]
-                raceline_msg.point_step=4*len(raceline_msg.fields)
-                raceline_msg.row_step=raceline_msg.point_step*raceline_msg.width
-                raceline_msg.data=raceline.transpose().flatten().tobytes()
             with open(innerlimitfile,"r") as f:
                 d : dict = json.load(f)
-                innerboundarypoints : np.ndarray = np.matmul(  Tmat, np.row_stack([ d["x"],  d["y"],  d["z"], np.ones_like(d["z"]) ]).astype(np.float32) )[0:3].transpose()
-                innerboundarynormals : np.ndarray = np.matmul( Rmat, np.row_stack([ d["nx"], d["ny"], d["nz"] ]).astype(np.float32) ).transpose()
-                innerboundary_r : np.ndarray = np.asarray(d["r"], dtype=np.float32)
-                innerboundary : np.ndarray = np.column_stack([innerboundarypoints, innerboundarynormals, innerboundary_r])
+            innerboundary_points : np.ndarray = np.matmul(  Tmat, np.row_stack([ d["x"],  d["y"],  d["z"], np.ones_like(d["z"]) ]).astype(Tmat.dtype) )[0:3].transpose()
+            # innerboundary_points[:,2] = np.mean(innerboundary_points[:,2])
+            innerboundary_r : np.ndarray = np.asarray(d["r"], dtype=Tmat.dtype)
+            innerboundary_spline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(innerboundary_r, innerboundary_points)
+            innerboundary_tangent_spline : scipy.interpolate.BSpline = innerboundary_spline.derivative()
+            innerboundary_xvecs : np.ndarray = innerboundary_tangent_spline(innerboundary_r)
+            innerboundary_xvecs = innerboundary_xvecs/(np.linalg.norm(innerboundary_xvecs, ord=2, axis=1)[:,np.newaxis])
 
-                innerboundary_msg : sensor_msgs.msg.PointCloud2 = sensor_msgs.msg.PointCloud2()
-                innerboundary_msg.fields=self.boundary_fields
-                innerboundary_msg.header=raceline_msg.header
-                innerboundary_msg.is_bigendian=False
-                innerboundary_msg.is_dense=True
-                innerboundary_msg.height=1
-                innerboundary_msg.width=innerboundary.shape[0]
-                innerboundary_msg.point_step=4*len(innerboundary_msg.fields)
-                innerboundary_msg.row_step=innerboundary_msg.point_step*innerboundary_msg.width
-                innerboundary_msg.data=innerboundary.flatten().tobytes()
+            down : np.ndarray = np.zeros_like(innerboundary_xvecs)
+            down[:,2]=-1.0
+
+            innerboundary_yvecs : np.ndarray = np.cross(down, innerboundary_xvecs)
+            innerboundary_yvecs = innerboundary_yvecs/(np.linalg.norm(innerboundary_yvecs, ord=2, axis=1)[:,np.newaxis])
+
+            innerboundary_zvecs : np.ndarray = np.cross(innerboundary_xvecs, innerboundary_yvecs)
+            innerboundary_zvecs = innerboundary_zvecs/(np.linalg.norm(innerboundary_zvecs, ord=2, axis=1)[:,np.newaxis])
+
+            innerboundary_rotmats : np.ndarray = np.zeros((innerboundary_xvecs.shape[0], 3, 3), dtype=innerboundary_xvecs.dtype)
+            innerboundary_rotmats[:,:,0] = innerboundary_xvecs
+            innerboundary_rotmats[:,:,1] = innerboundary_yvecs
+            innerboundary_rotmats[:,:,2] = innerboundary_zvecs
+
+            innerboundary_rotations : Rotation = Rotation.from_matrix(innerboundary_rotmats)
+            innerboundary_quaternions : np.ndarray = innerboundary_rotations.as_quat()
+
+            innerboundary_msg : nav_msgs.msg.Path = nav_msgs.msg.Path()
+            innerboundary_msg.header.frame_id=transform_msg.header.frame_id
+            for i in range(innerboundary_quaternions.shape[0]):
+                point : np.ndarray = innerboundary_points[i]
+                quat : np.ndarray = innerboundary_quaternions[i]
+                pose : geometry_msgs.msg.PoseStamped = geometry_msgs.msg.PoseStamped(header=innerboundary_msg.header)
+                d, i  = math.modf(innerboundary_r[i])
+                pose.header.stamp.sec=int(round(i))
+                pose.header.stamp.nanosec=int(round(d*1E9))
+                pose.pose.position.x=point[0]
+                pose.pose.position.y=point[1]
+                pose.pose.position.z=point[2]
+                pose.pose.orientation.x=quat[0]
+                pose.pose.orientation.y=quat[1]
+                pose.pose.orientation.z=quat[2]
+                pose.pose.orientation.w=quat[3]
+                innerboundary_msg.poses.append(pose)
             with open(outerlimitfile,"r") as f:
                 d : dict = json.load(f)
-                outerboundarypoints : np.ndarray = np.matmul(  Tmat, np.row_stack([ d["x"],  d["y"],  d["z"], np.ones_like(d["z"]) ]).astype(np.float32))[0:3].transpose()
-                outerboundarynormals : np.ndarray = np.matmul( Rmat, np.row_stack([ d["nx"], d["ny"], d["nz"] ]).astype(np.float32) ).transpose()
-                outerboundary_r : np.ndarray = np.asarray(d["r"], dtype=np.float32)
-                outerboundary : np.ndarray = np.column_stack([outerboundarypoints, outerboundarynormals, outerboundary_r])
+            outerboundary_points : np.ndarray = np.matmul(  Tmat, np.row_stack([ d["x"],  d["y"],  d["z"], np.ones_like(d["z"]) ]).astype(Tmat.dtype) )[0:3].transpose()
+            # outerboundary_points[:,2] = np.mean(outerboundary_points[:,2])
+            outerboundary_r : np.ndarray = np.asarray(d["r"], dtype=Tmat.dtype)
+            outerboundary_spline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(outerboundary_r, outerboundary_points)
+            outerboundary_tangent_spline : scipy.interpolate.BSpline = outerboundary_spline.derivative()
+            outerboundary_xvecs : np.ndarray = outerboundary_tangent_spline(outerboundary_r)
+            outerboundary_xvecs = outerboundary_xvecs/(np.linalg.norm(outerboundary_xvecs, ord=2, axis=1)[:,np.newaxis])
 
-                outerboundary_msg : sensor_msgs.msg.PointCloud2 = sensor_msgs.msg.PointCloud2()
-                outerboundary_msg.fields=self.boundary_fields
-                outerboundary_msg.header=raceline_msg.header
-                outerboundary_msg.is_bigendian=False
-                outerboundary_msg.is_dense=True
-                outerboundary_msg.height=1
-                outerboundary_msg.width=outerboundary.shape[0]
-                outerboundary_msg.point_step=4*len(outerboundary_msg.fields)
-                outerboundary_msg.row_step=outerboundary_msg.point_step*outerboundary_msg.width
-                outerboundary_msg.data=outerboundary.flatten().tobytes()
+            up : np.ndarray = np.zeros_like(outerboundary_xvecs)
+            up[:,2]=1.0
+
+            outerboundary_yvecs : np.ndarray = np.cross(up, outerboundary_xvecs)
+            outerboundary_yvecs = outerboundary_yvecs/(np.linalg.norm(outerboundary_yvecs, ord=2, axis=1)[:,np.newaxis])
+
+            outerboundary_zvecs : np.ndarray = np.cross(outerboundary_xvecs, outerboundary_yvecs)
+            outerboundary_zvecs = outerboundary_zvecs/(np.linalg.norm(outerboundary_zvecs, ord=2, axis=1)[:,np.newaxis])
+
+            outerboundary_rotmats : np.ndarray = np.zeros((outerboundary_xvecs.shape[0], 3, 3), dtype=outerboundary_xvecs.dtype)
+            outerboundary_rotmats[:,:,0] = outerboundary_xvecs
+            outerboundary_rotmats[:,:,1] = outerboundary_yvecs
+            outerboundary_rotmats[:,:,2] = outerboundary_zvecs
+
+            outerboundary_rotations : Rotation = Rotation.from_matrix(outerboundary_rotmats)
+            outerboundary_quaternions : np.ndarray = outerboundary_rotations.as_quat()
+
+            outerboundary_msg : nav_msgs.msg.Path = nav_msgs.msg.Path()
+            outerboundary_msg.header.frame_id=transform_msg.header.frame_id
+            for i in range(outerboundary_quaternions.shape[0]):
+                point : np.ndarray = outerboundary_points[i]
+                quat : np.ndarray = outerboundary_quaternions[i]
+                pose : geometry_msgs.msg.PoseStamped = geometry_msgs.msg.PoseStamped(header=outerboundary_msg.header)
+                d, i = math.modf(outerboundary_r[i])
+                pose.header.stamp.sec=int(round(i))
+                pose.header.stamp.nanosec=int(round(d*1E9))
+                pose.pose.position.x=point[0]
+                pose.pose.position.y=point[1]
+                pose.pose.position.z=point[2]
+                pose.pose.orientation.x=quat[0]
+                pose.pose.orientation.y=quat[1]
+                pose.pose.orientation.z=quat[2]
+                pose.pose.orientation.w=quat[3]
+                outerboundary_msg.poses.append(pose)
+
 
             self.current_track_id = idx
-            self.current_racingline = raceline_msg
             self.current_innerboundary = innerboundary_msg
-            self.current_outerboundary= outerboundary_msg
+            self.current_outerboundary = outerboundary_msg
 
     def timerCB(self):
         now = self.get_clock().now()
-        if self.current_racingline is not None:
-            self.current_racingline.header.stamp=now.to_msg()
-            self.racingline_pub.publish(self.current_racingline)
         if self.current_innerboundary is not None:
             self.current_innerboundary.header.stamp=now.to_msg()
             self.inner_boundary_pub.publish(self.current_innerboundary)
@@ -164,5 +183,5 @@ def main(args=None):
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     executor : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor()
     executor.add_node(node)
-    node.create_timer(1.0/120.0, node.timerCB)
+    node.create_timer(2.0, node.timerCB)
     executor.spin()
