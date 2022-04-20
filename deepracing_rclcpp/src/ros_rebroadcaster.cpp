@@ -380,7 +380,7 @@ int main(int argc, char *argv[])
   capture_freq_description.floating_point_range[0].step=0.0;
   capture_freq_description.description="Frequency (in Hz) to capture images from the screen";
 
-  rclcpp::ParameterValue search_string_p = node->declare_parameter("search_string",rclcpp::ParameterValue("F1"));
+  rclcpp::ParameterValue search_string_p = node->declare_parameter("search_string",rclcpp::ParameterValue(""));
   rclcpp::ParameterValue capture_frequency_p = node->declare_parameter("capture_frequency",rclcpp::ParameterValue(35.0), capture_freq_description);
   rclcpp::ParameterValue hostname_p = node->declare_parameter("hostname",rclcpp::ParameterValue("127.0.0.1"));
   rclcpp::ParameterValue num_theads_p = node->declare_parameter("num_theads",rclcpp::ParameterValue(0));
@@ -398,7 +398,8 @@ int main(int argc, char *argv[])
   rclcpp::ParameterValue port_p = node->declare_parameter(port_description.name, rclcpp::ParameterValue(20777), port_description);
 
   rclcpp::ParameterValue rebroadcast_p = node->declare_parameter("rebroadcast",rclcpp::ParameterValue(false));
-  deepf1::F1DataLogger dl(search_string_p.get<std::string>(), hostname_p.get<std::string>(), port_p.get<int>()); 
+  std::string search_string = search_string_p.get<std::string>();
+  deepf1::F1DataLogger dl(search_string, hostname_p.get<std::string>(), port_p.get<int>()); 
   std::shared_ptr<deepf1::RebroadcastHandler2018> rbh; 
   if(rebroadcast_p.get<bool>())
   {
@@ -439,15 +440,14 @@ int main(int argc, char *argv[])
   rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(), num_theads_p.get<int>());
   exec.add_node(node);
   dl.add2018UDPHandler(nw.datagrab_handler);
-  bool log_images = node->declare_parameter<bool>("log_images", false);
   std::shared_ptr<deepf1::IF1FrameGrabHandler> nullhandler;
-  if (log_images)
+  if (search_string.empty())
   {
-    dl.start(capture_frequency_p.get<double>(), nw.image_handler);
+    dl.start(capture_frequency_p.get<double>(), nullhandler);
   }
   else
   { 
-    dl.start(capture_frequency_p.get<double>(), nullhandler);
+    dl.start(capture_frequency_p.get<double>(), nw.image_handler);
   }
   exec.spin();
   rclcpp::shutdown();
