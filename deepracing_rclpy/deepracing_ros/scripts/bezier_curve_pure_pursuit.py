@@ -19,7 +19,7 @@ from rclpy.node import Node
 from deepracing_msgs.msg import BezierCurve
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Quaternion, Point, TransformStamped, Transform
-from autoware_auto_msgs.msg import VehicleControlCommand
+from ackermann_msgs.msg import AckermannDriveStamped
 import numpy as np
 import rclpy.executors
 from deepracing_ros.utils import AsyncSpinner
@@ -36,7 +36,7 @@ import rclpy.duration
 class BezierCurvePurePursuit(Node):
     def __init__(self,):
         super(BezierCurvePurePursuit,self).__init__('bezier_pure_pursuit')
-        self.setpoint_pub : Publisher = self.create_publisher(VehicleControlCommand, "ctrl_cmd", 1)
+        self.setpoint_pub : Publisher = self.create_publisher(AckermannDriveStamped, "ctrl_cmd", 1)
         self.curve_sub : Subscription = self.create_subscription(BezierCurve, "beziercurves_in", self.curveCB, 1)
         self.odom_sub : Subscription = self.create_subscription(Odometry, "odom", self.odomCB, 1)
         self.current_curve_msg : BezierCurve = None
@@ -138,10 +138,11 @@ class BezierCurvePurePursuit(Node):
         lookaheadDirection = lookaheadVector/ld
         alpha = torch.atan2(lookaheadDirection[1],lookaheadDirection[0])
 
-        control_out : VehicleControlCommand = VehicleControlCommand(stamp=odom_msg.header.stamp)
-        control_out.front_wheel_angle_rad = torch.atan((self.twoL * torch.sin(alpha)) / ld).item()
-        control_out.velocity_mps=speeds[lookahead_index_vel].item()
-        control_out.long_accel_mps2=longitudinal_accelerations[lookahead_index_vel].item()
+        control_out : AckermannDriveStamped = AckermannDriveStamped(header=odom_msg.header)
+        control_out.header.frame_id=odom_msg.child_frame_id
+        control_out.drive.steering_angle = torch.atan((self.twoL * torch.sin(alpha)) / ld).item()
+        control_out.drive.speed=speeds[lookahead_index_vel].item()
+        control_out.drive.acceleration=longitudinal_accelerations[lookahead_index_vel].item()
 
         self.setpoint_pub.publish(control_out)
 
