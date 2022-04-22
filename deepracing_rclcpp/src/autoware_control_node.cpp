@@ -3,7 +3,7 @@
 #include <functional>
 #include <deepracing_msgs/msg/timestamped_packet_car_telemetry_data.hpp>
 #include <deepracing_msgs/msg/timestamped_packet_car_status_data.hpp>
-#include <autoware_auto_msgs/msg/vehicle_control_command.hpp>
+#include <ackermann_msgs/msg/ackermann_drive_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <control_toolbox/pid_ros.hpp>
 #include <f1_datalogger/controllers/f1_interface_factory.h>
@@ -33,7 +33,7 @@ class AutowareControlNode : public rclcpp::Node
       m_game_interface_ = deepf1::F1InterfaceFactory::getDefaultInterface();
       rclcpp::SubscriptionOptions listner_options;
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-      command_listener = create_subscription<autoware_auto_msgs::msg::VehicleControlCommand>("ctrl_cmd", rclcpp::QoS{1},
+      command_listener = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>("ctrl_cmd", rclcpp::QoS{1},
         std::bind(&AutowareControlNode::commandCallback, this, std::placeholders::_1), listner_options);
       listner_options = rclcpp::SubscriptionOptions();
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
@@ -51,11 +51,11 @@ class AutowareControlNode : public rclcpp::Node
     }
     inline void controlLoop(const rclcpp::Duration& dt)
     {
-      double steercommand = m_setpoints.front_wheel_angle_rad;
+      double steercommand = m_setpoints.drive.steering_angle;
       double error;
       if (steercommand<=m_safe_steer_max_ && steercommand>=m_safe_steer_min_)
       {
-        error = m_setpoints.velocity_mps-m_current_speed_;
+        error = m_setpoints.drive.speed-m_current_speed_;
       }
       else
       {
@@ -99,25 +99,25 @@ class AutowareControlNode : public rclcpp::Node
     {
       m_drs_allowed_ = status_data->udp_packet.car_status_data.at(status_data->udp_packet.header.player_car_index).drs_allowed>0;
     }
-    inline void commandCallback(const autoware_auto_msgs::msg::VehicleControlCommand::SharedPtr new_commands)
+    inline void commandCallback(const ackermann_msgs::msg::AckermannDriveStamped::SharedPtr new_commands)
     {
-      autoware_auto_msgs::msg::VehicleControlCommand newsetpoints(*new_commands);
+      ackermann_msgs::msg::AckermannDriveStamped newsetpoints(*new_commands);
       m_setpoints = newsetpoints;
     }
     
     inline void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom)
     {
-      // m_current_speed_ = std::sqrt( odom->twist.twist.linear.x*odom->twist.twist.linear.x + 
-      //                               odom->twist.twist.linear.y*odom->twist.twist.linear.y +
-      //                               odom->twist.twist.linear.z*odom->twist.twist.linear.z );
-      m_current_speed_ =  odom->twist.twist.linear.x;
+      m_current_speed_ = std::sqrt( odom->twist.twist.linear.x*odom->twist.twist.linear.x + 
+                                    odom->twist.twist.linear.y*odom->twist.twist.linear.y +
+                                    odom->twist.twist.linear.z*odom->twist.twist.linear.z );
+      // m_current_speed_ =  odom->twist.twist.linear.x;
     }
     double m_current_speed_, m_safe_steer_max_, m_safe_steer_min_, m_safe_vel_, m_full_lock_left_, m_full_lock_right_;
     bool m_drs_allowed_, m_drs_enabled_;
     std::shared_ptr<control_toolbox::PidROS> m_velocity_pid_;
     std::shared_ptr<deepf1::F1Interface> m_game_interface_;
-    autoware_auto_msgs::msg::VehicleControlCommand m_setpoints;
-    rclcpp::Subscription<autoware_auto_msgs::msg::VehicleControlCommand>::SharedPtr command_listener;
+    ackermann_msgs::msg::AckermannDriveStamped m_setpoints;
+    rclcpp::Subscription<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr command_listener;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_listener;
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketCarStatusData>::SharedPtr status_listener;
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>::SharedPtr telemetry_listener;

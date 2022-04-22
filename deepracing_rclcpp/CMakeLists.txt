@@ -112,9 +112,10 @@ if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge
   ament_export_dependencies(image_transport)
   ament_export_dependencies(std_srvs)
 endif()
-if(TARGET f1_datalogger::f1_datalogger_controllers)
+find_package(ackermann_msgs QUIET)
+if(TARGET f1_datalogger::f1_datalogger_controllers AND ${ackermann_msgs_FOUND})
   add_executable(autoware_control_node src/autoware_control_node.cpp)
-  ament_target_dependencies(autoware_control_node autoware_auto_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp )
+  ament_target_dependencies(autoware_control_node ackermann_msgs autoware_auto_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp)
   target_link_libraries(autoware_control_node
   utils
   f1_datalogger::f1_datalogger_controllers
