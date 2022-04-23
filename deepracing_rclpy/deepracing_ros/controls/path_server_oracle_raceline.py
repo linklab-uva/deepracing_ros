@@ -1,4 +1,5 @@
 import argparse
+from ctypes import ArgumentError
 from typing import Generator
 from scipy.spatial.transform.rotation import Rotation
 import skimage
@@ -10,10 +11,7 @@ import logging
 import argparse
 import lmdb
 import deepracing.backend
-from numpy_ringbuffer import RingBuffer as RB
-import yaml
 import torch
-import torchvision
 import torchvision.transforms as tf
 import deepracing.imutils
 import scipy
@@ -39,6 +37,7 @@ from autoware_auto_msgs.msg import Trajectory, TrajectoryPoint, Complex32
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.parameter import Parameter
 from rclpy.subscription import Subscription
+from rclpy.service import Service
 from rclpy.publisher import Publisher
 from rclpy.node import Node
 from rclpy.time import Time, Duration
@@ -46,22 +45,24 @@ from rclpy.clock import Clock, ROSClock
 import deepracing_models.nn_models.Models as M
 from scipy.spatial.transform import Rotation as Rot
 from scipy.spatial.kdtree import KDTree
-import cv2, numpy as np
+import numpy as np
 from scipy.spatial import KDTree
 from copy import deepcopy
+from typing import List
 import json
 import torch
+import geometry_msgs.msg
 from deepracing_msgs.msg import BezierCurve
-from deepracing_msgs.srv import SetPurePursuitPath
-import deepracing_ros
 import deepracing_ros.convert as C
 import deepracing.raceline_utils as raceline_utils
 import pickle as pkl
-import tf2_ros
+from deepracing_msgs.srv import SetRaceline
 import deepracing_models.math_utils as mu
-import sensor_msgs_py.point_cloud2
 import math
 import builtin_interfaces.msg
+import rclpy.exceptions
+import ament_index_python
+from scipy.spatial.transform import Rotation
 
 class OraclePathServer(PathServerROS):
     def __init__(self):
@@ -103,8 +104,7 @@ class OraclePathServer(PathServerROS):
         bezier_order_param : Parameter = self.declare_parameter("bezier_order", value=3)
         self.bezier_order : int = bezier_order_param.get_parameter_value().integer_value
 
-        
-        self.rlsub : Subscription = self.create_subscription(PointCloud2, "optimal_raceline", self.racelineCB, 1)
+        self.rlservice : Service = self.create_service(SetRaceline, "set_raceline", self.set_raceline_cb)
         self.tsamp = torch.linspace(0.0, 1.0, steps=100, dtype=torch.float64, device=self.device).unsqueeze(0)
         self.Msamp = mu.bezierM(self.tsamp, self.bezier_order)
         self.Msampderiv = mu.bezierM(self.tsamp, self.bezier_order-1)
@@ -113,33 +113,55 @@ class OraclePathServer(PathServerROS):
         racelineframe_param : Parameter = self.declare_parameter("raceline_frame", value="map")
         self.racelineframe : str = racelineframe_param.get_parameter_value().string_value
 
-    def racelineCB(self, raceline_pc : PointCloud2):
-        numpoints : int = raceline_pc.width 
-        rlgenerator : Generator = sensor_msgs_py.point_cloud2.read_points(raceline_pc, field_names=["x","y","z","time","speed"])
-        raceline : torch.Tensor = torch.empty(4, numpoints, dtype=self.tsamp.dtype, device=self.device)
-        raceline[3]=1.0
-        racelinespeeds : torch.Tensor = torch.empty(numpoints, dtype=self.tsamp.dtype, device=self.device)
-        racelinetimes : torch.Tensor = torch.zeros_like(racelinespeeds)
-        for (i, p) in enumerate(rlgenerator):
-            pt : torch.Tensor = torch.as_tensor(p, dtype=self.tsamp.dtype, device=self.device)
-            raceline[0:3,i] = pt[0:3]
-            racelinetimes[i] = pt[3]
-            racelinespeeds[i] = pt[4]
-        if raceline_pc.header.frame_id==self.racelineframe:
-            racelinemap = raceline
-        else:
-            transformmsg = self.tf2_buffer.lookup_transform(self.racelineframe, raceline_pc.header.frame_id, Time(), timeout=Duration(seconds=1))
-            transform = C.transformMsgToTorch(transformmsg.transform, dtype=raceline.dtype, device=raceline.device)
-            racelinemap = torch.matmul(transform, raceline)
-        self.raceline=racelinemap
-        self.racelinespeeds=racelinespeeds
-        self.racelinetimes=racelinetimes
-        self.destroy_subscription(self.rlsub)
-        self.rlsub=None
-        
+    def set_raceline_cb(self, request : SetRaceline.Request , response : SetRaceline.Response):
+        self.get_logger().info("Processing set raceline request")
+        if (request.filename=="") and (len(request.new_raceline.poses)==0):
+            response.message="Filename and new raceline cannot both be empty. Exactly 1 of them must be popluated."
+            response.error_code=SetRaceline.Response.NEITHER_ARGUMENT_SET
+            return response
+        if (not (request.filename=="")) and (len(request.new_raceline.poses)>0):
+            response.message="Filename and new raceline cannot both be populated. Exactly 1 of them must be popluated."
+            response.error_code=SetRaceline.Response.BOTH_ARGUMENTS_SET
+            return response
+        if not (request.filename==""):
+            self.get_logger().info("Loading file: %s" %(request.filename,))
+            searchdirs : List[str] = str.split(os.getenv("F1_TRACK_DIRS", ""), os.pathsep)
+            try:
+                searchdirs.append(os.path.join(ament_index_python.get_package_share_directory("f1_datalogger"), "tracks", "minimumcurvature"))
+                searchdirs.append(os.path.join(ament_index_python.get_package_share_directory("f1_datalogger"), "tracks"))
+            except ament_index_python.PackageNotFoundError:
+                pass
+            racelinefile : str = deepracing.searchForFile(request.filename, searchdirs)
+            if racelinefile is None:
+                response.message="File %s not found" % (request.filename,)
+                response.error_code=SetRaceline.Response.FILEPATH_NOT_FOUND
+                return response
+            with open(racelinefile, "r") as f:
+                racelinedict : dict = json.load(f)
 
-       
-        
+            self.get_logger().info("Looking up transform")
+            try:
+                transform_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", "track", time=Time(), timeout=Duration(seconds=2))
+            except Exception as e:
+                response.message="TF2 lookup error. Underlying exception: %s" % (str(e),)
+                response.error_code=SetRaceline.Response.TF_FAILURE
+                return response
+            self.get_logger().info("Got transform")
+
+            rmat : np.ndarray = Rotation.from_quat([transform_msg.transform.rotation.x, transform_msg.transform.rotation.y, transform_msg.transform.rotation.z, transform_msg.transform.rotation.w]).as_matrix().astype(np.float64)
+            transformvec : np.ndarray = np.asarray([transform_msg.transform.translation.x, transform_msg.transform.translation.y, transform_msg.transform.translation.z], dtype=rmat.dtype)
+            racelinenp : np.ndarray = np.row_stack([np.asarray(racelinedict["x"], dtype=rmat.dtype), np.asarray(racelinedict["y"], dtype=rmat.dtype), np.asarray(racelinedict["z"], dtype=rmat.dtype)])
+            racelinenp = np.matmul(rmat, racelinenp) + transformvec[:,np.newaxis]
+            
+            raceline = torch.ones( (4, racelinenp.shape[1]) , dtype=self.tsamp.dtype, device=self.tsamp.device)
+            raceline[0:3] = torch.as_tensor(racelinenp, dtype=self.tsamp.dtype, device=self.tsamp.device)
+            self.raceline = raceline
+            self.racelinetimes = torch.as_tensor(racelinedict["t"], dtype=self.tsamp.dtype, device=self.tsamp.device)
+            self.racelinespeeds = torch.as_tensor(racelinedict["speeds"], dtype=self.tsamp.dtype, device=self.tsamp.device)
+            response.message="yay"
+            response.error_code=SetRaceline.Response.SUCCESS
+            return response
+
     def getTrajectory(self):
         if (self.raceline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None):
             self.get_logger().error("Returning None because raceline not yet received")
