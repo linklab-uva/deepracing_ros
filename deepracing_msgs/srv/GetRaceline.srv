@@ -1,0 +1,5 @@
+---
+nav_msgs/Path current_raceline
+string message
+uint8 SUCCESS=0
+uint8 UNKNOWN_ERROR=1

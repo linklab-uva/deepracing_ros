@@ -22,6 +22,7 @@ find_package(rclpy REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(tf2_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
@@ -39,7 +40,7 @@ file(GLOB srv_files
 rosidl_generate_interfaces(${PROJECT_NAME}
   ${msg_files}
   ${srv_files}
-  DEPENDENCIES geometry_msgs sensor_msgs std_msgs visualization_msgs trajectory_msgs tf2_msgs
+  DEPENDENCIES geometry_msgs nav_msgs sensor_msgs std_msgs visualization_msgs trajectory_msgs tf2_msgs
 )
 
 ament_export_dependencies(rosidl_default_runtime)
