@@ -58,7 +58,7 @@ class PathServerROS(Node):
           
 
         base_link_param : Parameter = self.declare_parameter("base_link", value="base_link")
-        self.base_link : str = base_link_param.get_parameter_value().string_value
+        self.base_link_id : str = base_link_param.get_parameter_value().string_value
        
         self.current_odom : Odometry = None
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = Duration(seconds=5))
