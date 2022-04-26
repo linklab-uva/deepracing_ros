@@ -50,7 +50,7 @@ class BezierCurvePurePursuit(Node):
         velocity_lookahead_gain_param : Parameter = self.declare_parameter("velocity_lookahead_gain", value=0.175)
         self.velocity_lookahead_gain : float = velocity_lookahead_gain_param.get_parameter_value().double_value
 
-        wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.05)
+        wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.726)
         wheelbase : float = wheelbase_param.get_parameter_value().double_value
 
         gpu_param : Parameter = self.declare_parameter("gpu", value=-1)

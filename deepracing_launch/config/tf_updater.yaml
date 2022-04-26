@@ -1,7 +1,6 @@
 f1_tf_updater:
     ros__parameters:
-        # centroid_to_base_translation: [0.0, 0.0, 0.0]
-        centroid_to_base_translation: [-1.45, 0.0, 0.0]
+        centroid_to_base_translation: [-1.863, 0.0, 0.0]
         # extra_position_noise: 0.01
         # extra_vel_noise: 0.001
         # extra_angvel_noise: 0.001
