@@ -20,8 +20,8 @@ class AutowareControlNode : public rclcpp::Node
     {
       m_safe_vel_ = declare_parameter<double>("safe_vel", 23.0);
 
-      m_full_lock_left_ = declare_parameter<double>("full_lock_left", 0.2986730635166168);
-      m_full_lock_right_ = declare_parameter<double>("full_lock_right", -0.26346784830093384);
+      m_full_lock_left_ = declare_parameter<double>("full_lock_left", 0.295);
+      m_full_lock_right_ = declare_parameter<double>("full_lock_right", -0.2659);
       m_safe_steer_max_ = declare_parameter<double>("safe_steer_max", m_full_lock_left_);
       m_safe_steer_min_ = declare_parameter<double>("safe_steer_min", m_full_lock_right_);
 
@@ -37,11 +37,11 @@ class AutowareControlNode : public rclcpp::Node
         std::bind(&AutowareControlNode::commandCallback, this, std::placeholders::_1), listner_options);
       listner_options = rclcpp::SubscriptionOptions();
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-      status_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarStatusData>("/f1_game/status_data", rclcpp::QoS{1},
+      status_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarStatusData>("status_data", rclcpp::QoS{1},
         std::bind(&AutowareControlNode::statusCallback, this, std::placeholders::_1), listner_options);
       listner_options = rclcpp::SubscriptionOptions();
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-      telemetry_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>("/f1_game/telemetry_data", rclcpp::QoS{1},
+      telemetry_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>("telemetry_data", rclcpp::QoS{1},
         std::bind(&AutowareControlNode::telemetryCallback, this, std::placeholders::_1), listner_options);
       listner_options = rclcpp::SubscriptionOptions();
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
@@ -63,6 +63,10 @@ class AutowareControlNode : public rclcpp::Node
       }
 
       double throttlecommand = m_velocity_pid_->computeCommand(error, dt);
+      if (m_setpoints.drive.speed>=79.5)
+      {
+        throttlecommand=1.0;
+      }
       deepf1::F1ControlCommand cmd;
       if (steercommand>=0.0)
       {
@@ -102,15 +106,19 @@ class AutowareControlNode : public rclcpp::Node
     inline void commandCallback(const ackermann_msgs::msg::AckermannDriveStamped::SharedPtr new_commands)
     {
       ackermann_msgs::msg::AckermannDriveStamped newsetpoints(*new_commands);
+      // if (newsetpoints.drive.speed>=79.5)
+      // {
+      //   newsetpoints.drive.speed=89.5;
+      // }
       m_setpoints = newsetpoints;
     }
     
     inline void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom)
     {
-      m_current_speed_ = std::sqrt( odom->twist.twist.linear.x*odom->twist.twist.linear.x + 
-                                    odom->twist.twist.linear.y*odom->twist.twist.linear.y +
-                                    odom->twist.twist.linear.z*odom->twist.twist.linear.z );
-      // m_current_speed_ =  odom->twist.twist.linear.x;
+      // m_current_speed_ = std::sqrt( odom->twist.twist.linear.x*odom->twist.twist.linear.x + 
+      //                               odom->twist.twist.linear.y*odom->twist.twist.linear.y +
+      //                               odom->twist.twist.linear.z*odom->twist.twist.linear.z );
+      m_current_speed_ = odom->twist.twist.linear.x;
     }
     double m_current_speed_, m_safe_steer_max_, m_safe_steer_min_, m_safe_vel_, m_full_lock_left_, m_full_lock_right_;
     bool m_drs_allowed_, m_drs_enabled_;
@@ -134,6 +142,11 @@ int main(int argc, char *argv[]) {
   rclcpp::Rate rate(node->declare_parameter<double>("frequency", 25.0));
   std::shared_ptr<control_toolbox::PidROS> pid_controller(new control_toolbox::PidROS(node));
   node->init(pid_controller);
+  double p,i,d;
+  node->get_parameter_or<double>("p", p, 0.5);
+  node->get_parameter_or<double>("i", i, 0.0);
+  node->get_parameter_or<double>("d", d, 0.0);
+  pid_controller->setGains(p, i, d, -1.0, 1.0, true);
   std::thread spinthread = std::thread(std::bind(&rclcpp::executors::MultiThreadedExecutor::spin, executor));
   rclcpp::Time t0 = node->now();
   rclcpp::Time t1;

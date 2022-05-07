@@ -49,8 +49,8 @@ class BoundaryPubNode(Node):
         self.current_innerboundary : nav_msgs.msg.Path = None
         self.current_outerboundary : nav_msgs.msg.Path = None
 
-        self.inner_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(nav_msgs.msg.Path, "inner_boundary", 1)
-        self.outer_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(nav_msgs.msg.Path, "outer_boundary", 1)
+        self.inner_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(nav_msgs.msg.Path, "/inner_boundary", 1)
+        self.outer_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(nav_msgs.msg.Path, "/outer_boundary", 1)
         self.session_data_sub : rclpy.subscription.Subscription = self.create_subscription(deepracing_msgs.msg.TimestampedPacketSessionData, "session_data", self.sessionDataCB, 1)
 
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time=Duration(seconds=5))

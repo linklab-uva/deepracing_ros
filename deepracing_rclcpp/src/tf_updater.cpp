@@ -40,8 +40,6 @@ class NodeWrapperTfUpdater_
      mapToTrack.header.frame_id = "map";
      mapToTrack.child_frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name;
 
-     carToBaseLink.header.frame_id = deepracing_ros::F1MsgUtils::car_coordinate_name;
-     carToBaseLink.child_frame_id = "base_link";
 
 
      tf2::Quaternion quat;
@@ -73,14 +71,14 @@ class NodeWrapperTfUpdater_
 
      this->session_listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>("session_data", 1, std::bind(&NodeWrapperTfUpdater_::sessionCallback, this, std::placeholders::_1));
      this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("motion_data", 1, std::bind(&NodeWrapperTfUpdater_::packetCallback, this, std::placeholders::_1));
-     this->twist_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("/ego_vehicle/velocity", 1);
-     this->twist_local_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("/ego_vehicle/velocity_local", 1);
-     this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("/ego_vehicle/odom", 1);
-     this->autoware_state_publisher = this->node->create_publisher<autoware_auto_msgs::msg::VehicleKinematicState>("/ego_vehicle/state", 1);
+     this->twist_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity", 1);
+     this->twist_local_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity_local", 1);
+     this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
+     this->autoware_state_publisher = this->node->create_publisher<autoware_auto_msgs::msg::VehicleKinematicState>("state", 1);
      
      if( m_tf_from_odom_ )
      {
-       odom_listener = this->node->create_subscription<nav_msgs::msg::Odometry>("/odometry/filtered", 1, std::bind(&NodeWrapperTfUpdater_::odomCallback, this, std::placeholders::_1));
+       odom_listener = this->node->create_subscription<nav_msgs::msg::Odometry>("filtered_odom", 1, std::bind(&NodeWrapperTfUpdater_::odomCallback, this, std::placeholders::_1));
      }
      
     }  
@@ -113,8 +111,11 @@ class NodeWrapperTfUpdater_
     int8_t current_track_id;
     void sessionCallback(const deepracing_msgs::msg::TimestampedPacketSessionData::SharedPtr session_msg)
     {
+      carToBaseLink.header.frame_id = deepracing_ros::F1MsgUtils::car_coordinate_name+"_"+std::to_string(session_msg->udp_packet.header.player_car_index);
+      carToBaseLink.child_frame_id = "base_link_"+std::to_string(session_msg->udp_packet.header.player_car_index);
       if((session_msg->udp_packet.track_id>=0) && (session_msg->udp_packet.track_id!=current_track_id))
       {
+        
         std::vector<std::string> search_dirs = deepracing_ros::FileUtils::split(std::string(std::getenv("F1_TRACK_DIRS")));
         std::array<std::string, 25> tracknames = deepracing_ros::F1MsgUtils::track_names();
         std::string trackname = tracknames[session_msg->udp_packet.track_id];
@@ -148,7 +149,10 @@ class NodeWrapperTfUpdater_
 
         current_track_id = session_msg->udp_packet.track_id;
       }
-      publishStatic();
+      if ( (current_track_id>=0) && (current_track_id<20) )
+      {
+        publishStatic();
+      }
 
     }  
     void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_msg)
@@ -196,7 +200,7 @@ class NodeWrapperTfUpdater_
       rotationEigen.normalize();
       geometry_msgs::msg::TransformStamped transformMsg;
       transformMsg.set__header(motion_data_packet->header);
-      transformMsg.set__child_frame_id(deepracing_ros::F1MsgUtils::car_coordinate_name);
+      transformMsg.set__child_frame_id(deepracing_ros::F1MsgUtils::car_coordinate_name+"_"+std::to_string(motion_data_packet->udp_packet.header.player_car_index));
       transformMsg.transform.rotation.x = rotationEigen.x();
       transformMsg.transform.rotation.y = rotationEigen.y();
       transformMsg.transform.rotation.z = rotationEigen.z();

@@ -20,7 +20,7 @@ import torch
 import torch.nn as NN
 import torch.utils.data as data_utils
 import deepracing_models.nn_models.Models
-from deepracing_msgs.msg import CarControl, TimestampedPacketCarStatusData, TimestampedPacketCarTelemetryData
+from deepracing_msgs.msg import CarControl, TimestampedPacketCarStatusData, TimestampedPacketCarTelemetryData, TimestampedPacketSessionData
 from nav_msgs.msg import Path,Odometry
 from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion, PoseArray, Twist, TwistStamped
 from sensor_msgs.msg import PointCloud2
@@ -59,15 +59,22 @@ class PathServerROS(Node):
 
         base_link_param : Parameter = self.declare_parameter("base_link", value="base_link")
         self.base_link_id : str = base_link_param.get_parameter_value().string_value
+
+        self.player_car_index : int = 0
        
         self.current_odom : Odometry = None
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
         self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(Odometry, 'odom', self.odomCallback, 1)
+        self.session_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketSessionData, 'session_data', self.sessionCallback, 1)
 
     def odomCallback(self, odom_msg : Odometry):
         self.get_logger().debug("Got a new pose: " + str(odom_msg))
         self.current_odom = odom_msg        
+
+    def sessionCallback(self, session_msg : TimestampedPacketSessionData):
+        self.get_logger().debug("Got a new session packet: " + str(session_msg))
+        self.player_car_index = session_msg.udp_packet.header.player_car_index       
 
     def getTrajectory(self):
         raise NotImplementedError("Subclasses of PathServerROS must override getTrajectory")

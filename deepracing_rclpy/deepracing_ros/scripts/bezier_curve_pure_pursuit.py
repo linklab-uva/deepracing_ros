@@ -16,7 +16,7 @@ from rclpy.parameter import Parameter
 from rclpy.subscription import Subscription
 from rclpy.publisher import Publisher
 from rclpy.node import Node
-from deepracing_msgs.msg import BezierCurve
+from deepracing_msgs.msg import BezierCurve, TimestampedPacketSessionData
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Quaternion, Point, TransformStamped, Transform
 from ackermann_msgs.msg import AckermannDriveStamped
@@ -44,13 +44,13 @@ class BezierCurvePurePursuit(Node):
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = rclpy.duration.Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
-        lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain", value=0.4)
+        lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain", value=0.425)
         self.lookahead_gain : float = lookahead_gain_param.get_parameter_value().double_value
 
-        velocity_lookahead_gain_param : Parameter = self.declare_parameter("velocity_lookahead_gain", value=0.175)
+        velocity_lookahead_gain_param : Parameter = self.declare_parameter("velocity_lookahead_gain", value=0.2)
         self.velocity_lookahead_gain : float = velocity_lookahead_gain_param.get_parameter_value().double_value
 
-        wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.726)
+        wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.75)
         wheelbase : float = wheelbase_param.get_parameter_value().double_value
 
         gpu_param : Parameter = self.declare_parameter("gpu", value=-1)
@@ -67,10 +67,16 @@ class BezierCurvePurePursuit(Node):
         self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 400, dtype=torch.float32, device=self.device).unsqueeze(0)
         self.twoL : torch.Tensor = torch.as_tensor(2.0*wheelbase, dtype=self.tsamp.dtype, device=self.tsamp.device)
 
+        self.player_car_index : int = 0
 
+
+
+    def sessionCB(self, session_msg : TimestampedPacketSessionData):
+        self.player_car_index = session_msg.udp_packet.header.player_car_index
 
     def curveCB(self, curve_msg : BezierCurve):
         self.current_curve_msg = curve_msg
+
     def odomCB(self, odom_msg : Odometry):
         if self.current_curve_msg is None:
             return
@@ -78,12 +84,17 @@ class BezierCurvePurePursuit(Node):
         
         map_to_car : torch.Tensor = C.poseMsgToTorch(odom_msg.pose.pose, dtype=self.tsamp.dtype, device=self.tsamp.device)
 
-        if not odom_msg.child_frame_id=="base_link":
-            car_to_base_link_msg : TransformStamped = self.tf2_buffer.lookup_transform(odom_msg.child_frame_id, "base_link", rclpy.time.Time.from_msg(odom_msg.header.stamp), rclpy.duration.Duration(seconds=2))
-            car_to_base_link : torch.Tensor = C.transformMsgToTorch(car_to_base_link_msg.transform, dtype=map_to_car.dtype, device=map_to_car.device)
-            pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
-        else:
-            pose_curr : torch.Tensor = map_to_car
+        base_link_id = "base_link_%d" % (self.player_car_index,)
+        try:
+            if not odom_msg.child_frame_id==base_link_id:
+                car_to_base_link_msg : TransformStamped = self.tf2_buffer.lookup_transform(odom_msg.child_frame_id, base_link_id, rclpy.time.Time.from_msg(odom_msg.header.stamp), rclpy.duration.Duration(seconds=2))
+                car_to_base_link : torch.Tensor = C.transformMsgToTorch(car_to_base_link_msg.transform, dtype=map_to_car.dtype, device=map_to_car.device)
+                pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
+            else:
+                pose_curr : torch.Tensor = map_to_car
+        except Exception as e:
+            self.get_logger().error("Unable to lookup TF2 transform.")
+            return
 
         transform : torch.Tensor = torch.inverse(pose_curr)
 
