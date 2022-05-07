@@ -115,7 +115,7 @@ endif()
 find_package(ackermann_msgs QUIET)
 if(TARGET f1_datalogger::f1_datalogger_controllers AND ${ackermann_msgs_FOUND})
   add_executable(autoware_control_node src/autoware_control_node.cpp)
-  ament_target_dependencies(autoware_control_node ackermann_msgs autoware_auto_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp)
+  ament_target_dependencies(autoware_control_node ackermann_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp)
   target_link_libraries(autoware_control_node
   utils
   f1_datalogger::f1_datalogger_controllers
