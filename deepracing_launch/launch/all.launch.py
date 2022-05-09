@@ -16,6 +16,8 @@ def generate_launch_description():
     nodez = []
     argz = []
     
+    boundary_pub = DeclareLaunchArgument("boundary_pub", default_value="true")
+    argz.append(boundary_pub)
     use_sim_time = DeclareLaunchArgument("use_sim_time", default_value="false")
     argz.append(use_sim_time)
     tf_from_odom = DeclareLaunchArgument("tf_from_odom", default_value="false")
@@ -27,7 +29,7 @@ def generate_launch_description():
     port = DeclareLaunchArgument("port", default_value="20777")
     argz.append(port)
     includez.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(PathJoinSubstitution([deepracing_launch_launch_dir, "utilities.launch.py"]))\
-                    ,launch_arguments=list({ns.name: LaunchConfiguration(ns.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), tf_from_odom.name : LaunchConfiguration(tf_from_odom.name)}.items())))
+                    ,launch_arguments=list({boundary_pub.name: LaunchConfiguration(boundary_pub.name), ns.name: LaunchConfiguration(ns.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), tf_from_odom.name : LaunchConfiguration(tf_from_odom.name)}.items())))
 
     includez.append( launch_ros.actions.Node(package='deepracing_rclcpp', name='rebroadcaster_node', executable='ros_rebroadcaster', output='screen', namespace=LaunchConfiguration(ns.name), parameters=[{port.name : LaunchConfiguration(port.name), hostname.name : LaunchConfiguration(hostname.name)}]) )
     includez.append( launch_ros.actions.Node(package='deepracing_rclpy', name='oracle_path_server', executable='oracle_path_server', output='screen', namespace=LaunchConfiguration(ns.name) ) )
