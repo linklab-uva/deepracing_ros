@@ -39,6 +39,7 @@ class BezierCurvePurePursuit(Node):
         self.setpoint_pub : Publisher = self.create_publisher(AckermannDriveStamped, "ctrl_cmd", 1)
         self.curve_sub : Subscription = self.create_subscription(BezierCurve, "beziercurves_in", self.curveCB, 1)
         self.odom_sub : Subscription = self.create_subscription(Odometry, "odom", self.odomCB, 1)
+        self.session_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "session_data", self.sessionCB, 1)
         self.current_curve_msg : BezierCurve = None
 
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = rclpy.duration.Duration(seconds=5))
@@ -93,7 +94,7 @@ class BezierCurvePurePursuit(Node):
             else:
                 pose_curr : torch.Tensor = map_to_car
         except Exception as e:
-            self.get_logger().error("Unable to lookup TF2 transform.")
+            self.get_logger().error("Unable to lookup TF2 transform for base link frame: %s." % (base_link_id,))
             return
 
         transform : torch.Tensor = torch.inverse(pose_curr)
