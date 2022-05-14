@@ -68,7 +68,7 @@ class OraclePathServer(PathServerROS):
     def __init__(self):
         super(OraclePathServer, self).__init__()
         #Say hello to all of the wonderful people
-        self.get_logger().info("Hello Path Server!")
+        self.get_logger().info("Hello Path Server! I live in namespace: %s" % (self.get_namespace()))
 
         gpu_param_descriptor = ParameterDescriptor(description="Which gpu to use for computation. Any negative number means use CPU")
         gpu_param : Parameter = self.declare_parameter("gpu", value=-1, descriptor=gpu_param_descriptor)
@@ -201,7 +201,7 @@ class OraclePathServer(PathServerROS):
         map_to_car : torch.Tensor = C.poseMsgToTorch(posemsg.pose.pose, dtype=self.tsamp.dtype, device=self.device)
 
         if not posemsg.child_frame_id==self.base_link_id:
-            car_to_base_link_msg : TransformStamped = self.tf2_buffer.lookup_transform(posemsg.child_frame_id, self.base_link_id+("_%d"%(self.player_car_index,)), Time.from_msg(posemsg.header.stamp), Duration(seconds=2))
+            car_to_base_link_msg : TransformStamped = self.tf2_buffer.lookup_transform(posemsg.child_frame_id, self.base_link_id, Time.from_msg(posemsg.header.stamp), Duration(seconds=2))
             car_to_base_link : torch.Tensor = C.transformMsgToTorch(car_to_base_link_msg.transform, dtype=self.tsamp.dtype, device=self.device)
             pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
         else:

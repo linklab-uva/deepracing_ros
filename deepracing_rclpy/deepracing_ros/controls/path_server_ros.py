@@ -56,9 +56,11 @@ class PathServerROS(Node):
     def __init__(self, name='path_server_ros'):
         super(PathServerROS,self).__init__(name, allow_undeclared_parameters=False, automatically_declare_parameters_from_overrides=False)
           
-
-        base_link_param : Parameter = self.declare_parameter("base_link", value="base_link")
-        self.base_link_id : str = base_link_param.get_parameter_value().string_value
+        
+        carname_param : Parameter = self.declare_parameter("carname", value="")
+        self.carname : str = carname_param.get_parameter_value().string_value
+        
+        self.base_link_id : str = "base_link_%s" %(self.carname,)
 
         self.player_car_index : int = 0
        

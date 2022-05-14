@@ -45,13 +45,18 @@ class BezierCurvePurePursuit(Node):
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = rclpy.duration.Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
-        lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain", value=0.425)
+        carname_param : Parameter = self.declare_parameter("carname", value="")
+        self.carname : str = carname_param.get_parameter_value().string_value
+
+        self.base_link_id : str = "base_link_%s" % (self.carname,)
+
+        lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain", value=0.4)
         self.lookahead_gain : float = lookahead_gain_param.get_parameter_value().double_value
 
         velocity_lookahead_gain_param : Parameter = self.declare_parameter("velocity_lookahead_gain", value=0.2)
         self.velocity_lookahead_gain : float = velocity_lookahead_gain_param.get_parameter_value().double_value
 
-        wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.75)
+        wheelbase_param : Parameter = self.declare_parameter("wheelbase", value=3.726)
         wheelbase : float = wheelbase_param.get_parameter_value().double_value
 
         gpu_param : Parameter = self.declare_parameter("gpu", value=-1)
@@ -85,16 +90,15 @@ class BezierCurvePurePursuit(Node):
         
         map_to_car : torch.Tensor = C.poseMsgToTorch(odom_msg.pose.pose, dtype=self.tsamp.dtype, device=self.tsamp.device)
 
-        base_link_id = "base_link_%d" % (self.player_car_index,)
         try:
-            if not odom_msg.child_frame_id==base_link_id:
-                car_to_base_link_msg : TransformStamped = self.tf2_buffer.lookup_transform(odom_msg.child_frame_id, base_link_id, rclpy.time.Time.from_msg(odom_msg.header.stamp), rclpy.duration.Duration(seconds=2))
+            if not odom_msg.child_frame_id==self.base_link_id:
+                car_to_base_link_msg : TransformStamped = self.tf2_buffer.lookup_transform(odom_msg.child_frame_id, self.base_link_id, rclpy.time.Time.from_msg(odom_msg.header.stamp), rclpy.duration.Duration(seconds=2))
                 car_to_base_link : torch.Tensor = C.transformMsgToTorch(car_to_base_link_msg.transform, dtype=map_to_car.dtype, device=map_to_car.device)
                 pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
             else:
                 pose_curr : torch.Tensor = map_to_car
         except Exception as e:
-            self.get_logger().error("Unable to lookup TF2 transform for base link frame: %s." % (base_link_id,))
+            self.get_logger().error("Unable to lookup TF2 transform for base link frame: %s." % (self.base_link_id,))
             return
 
         transform : torch.Tensor = torch.inverse(pose_curr)
@@ -105,7 +109,7 @@ class BezierCurvePurePursuit(Node):
             bcurve_global[i,1]=current_curve.control_points[i].y
             bcurve_global[i,2]=current_curve.control_points[i].z
         bcurve_local = torch.matmul(bcurve_global, transform[0:3].t()).unsqueeze(0)
-        dt : float = (float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9)
+        dt : float = (float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9)#*.9875
         
         Msamp : torch.Tensor = mu.bezierM(self.tsamp, bcurve_local.shape[1]-1)
         Psamp : torch.Tensor = torch.matmul(Msamp, bcurve_local)
