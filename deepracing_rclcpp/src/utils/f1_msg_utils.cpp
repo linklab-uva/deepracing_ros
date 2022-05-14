@@ -12,7 +12,7 @@
 #include <algorithm>
 
 const std::string deepracing_ros::F1MsgUtils::world_coordinate_name("track");
-const std::string deepracing_ros::F1MsgUtils::car_coordinate_name("car");
+const std::string deepracing_ros::F1MsgUtils::car_coordinate_name("centroid");
 deepracing_msgs::msg::MarshalZone deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::MarshalZone& marshal_zone)
 {
   deepracing_msgs::msg::MarshalZone rtn;
