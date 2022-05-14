@@ -33,6 +33,8 @@ def generate_launch_description():
     params_path = os.path.join(share_dir, 'config')
 
     argz = []
+    ns = DeclareLaunchArgument("ns", default_value="")
+    argz.append(ns)
 
     nodez= []
     nodez.append(Node(
@@ -46,7 +48,9 @@ def generate_launch_description():
         executable='ekf_node',
         name='ekf_filter_node',
         output='screen',
-        parameters=[os.path.join(params_path, 'ekf.yaml')],
+        parameters=[os.path.join(params_path, 'ekf.yaml')], 
+        remappings=[("odometry/filtered", "odom/filtered")],
+        namespace=LaunchConfiguration(ns.name)
     ))
     
     # nodez.append(Node(
