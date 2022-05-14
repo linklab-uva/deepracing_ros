@@ -11,6 +11,7 @@
 #include <boost/math/constants/constants.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
+#include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include "deepracing_ros/utils/f1_msg_utils.h"
 #include <tf2_eigen/tf2_eigen.h>
@@ -22,6 +23,8 @@
 #include <deepracing_ros/utils/file_utils.h>
 #include <fstream>
 #include <iostream>
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <filesystem>
 
 
 class NodeWrapperTfUpdater_ 
@@ -35,6 +38,7 @@ class NodeWrapperTfUpdater_
      current_track_id = -1;
      node = rclcpp::Node::make_shared("f1_tf_updater");//,"",options);
      m_tf_from_odom_ = node->declare_parameter<bool>("tf_from_odom", false);
+     carname = node->declare_parameter<std::string>("carname", "");
      statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node));
      tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node));
      mapToTrack.header.frame_id = "map";
@@ -74,11 +78,12 @@ class NodeWrapperTfUpdater_
      this->twist_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity", 1);
      this->twist_local_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity_local", 1);
      this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
+     this->accel_publisher = this->node->create_publisher<geometry_msgs::msg::AccelWithCovarianceStamped>("accel", 1);
      this->autoware_state_publisher = this->node->create_publisher<autoware_auto_msgs::msg::VehicleKinematicState>("state", 1);
      
      if( m_tf_from_odom_ )
      {
-       odom_listener = this->node->create_subscription<nav_msgs::msg::Odometry>("filtered_odom", 1, std::bind(&NodeWrapperTfUpdater_::odomCallback, this, std::placeholders::_1));
+       odom_listener = this->node->create_subscription<nav_msgs::msg::Odometry>("odom/filtered", 1, std::bind(&NodeWrapperTfUpdater_::odomCallback, this, std::placeholders::_1));
      }
      
     }  
@@ -87,6 +92,7 @@ class NodeWrapperTfUpdater_
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketSessionData>::SharedPtr session_listener;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_publisher;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_local_publisher;
+    rclcpp::Publisher<geometry_msgs::msg::AccelWithCovarianceStamped>::SharedPtr accel_publisher;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
     rclcpp::Publisher<autoware_auto_msgs::msg::VehicleKinematicState>::SharedPtr autoware_state_publisher;
 
@@ -109,14 +115,26 @@ class NodeWrapperTfUpdater_
     double m_extra_vel_noise;   
     double m_extra_angvel_noise; 
     int8_t current_track_id;
+    std::string carname;
     void sessionCallback(const deepracing_msgs::msg::TimestampedPacketSessionData::SharedPtr session_msg)
     {
-      carToBaseLink.header.frame_id = deepracing_ros::F1MsgUtils::car_coordinate_name+"_"+std::to_string(session_msg->udp_packet.header.player_car_index);
-      carToBaseLink.child_frame_id = "base_link_"+std::to_string(session_msg->udp_packet.header.player_car_index);
+      carToBaseLink.header.frame_id = deepracing_ros::F1MsgUtils::car_coordinate_name+"_"+carname;
+      carToBaseLink.child_frame_id = "base_link_"+carname;
       if((session_msg->udp_packet.track_id>=0) && (session_msg->udp_packet.track_id!=current_track_id))
       {
         
         std::vector<std::string> search_dirs = deepracing_ros::FileUtils::split(std::string(std::getenv("F1_TRACK_DIRS")));
+        try
+        {
+          std::filesystem::path f1_datalogger_path = std::filesystem::path(ament_index_cpp::get_package_share_directory("f1_datalogger"));
+          search_dirs.push_back((f1_datalogger_path / std::filesystem::path("f1_tracks")).string());
+          search_dirs.push_back((f1_datalogger_path / std::filesystem::path("f1_tracks") / std::filesystem::path("minimumcurvature")).string());
+        }
+        catch(const std::exception& e)
+        {
+          
+        }
+        
         std::array<std::string, 25> tracknames = deepracing_ros::F1MsgUtils::track_names();
         std::string trackname = tracknames[session_msg->udp_packet.track_id];
         std::string starting_pose_filepath = deepracing_ros::FileUtils::findFile(trackname+"_startingpose.json", search_dirs);
@@ -200,7 +218,7 @@ class NodeWrapperTfUpdater_
       rotationEigen.normalize();
       geometry_msgs::msg::TransformStamped transformMsg;
       transformMsg.set__header(motion_data_packet->header);
-      transformMsg.set__child_frame_id(deepracing_ros::F1MsgUtils::car_coordinate_name+"_"+std::to_string(motion_data_packet->udp_packet.header.player_car_index));
+      transformMsg.set__child_frame_id(deepracing_ros::F1MsgUtils::car_coordinate_name+"_"+carname);
       transformMsg.transform.rotation.x = rotationEigen.x();
       transformMsg.transform.rotation.y = rotationEigen.y();
       transformMsg.transform.rotation.z = rotationEigen.z();
@@ -227,11 +245,29 @@ class NodeWrapperTfUpdater_
       // centroidVelEigenLocal+=m_extra_vel_noise*Eigen::Vector3d(m_rng_.gaussian01(), m_rng_.gaussian01(), m_rng_.gaussian01());
 
 
-      Eigen::Vector3d centroidAngVelWeird(motion_data_packet->udp_packet.angular_velocity.x, motion_data_packet->udp_packet.angular_velocity.y, motion_data_packet->udp_packet.angular_velocity.z);
-      Eigen::Vector3d centroidAngVel = trackToCarEigen.rotation().inverse()*centroidAngVelWeird;
+      Eigen::Vector3d centroidAngVelTrack(motion_data_packet->udp_packet.angular_velocity.x, motion_data_packet->udp_packet.angular_velocity.y, motion_data_packet->udp_packet.angular_velocity.z);
+      Eigen::Vector3d centroidAngVel = trackToCarEigen.rotation().inverse()*centroidAngVelTrack;
       
-      Eigen::Vector3d centroidAngAccelWeird(motion_data_packet->udp_packet.angular_acceleration.x, motion_data_packet->udp_packet.angular_acceleration.y, motion_data_packet->udp_packet.angular_acceleration.z);
-      Eigen::Vector3d centroidAngAccel = trackToCarEigen.rotation().inverse()*centroidAngAccelWeird;
+      Eigen::Vector3d centroidAngAccelTrack(motion_data_packet->udp_packet.angular_acceleration.x, motion_data_packet->udp_packet.angular_acceleration.y, motion_data_packet->udp_packet.angular_acceleration.z);
+      Eigen::Vector3d centroidAngAccel = trackToCarEigen.rotation().inverse()*centroidAngAccelTrack;
+
+      Eigen::Vector3d centroidLinearAccel=9.81*Eigen::Vector3d(motion_data.g_force_longitudinal, motion_data.g_force_lateral, motion_data.g_force_vertical);
+
+      geometry_msgs::msg::AccelWithCovarianceStamped accel_msg;
+      accel_msg.header.set__stamp(transformMsg.header.stamp);
+      accel_msg.header.set__frame_id(transformMsg.child_frame_id);
+      accel_msg.accel.accel.linear.x=centroidLinearAccel.x();
+      accel_msg.accel.accel.linear.y=centroidLinearAccel.y();
+      accel_msg.accel.accel.linear.z=centroidLinearAccel.z();
+      accel_msg.accel.accel.angular.x=centroidAngAccel.x();
+      accel_msg.accel.accel.angular.y=centroidAngAccel.y();
+      accel_msg.accel.accel.angular.z=centroidAngAccel.z();
+      accel_msg.accel.covariance[0]=0.01;
+      accel_msg.accel.covariance[7]=0.01;
+      accel_msg.accel.covariance[14]=0.01;
+      accel_msg.accel.covariance[21]=0.01;
+      accel_msg.accel.covariance[28]=0.01;
+      accel_msg.accel.covariance[35]=0.01;
     
       nav_msgs::msg::Odometry odom;
       odom.header.set__frame_id("map");
@@ -289,6 +325,7 @@ class NodeWrapperTfUpdater_
       }
       this->odom_publisher->publish(odom);
       this->autoware_state_publisher->publish(state);
+      this->accel_publisher->publish(accel_msg);
     }
 };
 int main(int argc, char *argv[]) {
