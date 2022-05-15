@@ -19,6 +19,7 @@ from rclpy.publisher import Publisher
 from rclpy.node import Node
 from deepracing_msgs.msg import BezierCurve, TimestampedPacketSessionData
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Float64
 from geometry_msgs.msg import Quaternion, Point, TransformStamped, Transform
 from ackermann_msgs.msg import AckermannDriveStamped
 import numpy as np
@@ -39,6 +40,7 @@ class BezierCurvePurePursuit(Node):
     def __init__(self,):
         super(BezierCurvePurePursuit,self).__init__('bezier_pure_pursuit')
         self.setpoint_pub : Publisher = self.create_publisher(AckermannDriveStamped, "ctrl_cmd", 1)
+        self.lateral_error_pub : Publisher = self.create_publisher(Float64, "lateral_error", 1)
         self.curve_sub : Subscription = self.create_subscription(BezierCurve, "beziercurves_in", self.curveCB, 1)
         self.odom_sub : Subscription = self.create_subscription(Odometry, "odom", self.odomCB, 1)
         self.session_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "session_data", self.sessionCB, 1)
@@ -161,6 +163,7 @@ class BezierCurvePurePursuit(Node):
         control_out.drive.speed=speeds[lookahead_index_vel].item()
 
         self.setpoint_pub.publish(control_out)
+        self.lateral_error_pub.publish(Float64(data=torch.norm(Psamp[0], p=2).item()))
 
         
 
