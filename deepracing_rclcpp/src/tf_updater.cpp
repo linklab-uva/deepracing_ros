@@ -12,6 +12,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
+#include <sensor_msgs/msg/imu.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include "deepracing_ros/utils/f1_msg_utils.h"
 #include <tf2_eigen/tf2_eigen.h>
@@ -81,7 +82,7 @@ class NodeWrapperTfUpdater_
      this->twist_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity", 1);
      this->twist_local_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity_local", 1);
      this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
-     this->accel_publisher = this->node->create_publisher<geometry_msgs::msg::AccelWithCovarianceStamped>("accel", 1);
+     this->accel_publisher = this->node->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
      this->autoware_state_publisher = this->node->create_publisher<autoware_auto_msgs::msg::VehicleKinematicState>("state", 1);
      
      if( m_tf_from_odom_ )
@@ -95,7 +96,7 @@ class NodeWrapperTfUpdater_
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketSessionData>::SharedPtr session_listener;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_publisher;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_local_publisher;
-    rclcpp::Publisher<geometry_msgs::msg::AccelWithCovarianceStamped>::SharedPtr accel_publisher;
+    rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr accel_publisher;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
     rclcpp::Publisher<autoware_auto_msgs::msg::VehicleKinematicState>::SharedPtr autoware_state_publisher;
 
@@ -250,41 +251,27 @@ class NodeWrapperTfUpdater_
 
       Eigen::Vector3d centroidLinearAccel=9.81*Eigen::Vector3d(motion_data.g_force_longitudinal, motion_data.g_force_lateral, motion_data.g_force_vertical);
 
-      geometry_msgs::msg::AccelWithCovarianceStamped accel_msg;
-      accel_msg.header.set__stamp(transformMsg.header.stamp);
-      accel_msg.header.set__frame_id(transformMsg.child_frame_id);
-      accel_msg.accel.accel.linear.x=centroidLinearAccel.x();
-      accel_msg.accel.accel.linear.y=centroidLinearAccel.y();
-      accel_msg.accel.accel.linear.z=centroidLinearAccel.z();
-      accel_msg.accel.accel.angular.x=centroidAngAccel.x();
-      accel_msg.accel.accel.angular.y=centroidAngAccel.y();
-      accel_msg.accel.accel.angular.z=centroidAngAccel.z();
-      accel_msg.accel.covariance[0]=0.01;
-      accel_msg.accel.covariance[7]=0.01;
-      accel_msg.accel.covariance[14]=0.01;
-      accel_msg.accel.covariance[21]=0.01;
-      accel_msg.accel.covariance[28]=0.01;
-      accel_msg.accel.covariance[35]=0.01;
+      sensor_msgs::msg::Imu imu_msg;
+      imu_msg.header.set__stamp(transformMsg.header.stamp);
+      imu_msg.header.set__frame_id(transformMsg.child_frame_id);
+      imu_msg.orientation_covariance.fill(-1.0);
+      imu_msg.angular_velocity.set__x(centroidAngVel.x());
+      imu_msg.angular_velocity.set__y(centroidAngVel.y());
+      imu_msg.angular_velocity.set__z(centroidAngVel.z());
+      imu_msg.angular_velocity_covariance[0]=imu_msg.angular_velocity_covariance[4]=imu_msg.angular_velocity_covariance[8]=0.0225;
+      imu_msg.linear_acceleration.set__x(centroidLinearAccel.x());
+      imu_msg.linear_acceleration.set__y(centroidLinearAccel.y());
+      imu_msg.linear_acceleration.set__z(centroidLinearAccel.z());
+      imu_msg.linear_acceleration_covariance[0]=imu_msg.linear_acceleration_covariance[4]=0.0225;
+      imu_msg.linear_acceleration_covariance[8]=0.25;
+
+
     
       nav_msgs::msg::Odometry odom;
       odom.header.set__frame_id("map");
       odom.header.set__stamp(transformMsg.header.stamp);
       odom.set__child_frame_id(transformMsg.child_frame_id);
       odom.pose.pose = tf2::toMsg(mapToCarEigen);
-      // geometry_msgs::msg::Quaternion& quat_in = odom.pose.pose.orientation;
-      // Eigen::Quaterniond noisy_quaterion(quat_in.w + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.x + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.y + m_extra_rot_noise*m_rng_.gaussian01(), quat_in.z + m_extra_rot_noise*m_rng_.gaussian01());
-      // noisy_quaterion.normalize();
-      // double extra_position_variance=m_extra_position_noise*m_extra_position_noise;
-      // double extra_rot_variance=m_extra_rot_noise*m_extra_rot_noise;
-      // double extra_vel_variance=m_extra_vel_noise*m_extra_vel_noise;      
-      // double extra_angvel_variance=m_extra_angvel_noise*m_extra_angvel_noise;      
-      // odom.pose.pose.position.x+=m_extra_position_noise*m_rng_.gaussian01();
-      // odom.pose.pose.position.y+=m_extra_position_noise*m_rng_.gaussian01();
-      // odom.pose.pose.position.z+=m_extra_position_noise*m_rng_.gaussian01();
-      // odom.pose.pose.orientation.x=noisy_quaterion.x();
-      // odom.pose.pose.orientation.y=noisy_quaterion.y();
-      // odom.pose.pose.orientation.z=noisy_quaterion.z();
-      // odom.pose.pose.orientation.w=noisy_quaterion.w();
 
       odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14] = 0.0025;// + extra_position_variance;
       odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35] = 1.0E-4;// + extra_rot_variance;
@@ -322,7 +309,7 @@ class NodeWrapperTfUpdater_
       }
       this->odom_publisher->publish(odom);
       this->autoware_state_publisher->publish(state);
-      this->accel_publisher->publish(accel_msg);
+      this->accel_publisher->publish(imu_msg);
     }
 };
 int main(int argc, char *argv[]) {
