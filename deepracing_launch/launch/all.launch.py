@@ -22,18 +22,16 @@ def generate_launch_description():
     argz.append(use_sim_time)
     tf_from_odom = DeclareLaunchArgument("tf_from_odom", default_value="false")
     argz.append(tf_from_odom)
-    ns = DeclareLaunchArgument("ns", default_value="")
-    argz.append(ns)
+    carname = DeclareLaunchArgument("carname", default_value="")
+    argz.append(carname)
     hostname = DeclareLaunchArgument("hostname", default_value="127.0.0.1")
     argz.append(hostname)
     port = DeclareLaunchArgument("port", default_value="20777")
     argz.append(port)
     includez.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(PathJoinSubstitution([deepracing_launch_launch_dir, "utilities.launch.py"]))\
-                    ,launch_arguments=list({boundary_pub.name: LaunchConfiguration(boundary_pub.name), ns.name: LaunchConfiguration(ns.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), tf_from_odom.name : LaunchConfiguration(tf_from_odom.name)}.items())))
-
-    includez.append( launch_ros.actions.Node(package='deepracing_rclcpp', name='rebroadcaster_node', executable='ros_rebroadcaster', output='screen', namespace=LaunchConfiguration(ns.name), parameters=[{port.name : LaunchConfiguration(port.name), hostname.name : LaunchConfiguration(hostname.name)}]) )
-    includez.append( launch_ros.actions.Node(package='deepracing_rclpy', name='oracle_path_server', executable='oracle_path_server', output='screen', namespace=LaunchConfiguration(ns.name) ) )
-    includez.append( launch_ros.actions.Node(package='deepracing_rclpy', name='pure_pursuit_node', executable='bezier_curve_pure_pursuit', output='screen', namespace=LaunchConfiguration(ns.name), remappings=[("beziercurves_in", "oraclebeziercurves")] ) )
+                    ,launch_arguments=list({boundary_pub.name: LaunchConfiguration(boundary_pub.name), carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), tf_from_odom.name : LaunchConfiguration(tf_from_odom.name)}.items())))
+    includez.append(IncludeLaunchDescription(FrontendLaunchDescriptionSource(PathJoinSubstitution([deepracing_launch_launch_dir, "pure_pursuit_oracle.launch"]))\
+                    ,launch_arguments=list({carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), tf_from_odom.name : LaunchConfiguration(tf_from_odom.name)}.items())))
 
     return LaunchDescription(argz + includez + nodez)
     
