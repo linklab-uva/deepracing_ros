@@ -258,11 +258,11 @@ class NodeWrapperTfUpdater_
       imu_msg.angular_velocity.set__x(centroidAngVel.x());
       imu_msg.angular_velocity.set__y(centroidAngVel.y());
       imu_msg.angular_velocity.set__z(centroidAngVel.z());
-      imu_msg.angular_velocity_covariance[0]=imu_msg.angular_velocity_covariance[4]=imu_msg.angular_velocity_covariance[8]=0.0225;
+      imu_msg.angular_velocity_covariance[0]=imu_msg.angular_velocity_covariance[4]=imu_msg.angular_velocity_covariance[8]=0.00225;
       imu_msg.linear_acceleration.set__x(centroidLinearAccel.x());
       imu_msg.linear_acceleration.set__y(centroidLinearAccel.y());
       imu_msg.linear_acceleration.set__z(centroidLinearAccel.z());
-      imu_msg.linear_acceleration_covariance[0]=imu_msg.linear_acceleration_covariance[4]=0.0225;
+      imu_msg.linear_acceleration_covariance[0]=imu_msg.linear_acceleration_covariance[4]=0.00225;
       imu_msg.linear_acceleration_covariance[8]=0.25;
 
 
