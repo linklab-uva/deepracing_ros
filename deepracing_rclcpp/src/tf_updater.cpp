@@ -234,11 +234,11 @@ class NodeWrapperTfUpdater_
       Eigen::Vector3d mapToBL_translation(mapToBLEigen.translation());
       Eigen::Quaterniond mapToBL_quaternion(mapToBLEigen.rotation());
 
-      // Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.x, velocityROS.vector.y, velocityROS.vector.z);
-      // Eigen::Vector3d centroidVelEigenLocal = trackToCarEigen.rotation().inverse()*centroidVelEigenGlobal;    
+      Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.x, velocityROS.vector.y, velocityROS.vector.z);
+      Eigen::Vector3d centroidVelEigenLocal = trackToCarEigen.rotation().inverse()*centroidVelEigenGlobal;    
 
       // Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.x, velocityROS.vector.y, velocityROS.vector.z);
-      Eigen::Vector3d centroidVelEigenLocal(motion_data_packet->udp_packet.local_velocity.z, motion_data_packet->udp_packet.local_velocity.x, motion_data_packet->udp_packet.local_velocity.y); 
+      // Eigen::Vector3d centroidVelEigenLocal(motion_data_packet->udp_packet.local_velocity.z, motion_data_packet->udp_packet.local_velocity.x, motion_data_packet->udp_packet.local_velocity.y); 
       // centroidVelEigenLocal+=m_extra_vel_noise*Eigen::Vector3d(m_rng_.gaussian01(), m_rng_.gaussian01(), m_rng_.gaussian01());
 
 
