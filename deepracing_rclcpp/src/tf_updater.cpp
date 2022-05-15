@@ -263,7 +263,7 @@ class NodeWrapperTfUpdater_
       imu_msg.linear_acceleration.set__y(centroidLinearAccel.y());
       imu_msg.linear_acceleration.set__z(centroidLinearAccel.z());
       imu_msg.linear_acceleration_covariance[0]=imu_msg.linear_acceleration_covariance[4]=0.00225;
-      imu_msg.linear_acceleration_covariance[8]=0.25;
+      imu_msg.linear_acceleration_covariance[8]=0.005;
 
 
     
