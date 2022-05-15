@@ -73,7 +73,7 @@ class BezierCurvePurePursuit(Node):
             self.device : torch.device = torch.device("cpu")
 
 
-        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 400, dtype=torch.float32, device=self.device).unsqueeze(0)
+        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 400, dtype=torch.float64, device=self.device).unsqueeze(0)
         self.twoL : torch.Tensor = torch.as_tensor(2.0*wheelbase, dtype=self.tsamp.dtype, device=self.tsamp.device)
 
         self.player_car_index : int = 0
