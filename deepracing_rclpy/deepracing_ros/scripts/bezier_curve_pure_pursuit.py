@@ -11,6 +11,7 @@
 # limitations under the License.
 
 from copy import deepcopy
+from multiprocessing import Semaphore
 import rclpy
 from rclpy.parameter import Parameter
 from rclpy.subscription import Subscription
@@ -31,6 +32,7 @@ import deepracing_models.math_utils as mu
 import tf2_ros
 import rclpy.time
 import rclpy.duration
+import threading 
 
 
 class BezierCurvePurePursuit(Node):
@@ -41,6 +43,7 @@ class BezierCurvePurePursuit(Node):
         self.odom_sub : Subscription = self.create_subscription(Odometry, "odom", self.odomCB, 1)
         self.session_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "session_data", self.sessionCB, 1)
         self.current_curve_msg : BezierCurve = None
+        self.current_curve_mutex : threading.Semaphore = threading.Semaphore()
 
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = rclpy.duration.Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
@@ -81,15 +84,24 @@ class BezierCurvePurePursuit(Node):
         self.player_car_index = session_msg.udp_packet.header.player_car_index
 
     def curveCB(self, curve_msg : BezierCurve):
+        if not self.current_curve_mutex.acquire(timeout=0.5):
+            self.get_logger().error("Unable to acquire current_curve_mutex")
+            return
         self.current_curve_msg = curve_msg
+        self.current_curve_mutex.release()
 
     def odomCB(self, odom_msg : Odometry):
         if self.current_curve_msg is None:
+            self.get_logger().error("No bezier curve received yet")
+            return
+        if not self.current_curve_mutex.acquire(timeout=0.5):
+            self.get_logger().error("Unable to acquire current_curve_mutex")
             return
         current_curve : BezierCurve = deepcopy(self.current_curve_msg)
+        self.current_curve_mutex.release()
+        
         
         map_to_car : torch.Tensor = C.poseMsgToTorch(odom_msg.pose.pose, dtype=self.tsamp.dtype, device=self.tsamp.device)
-
         try:
             if not odom_msg.child_frame_id==self.base_link_id:
                 car_to_base_link_msg : TransformStamped = self.tf2_buffer.lookup_transform(odom_msg.child_frame_id, self.base_link_id, rclpy.time.Time.from_msg(odom_msg.header.stamp), rclpy.duration.Duration(seconds=2))
@@ -100,10 +112,10 @@ class BezierCurvePurePursuit(Node):
         except Exception as e:
             self.get_logger().error("Unable to lookup TF2 transform for base link frame: %s." % (self.base_link_id,))
             return
-
+        
         transform : torch.Tensor = torch.inverse(pose_curr)
 
-        bcurve_global : torch.Tensor = torch.ones(len(current_curve.control_points), 4, dtype=map_to_car.dtype, device=map_to_car.device )
+        bcurve_global : torch.Tensor = torch.ones(len(current_curve.control_points), 4, dtype=transform.dtype, device=transform.device )
         for i in range(bcurve_global.shape[0]):
             bcurve_global[i,0]=current_curve.control_points[i].x
             bcurve_global[i,1]=current_curve.control_points[i].y
@@ -112,26 +124,16 @@ class BezierCurvePurePursuit(Node):
         dt : float = (float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9)#*.9875
         
         Msamp : torch.Tensor = mu.bezierM(self.tsamp, bcurve_local.shape[1]-1)
-        Psamp : torch.Tensor = torch.matmul(Msamp, bcurve_local)
-        Psamp=Psamp[0]
+        Psamp : torch.Tensor = torch.matmul(Msamp[0], bcurve_local[0])
         arclengths : torch.Tensor = torch.zeros_like(self.tsamp[0])
         arclengths[1:]=torch.cumsum(torch.norm(Psamp[1:] - Psamp[:-1], p=2, dim=1), 0)
 
         _, _velocities = mu.bezierDerivative(bcurve_local, t=self.tsamp)
         velocities : torch.Tensor = _velocities[0]/dt
         speeds : torch.Tensor = torch.norm(velocities, p=2, dim=1)
-        unit_tangents : torch.Tensor = velocities/speeds[:,None]
-
-        _, _accelerations = mu.bezierDerivative(bcurve_local, t=self.tsamp, order=2)
-        accelerations : torch.Tensor = _accelerations[0]/(dt*dt)
-        longitudinal_accelerations : torch.Tensor = torch.sum(accelerations*unit_tangents, dim=1)
-
-
 
         idx = torch.argmin(torch.norm(Psamp, p=2, dim=1))
-        tsamp = self.tsamp[:,idx:]
         velocities = velocities[idx:]
-        longitudinal_accelerations = longitudinal_accelerations[idx:]
         speeds = speeds[idx:]
         Psamp = Psamp[idx:]
         arclengths = arclengths[idx:]
@@ -158,7 +160,6 @@ class BezierCurvePurePursuit(Node):
         control_out.header.frame_id=odom_msg.child_frame_id
         control_out.drive.steering_angle = torch.atan((self.twoL * torch.sin(alpha)) / ld).item()
         control_out.drive.speed=speeds[lookahead_index_vel].item()
-        control_out.drive.acceleration=longitudinal_accelerations[lookahead_index_vel].item()
 
         self.setpoint_pub.publish(control_out)
 
