@@ -1,9 +1,0 @@
-<launch>
-   <arg name="params_file"/>
-   <arg name="direct_vjoy" default="false"/>
-   <node pkg="deepracing_rclpy" exec="vjoy_control_node" unless="$(var direct_vjoy)" output="screen"/>
-   <node pkg="deepracing_rclpy" exec="pure_pursuit_oracle" output="screen" args='--ros-args --log-level info'>
-        <param from="$(var params_file)"/>
-        <param name="direct_vjoy" value="$(var direct_vjoy)"/>
-   </node>
-</launch>
