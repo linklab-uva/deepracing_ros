@@ -1,10 +1,13 @@
 <launch>
    <arg name="carname" default=""/>
+   <arg name="use_sim_time" default="false"/>
    <node pkg="robot_localization" exec="ekf_node" name="ekf_localization_node" output="screen" namespace="$(var carname)">
         <param from="$(find-pkg-share deepracing_launch)/config/ekf.yaml"/>
         <param name="base_link_frame" value="centroid_$(var carname)"/>
+        <param name="odom_frame" value="odom_$(var carname)"/>
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
         <remap from="odometry/filtered" to="odom/filtered"/>
    </node>
-   <node pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom">
+   <node pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom_$(var carname)">
    </node>
 </launch>
