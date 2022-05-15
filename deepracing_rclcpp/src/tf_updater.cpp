@@ -50,17 +50,20 @@ class NodeWrapperTfUpdater_
      quat.setRPY( boost::math::constants::half_pi<double>(), 0.0, 0.0 );
      tf2::Transform t(quat, tf2::Vector3(0.0,0.0,0.0));
      mapToTrack.transform = tf2::toMsg(t);
-
-     std::vector<double> car_to_base_translation = node->declare_parameter< std::vector<double> >("centroid_to_base_translation", std::vector<double>{-1.85, 0.0, 0.0});
+     node->declare_parameter< std::vector<double> >("centroid_to_base_translation");
      
      m_extra_position_noise = node->declare_parameter< double >("extra_position_noise", 0.0);
      m_extra_rot_noise = node->declare_parameter< double >("extra_rot_noise", 0.0);
      m_extra_vel_noise = node->declare_parameter< double >("extra_vel_noise", 0.0);
      m_extra_angvel_noise = node->declare_parameter< double >("extra_angvel_noise", 0.0);
+     std::vector<double> car_to_base_translation;
+     node->get_parameter<std::vector<double>>("centroid_to_base_translation", car_to_base_translation);
      if (car_to_base_translation.size()!=3)
      {
        throw rclcpp::exceptions::InvalidParameterValueException("\"centroid_to_base_translation\" must have exactly 3 values");
      }
+     carToBaseLink.header.frame_id = deepracing_ros::F1MsgUtils::car_coordinate_name+"_"+carname;
+     carToBaseLink.child_frame_id = "base_link_"+carname;
      carToBaseLink.transform.translation.x = car_to_base_translation.at(0);
      carToBaseLink.transform.translation.y = car_to_base_translation.at(1);
      carToBaseLink.transform.translation.z = car_to_base_translation.at(2);
@@ -118,8 +121,6 @@ class NodeWrapperTfUpdater_
     std::string carname;
     void sessionCallback(const deepracing_msgs::msg::TimestampedPacketSessionData::SharedPtr session_msg)
     {
-      carToBaseLink.header.frame_id = deepracing_ros::F1MsgUtils::car_coordinate_name+"_"+carname;
-      carToBaseLink.child_frame_id = "base_link_"+carname;
       if((session_msg->udp_packet.track_id>=0) && (session_msg->udp_packet.track_id!=current_track_id))
       {
         
@@ -167,11 +168,7 @@ class NodeWrapperTfUpdater_
 
         current_track_id = session_msg->udp_packet.track_id;
       }
-      if ( (current_track_id>=0) && (current_track_id<20) )
-      {
-        publishStatic();
-      }
-
+      publishStatic();
     }  
     void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_msg)
     {
