@@ -139,8 +139,7 @@ class BezierCurvePurePursuit(Node):
         arclengths = arclengths[idx:]
         arclengths = arclengths - arclengths[0]
 
-        vel_local = odom_msg.twist.twist.linear
-        current_speed : float = torch.norm(torch.as_tensor([vel_local.x, vel_local.y, vel_local.z]), p=2).item()
+        current_speed : float = odom_msg.twist.twist.linear.x
         lookahead_distance = max(self.lookahead_gain*current_speed, 10.0)
         if current_speed>55.0:
             lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
