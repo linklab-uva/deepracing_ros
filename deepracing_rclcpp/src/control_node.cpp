@@ -8,11 +8,11 @@
 #include <control_toolbox/pid_ros.hpp>
 #include <f1_datalogger/controllers/f1_interface_factory.h>
 
-class AutowareControlNode : public rclcpp::Node 
+class ControlNode : public rclcpp::Node 
 {
 
   public:
-    AutowareControlNode( const rclcpp::NodeOptions & options )
+    ControlNode( const rclcpp::NodeOptions & options )
      : rclcpp::Node("autoware_control_node", options), m_current_speed_(0.0)
     {
     }
@@ -34,19 +34,19 @@ class AutowareControlNode : public rclcpp::Node
       rclcpp::SubscriptionOptions listner_options;
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
       command_listener = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>("ctrl_cmd", rclcpp::QoS{1},
-        std::bind(&AutowareControlNode::commandCallback, this, std::placeholders::_1), listner_options);
+        std::bind(&ControlNode::commandCallback, this, std::placeholders::_1), listner_options);
       listner_options = rclcpp::SubscriptionOptions();
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
       status_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarStatusData>("status_data", rclcpp::QoS{1},
-        std::bind(&AutowareControlNode::statusCallback, this, std::placeholders::_1), listner_options);
+        std::bind(&ControlNode::statusCallback, this, std::placeholders::_1), listner_options);
       listner_options = rclcpp::SubscriptionOptions();
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
       telemetry_listener = create_subscription<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>("telemetry_data", rclcpp::QoS{1},
-        std::bind(&AutowareControlNode::telemetryCallback, this, std::placeholders::_1), listner_options);
+        std::bind(&ControlNode::telemetryCallback, this, std::placeholders::_1), listner_options);
       listner_options = rclcpp::SubscriptionOptions();
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
       odom_listener = create_subscription<nav_msgs::msg::Odometry>("odom", rclcpp::QoS{1},
-        std::bind(&AutowareControlNode::odomCallback, this, std::placeholders::_1), listner_options);
+        std::bind(&ControlNode::odomCallback, this, std::placeholders::_1), listner_options);
 
     }
     inline void controlLoop(const rclcpp::Duration& dt)
@@ -135,7 +135,7 @@ class AutowareControlNode : public rclcpp::Node
 };
 int main(int argc, char *argv[]) {
   rclcpp::init(argc,argv);
-  std::shared_ptr<AutowareControlNode> node(new AutowareControlNode(rclcpp::NodeOptions()));
+  std::shared_ptr<ControlNode> node(new ControlNode(rclcpp::NodeOptions()));
   std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> executor( new rclcpp::executors::MultiThreadedExecutor(rclcpp::ExecutorOptions(), 3) );
   executor->add_node(node);
   // rclcpp::Clock::SharedPtr clock = node->get_clock();

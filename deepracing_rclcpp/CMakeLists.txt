@@ -112,18 +112,18 @@ if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge
   ament_export_dependencies(image_transport)
   ament_export_dependencies(std_srvs)
 endif()
-find_package(ackermann_msgs QUIET)
+find_package(ackermann_msgs)
 if(TARGET f1_datalogger::f1_datalogger_controllers AND ${ackermann_msgs_FOUND})
-  add_executable(autoware_control_node src/autoware_control_node.cpp)
-  ament_target_dependencies(autoware_control_node ackermann_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp)
-  target_link_libraries(autoware_control_node
+  add_executable(control_node src/control_node.cpp)
+  ament_target_dependencies(control_node ackermann_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp)
+  target_link_libraries(control_node
   utils
   f1_datalogger::f1_datalogger_controllers
   )
   if(WIN32)
-    target_compile_definitions(autoware_control_node PUBLIC "_USE_MATH_DEFINES" "NOGDI")
+    target_compile_definitions(control_node PUBLIC "_USE_MATH_DEFINES" "NOGDI")
   endif()
-  list(APPEND nodes_to_install_ autoware_control_node)
+  list(APPEND nodes_to_install_ control_node)
 endif()
 
 
