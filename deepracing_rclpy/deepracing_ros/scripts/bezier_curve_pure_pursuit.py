@@ -123,7 +123,7 @@ class BezierCurvePurePursuit(Node):
             bcurve_global[i,1]=current_curve.control_points[i].y
             bcurve_global[i,2]=current_curve.control_points[i].z
         bcurve_local = torch.matmul(bcurve_global, transform[0:3].t()).unsqueeze(0)
-        dt : float = (float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9)#*.9875
+        dt : float = (float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9)
         
         Msamp : torch.Tensor = mu.bezierM(self.tsamp, bcurve_local.shape[1]-1)
         Psamp : torch.Tensor = torch.matmul(Msamp[0], bcurve_local[0])
