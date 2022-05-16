@@ -251,19 +251,6 @@ class NodeWrapperTfUpdater_
 
       Eigen::Vector3d centroidLinearAccel=9.81*Eigen::Vector3d(motion_data.g_force_longitudinal, motion_data.g_force_lateral, motion_data.g_force_vertical);
 
-      sensor_msgs::msg::Imu imu_msg;
-      imu_msg.header.set__stamp(transformMsg.header.stamp);
-      imu_msg.header.set__frame_id(transformMsg.child_frame_id);
-      imu_msg.orientation_covariance.fill(-1.0);
-      imu_msg.angular_velocity.set__x(centroidAngVel.x());
-      imu_msg.angular_velocity.set__y(centroidAngVel.y());
-      imu_msg.angular_velocity.set__z(centroidAngVel.z());
-      imu_msg.angular_velocity_covariance[0]=imu_msg.angular_velocity_covariance[4]=imu_msg.angular_velocity_covariance[8]=0.00225;
-      imu_msg.linear_acceleration.set__x(centroidLinearAccel.x());
-      imu_msg.linear_acceleration.set__y(centroidLinearAccel.y());
-      imu_msg.linear_acceleration.set__z(centroidLinearAccel.z());
-      imu_msg.linear_acceleration_covariance[0]=imu_msg.linear_acceleration_covariance[4]=0.00225;
-      imu_msg.linear_acceleration_covariance[8]=0.005;
 
 
     
@@ -283,6 +270,22 @@ class NodeWrapperTfUpdater_
       odom.twist.twist.angular.z=centroidAngVel.z();// + m_extra_angvel_noise*m_rng_.gaussian01();
       odom.twist.covariance[0]=odom.twist.covariance[7]=odom.twist.covariance[14]=0.000225;//+extra_vel_variance;
       odom.twist.covariance[21]=odom.twist.covariance[28]=odom.twist.covariance[35]=2.0E-5;//+extra_angvel_variance;
+
+      
+      sensor_msgs::msg::Imu imu_msg;
+      imu_msg.header.set__stamp(transformMsg.header.stamp);
+      imu_msg.header.set__frame_id(transformMsg.child_frame_id);
+      imu_msg.set__orientation(odom.pose.pose.orientation);
+      imu_msg.orientation_covariance[0]=imu_msg.orientation_covariance[4]=imu_msg.orientation_covariance[8]=odom.pose.covariance[21];
+      imu_msg.angular_velocity.set__x(centroidAngVel.x());
+      imu_msg.angular_velocity.set__y(centroidAngVel.y());
+      imu_msg.angular_velocity.set__z(centroidAngVel.z());
+      imu_msg.angular_velocity_covariance[0]=imu_msg.angular_velocity_covariance[4]=imu_msg.angular_velocity_covariance[8]=odom.twist.covariance[21];
+      imu_msg.linear_acceleration.set__x(centroidLinearAccel.x());
+      imu_msg.linear_acceleration.set__y(centroidLinearAccel.y());
+      imu_msg.linear_acceleration.set__z(centroidLinearAccel.z());
+      imu_msg.linear_acceleration_covariance[0]=imu_msg.linear_acceleration_covariance[4]=0.00225;
+      imu_msg.linear_acceleration_covariance[8]=0.005;
 
       carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
       mapToTrack.header.set__stamp(motion_data.world_position.header.stamp);
