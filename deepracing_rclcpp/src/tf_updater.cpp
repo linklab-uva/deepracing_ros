@@ -17,7 +17,6 @@
 #include "deepracing_ros/utils/f1_msg_utils.h"
 #include <tf2_eigen/tf2_eigen.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include <autoware_auto_msgs/msg/vehicle_kinematic_state.hpp>
 #include <random_numbers/random_numbers.h>
 #include <json/json.h>
 #include <deepracing_ros/utils/f1_msg_utils.h>
@@ -44,6 +43,43 @@ class NodeWrapperTfUpdater_
      tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node));
      mapToTrack.header.frame_id = "map";
      mapToTrack.child_frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name;
+     std::filesystem::path covariance_file_path = std::filesystem::path(ament_index_cpp::get_package_share_directory("deepracing_launch")) / std::filesystem::path("data") / std::filesystem::path("covariances.json");
+
+     Json::Value root;
+     Json::CharReaderBuilder builder;
+     builder["collectComments"] = true;
+     JSONCPP_STRING errs;
+     std::ifstream ifs;
+     std::ifstream covariance_file;
+     covariance_file.open(covariance_file_path.string().c_str());
+     bool success = parseFromStream(builder, covariance_file, &root, &errs);
+     covariance_file.close();
+     if(!success)
+     {
+       RCLCPP_ERROR(node->get_logger(), "Unable to parse json file at %s. Error message: %s", covariance_file_path.string().c_str(), errs.c_str());
+       return;
+     }
+     Json::Value position_cov_json = root["position_cov"];
+     Json::Value linear_vel_cov_json = root["linear_vel_cov"];
+     Json::Value angular_vel_cov_json = root["angular_vel_cov"];
+     Json::Value linear_accel_cov_json = root["linear_accel_cov"];
+     Json::Value euler_angles_cov_json = root["euler_angles_cov"];
+     for (unsigned int i = 0; i < imu_msg_.angular_velocity_covariance.size(); i++)
+     {
+       imu_msg_.angular_velocity_covariance[i] = angular_vel_cov_json[i].asDouble();
+       imu_msg_.orientation_covariance[i] = euler_angles_cov_json[i].asDouble();
+       imu_msg_.linear_acceleration_covariance[i] = linear_accel_cov_json[i].asDouble();
+     }
+     Json::Value pose_cov_json = root["pose_cov"];
+     Json::Value all_vel_cov_json = root["all_vel_cov"];
+     for (unsigned int i = 0; i < odom_msg_.pose.covariance.size(); i++)
+     {
+       odom_msg_.pose.covariance[i] = pose_cov_json[i].asDouble();
+       odom_msg_.twist.covariance[i] = all_vel_cov_json[i].asDouble();
+     }
+
+
+     
 
 
 
@@ -83,7 +119,6 @@ class NodeWrapperTfUpdater_
      this->twist_local_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity_local", 1);
      this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
      this->accel_publisher = this->node->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
-     this->autoware_state_publisher = this->node->create_publisher<autoware_auto_msgs::msg::VehicleKinematicState>("state", 1);
      
      if( m_tf_from_odom_ )
      {
@@ -98,7 +133,6 @@ class NodeWrapperTfUpdater_
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_local_publisher;
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr accel_publisher;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
-    rclcpp::Publisher<autoware_auto_msgs::msg::VehicleKinematicState>::SharedPtr autoware_state_publisher;
 
     std::shared_ptr<rclcpp::Node> node;
     std::shared_ptr<tf2_ros::TransformBroadcaster> tfbroadcaster;
@@ -113,6 +147,8 @@ class NodeWrapperTfUpdater_
   private:
     random_numbers::RandomNumberGenerator m_rng_;
     bool m_tf_from_odom_;
+    nav_msgs::msg::Odometry odom_msg_;
+    sensor_msgs::msg::Imu imu_msg_;
     
     double m_extra_position_noise;
     double m_extra_rot_noise;
@@ -254,65 +290,46 @@ class NodeWrapperTfUpdater_
 
 
     
-      nav_msgs::msg::Odometry odom;
-      odom.header.set__frame_id("map");
-      odom.header.set__stamp(transformMsg.header.stamp);
-      odom.set__child_frame_id(transformMsg.child_frame_id);
-      odom.pose.pose = tf2::toMsg(mapToCarEigen);
+      odom_msg_.header.set__frame_id("map");
+      odom_msg_.header.set__stamp(transformMsg.header.stamp);
+      odom_msg_.set__child_frame_id(transformMsg.child_frame_id);
+      odom_msg_.pose.pose = tf2::toMsg(mapToCarEigen);
 
-      odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14] = 0.0025;// + extra_position_variance;
-      odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35] = 1.0E-4;// + extra_rot_variance;
-      odom.twist.twist.linear.x=centroidVelEigenLocal.x();// + m_extra_vel_noise*m_rng_.gaussian01();
-      odom.twist.twist.linear.y=centroidVelEigenLocal.y();// + m_extra_vel_noise*m_rng_.gaussian01();
-      odom.twist.twist.linear.z=centroidVelEigenLocal.z();// + m_extra_vel_noise*m_rng_.gaussian01();
-      odom.twist.twist.angular.x=centroidAngVel.x();// + m_extra_angvel_noise*m_rng_.gaussian01();
-      odom.twist.twist.angular.y=centroidAngVel.y();// + m_extra_angvel_noise*m_rng_.gaussian01();
-      odom.twist.twist.angular.z=centroidAngVel.z();// + m_extra_angvel_noise*m_rng_.gaussian01();
-      odom.twist.covariance[0]=odom.twist.covariance[7]=odom.twist.covariance[14]=0.000225;//+extra_vel_variance;
-      odom.twist.covariance[21]=odom.twist.covariance[28]=odom.twist.covariance[35]=2.0E-5;//+extra_angvel_variance;
+      // odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14] = 0.0025;// + extra_position_variance;
+      // odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35] = 1.0E-4;// + extra_rot_variance;
+      odom_msg_.twist.twist.linear.x=centroidVelEigenLocal.x();// + m_extra_vel_noise*m_rng_.gaussian01();
+      odom_msg_.twist.twist.linear.y=centroidVelEigenLocal.y();// + m_extra_vel_noise*m_rng_.gaussian01();
+      odom_msg_.twist.twist.linear.z=centroidVelEigenLocal.z();// + m_extra_vel_noise*m_rng_.gaussian01();
+      odom_msg_.twist.twist.angular.x=centroidAngVel.x();// + m_extra_angvel_noise*m_rng_.gaussian01();
+      odom_msg_.twist.twist.angular.y=centroidAngVel.y();// + m_extra_angvel_noise*m_rng_.gaussian01();
+      odom_msg_.twist.twist.angular.z=centroidAngVel.z();// + m_extra_angvel_noise*m_rng_.gaussian01();
+      // odom.twist.covariance[0]=odom.twist.covariance[7]=odom.twist.covariance[14]=0.000225;//+extra_vel_variance;
+      // odom.twist.covariance[21]=odom.twist.covariance[28]=odom.twist.covariance[35]=2.0E-5;//+extra_angvel_variance;
 
       
-      sensor_msgs::msg::Imu imu_msg;
-      imu_msg.header.set__stamp(transformMsg.header.stamp);
-      imu_msg.header.set__frame_id(transformMsg.child_frame_id);
-      imu_msg.set__orientation(odom.pose.pose.orientation);
-      imu_msg.orientation_covariance[0]=imu_msg.orientation_covariance[4]=imu_msg.orientation_covariance[8]=odom.pose.covariance[21];
-      imu_msg.angular_velocity.set__x(centroidAngVel.x());
-      imu_msg.angular_velocity.set__y(centroidAngVel.y());
-      imu_msg.angular_velocity.set__z(centroidAngVel.z());
-      imu_msg.angular_velocity_covariance[0]=imu_msg.angular_velocity_covariance[4]=imu_msg.angular_velocity_covariance[8]=odom.twist.covariance[21];
-      imu_msg.linear_acceleration.set__x(centroidLinearAccel.x());
-      imu_msg.linear_acceleration.set__y(centroidLinearAccel.y());
-      imu_msg.linear_acceleration.set__z(centroidLinearAccel.z());
-      imu_msg.linear_acceleration_covariance[0]=imu_msg.linear_acceleration_covariance[4]=0.00225;
-      imu_msg.linear_acceleration_covariance[8]=0.005;
+      imu_msg_.header.set__stamp(transformMsg.header.stamp);
+      imu_msg_.header.set__frame_id(transformMsg.child_frame_id);
+      imu_msg_.set__orientation(odom_msg_.pose.pose.orientation);
+      // imu_msg.orientation_covariance[0]=imu_msg.orientation_covariance[4]=imu_msg.orientation_covariance[8]=odom.pose.covariance[21];
+      imu_msg_.angular_velocity.set__x(centroidAngVel.x());
+      imu_msg_.angular_velocity.set__y(centroidAngVel.y());
+      imu_msg_.angular_velocity.set__z(centroidAngVel.z());
+      // imu_msg.angular_velocity_covariance[0]=imu_msg.angular_velocity_covariance[4]=imu_msg.angular_velocity_covariance[8]=odom.twist.covariance[21];
+      imu_msg_.linear_acceleration.set__x(centroidLinearAccel.x());
+      imu_msg_.linear_acceleration.set__y(centroidLinearAccel.y());
+      imu_msg_.linear_acceleration.set__z(centroidLinearAccel.z());
+      // imu_msg.linear_acceleration_covariance[0]=imu_msg.linear_acceleration_covariance[4]=0.00225;
+      // imu_msg.linear_acceleration_covariance[8]=0.005;
 
       carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
       mapToTrack.header.set__stamp(motion_data.world_position.header.stamp);
-
-      autoware_auto_msgs::msg::VehicleKinematicState state;
-      state.set__header(odom.header);
-      state.state.x=odom.pose.pose.position.x;
-      state.state.y=odom.pose.pose.position.y;
-      state.state.z=odom.pose.pose.position.z;
-      state.state.longitudinal_velocity_mps=odom.twist.twist.linear.x;
-      state.state.lateral_velocity_mps=odom.twist.twist.linear.y;
-      state.state.heading_rate_rps=odom.twist.twist.angular.z;
-      state.state.front_wheel_angle_rad=-motion_data_packet->udp_packet.front_wheels_angle;
-      state.state.rear_wheel_angle_rad=0.0;
-      mapToBL_quaternion.x()=0.0;
-      mapToBL_quaternion.y()=0.0;
-      mapToBL_quaternion.normalize();
-      state.state.heading.imag=mapToBL_quaternion.z();
-      state.state.heading.real=mapToBL_quaternion.w();
 
       if (!m_tf_from_odom_)
       {
         this->tfbroadcaster->sendTransform(transformMsg);
       }
-      this->odom_publisher->publish(odom);
-      this->autoware_state_publisher->publish(state);
-      this->accel_publisher->publish(imu_msg);
+      this->odom_publisher->publish(odom_msg_);
+      this->accel_publisher->publish(imu_msg_);
     }
 };
 int main(int argc, char *argv[]) {
