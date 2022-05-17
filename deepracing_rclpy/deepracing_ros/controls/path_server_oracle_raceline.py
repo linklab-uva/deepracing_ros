@@ -243,14 +243,11 @@ class OraclePathServer(PathServerROS):
         unit_normals = unit_normals/(torch.norm(unit_normals, p=2, dim=1)[:,None])
         
 
-        # _, bcurv2ndderiv = mu.bezierDerivative(bcurve, M=self.Msamp2ndderiv, order=2)
-        # accelerationsbcurve : torch.Tensor = (bcurv2ndderiv[0]/(dt*dt))
-        # longitudinal_accels : torch.Tensor = torch.sum(accelerationsbcurve*unit_tangents, dim=1)
-
         bcurve_msg : BezierCurve = C.toBezierCurveMsg(bcurve[0],posemsg.header)
         path_msg : Path = Path(header=posemsg.header) 
         up : np.ndarray = np.asarray( [0.0, 0.0, 1.0] )
         unit_tangents_np : np.ndarray = unit_tangents.cpu().numpy()
+        unit_normals_np : np.ndarray = unit_normals.cpu().numpy()
         for i in range(positionsbcurve.shape[0]):
             pose : PoseStamped = PoseStamped(header=path_msg.header)
             fracpart, intpart = math.modf((dt*self.tsamp[0,i]).item())
@@ -261,13 +258,10 @@ class OraclePathServer(PathServerROS):
 
             Rmat : np.ndarray = np.eye(3)
             Rmat[0:3,0]=unit_tangents_np[i]
-            Rmat[0:3,1]=np.cross(up, Rmat[0:3,0])
-            Rmat[0:3,1]=Rmat[0:3,1]/np.linalg.norm(Rmat[0:3,1], ord=2)
+            Rmat[0:3,1]=unit_normals_np[i]
             Rmat[0:3,2]=np.cross(Rmat[0:3,0], Rmat[0:3,1])
             rot : Rot = Rot.from_matrix(Rmat)
             quat : np.ndarray = rot.as_quat()
-            # quat[0:2]=0.0
-            # quat = quat/np.linalg.norm(quat,ord=2)
             pose.pose.orientation.x=float(quat[0])
             pose.pose.orientation.y=float(quat[1])
             pose.pose.orientation.z=float(quat[2])
