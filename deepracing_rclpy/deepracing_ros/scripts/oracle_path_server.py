@@ -16,7 +16,6 @@ from rclpy.node import Node
 from rclpy.publisher import Publisher
 from std_msgs.msg import String, Float64
 from nav_msgs.msg import Path
-from autoware_auto_msgs.msg import Trajectory
 from deepracing_msgs.msg import TimestampedPacketMotionData, CarMotionData, CarControl, BezierCurve
 from geometry_msgs.msg import PoseStamped, Pose
 from geometry_msgs.msg import PointStamped, Point
@@ -33,7 +32,6 @@ def main(args=None):
     node = OraclePathServer()
     bcurve_pub : Publisher = node.create_publisher(BezierCurve, "oraclebeziercurves", 1)
     path_pub : Publisher = node.create_publisher(Path, "oraclepaths", 1)
-    traj_pub : Publisher = node.create_publisher(Trajectory, "oracletrajectories", 1)
     spinner.add_node(node)
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     spinner.spin()
@@ -42,11 +40,10 @@ def main(args=None):
     try:
         while rclpy.ok():
             rate.sleep()
-            bcurve_msg, path_msg, traj_msg = node.getTrajectory()
-            if (bcurve_msg is not None) and (path_msg is not None) and (traj_msg is not None):
+            bcurve_msg, path_msg = node.getTrajectory()
+            if (bcurve_msg is not None) and (path_msg is not None):
                 bcurve_pub.publish(bcurve_msg)
                 path_pub.publish(path_msg)
-                traj_pub.publish(traj_msg)
     except KeyboardInterrupt:
         pass
     spinner.shutdown()

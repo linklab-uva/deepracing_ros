@@ -16,7 +16,6 @@ from rclpy.node import Node
 from rclpy.publisher import Publisher
 from std_msgs.msg import String, Float64
 from nav_msgs.msg import Path
-from autoware_auto_msgs.msg import Trajectory
 from deepracing_msgs.msg import TimestampedPacketMotionData, CarMotionData, CarControl, BezierCurve
 from geometry_msgs.msg import PoseStamped, Pose
 from geometry_msgs.msg import PointStamped, Point

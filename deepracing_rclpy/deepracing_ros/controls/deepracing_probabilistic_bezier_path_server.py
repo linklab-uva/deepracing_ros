@@ -46,7 +46,6 @@ from deepracing_msgs.msg import PathRaw, ImageWithPath, BezierCurve, TrajCompari
 from geometry_msgs.msg import Vector3Stamped, Vector3, PointStamped, Point, PoseStamped, Pose, Quaternion, TransformStamped, Transform, PoseArray
 from nav_msgs.msg import Path
 from std_msgs.msg import Float64, Header
-from autoware_auto_msgs.msg import Trajectory, TrajectoryPoint
 import rclpy
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.parameter import Parameter

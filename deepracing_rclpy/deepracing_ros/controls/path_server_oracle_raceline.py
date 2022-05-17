@@ -33,7 +33,6 @@ from sensor_msgs.msg import PointCloud2
 from geometry_msgs.msg import PoseStamped, Transform, TransformStamped
 from std_msgs.msg import Float64, Header
 from nav_msgs.msg import Path
-from autoware_auto_msgs.msg import Trajectory, TrajectoryPoint, Complex32
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.parameter import Parameter
 from rclpy.subscription import Subscription
@@ -190,14 +189,14 @@ class OraclePathServer(PathServerROS):
     def getTrajectory(self):
         if (self.racelineframe is None) or (self.raceline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None) or (self.racelinetangents is None) or (self.racelinenormals is None):
             self.get_logger().error("Returning None because raceline not yet received")
-            return None, None, None
+            return None, None
         if self.current_odom is None:
             self.get_logger().error("Returning None because odometry not yet received")
-            return None, None, None
+            return None, None
         posemsg = deepcopy(self.current_odom)
         if not (posemsg.header.frame_id==self.racelineframe):
             self.get_logger().error("Returning None because current odometry is in the %f frame, but the raceline is in the %f frame" % (posemsg.header.frame_id,self.racelineframe))
-            return None, None, None
+            return None, None
         map_to_car : torch.Tensor = C.poseMsgToTorch(posemsg.pose.pose, dtype=self.tsamp.dtype, device=self.device)
 
         if not posemsg.child_frame_id==self.base_link_id:
@@ -244,21 +243,21 @@ class OraclePathServer(PathServerROS):
         unit_normals = unit_normals/(torch.norm(unit_normals, p=2, dim=1)[:,None])
         
 
-        _, bcurv2ndderiv = mu.bezierDerivative(bcurve, M=self.Msamp2ndderiv, order=2)
-        accelerationsbcurve : torch.Tensor = (bcurv2ndderiv[0]/(dt*dt))
-        longitudinal_accels : torch.Tensor = torch.sum(accelerationsbcurve*unit_tangents, dim=1)
+        # _, bcurv2ndderiv = mu.bezierDerivative(bcurve, M=self.Msamp2ndderiv, order=2)
+        # accelerationsbcurve : torch.Tensor = (bcurv2ndderiv[0]/(dt*dt))
+        # longitudinal_accels : torch.Tensor = torch.sum(accelerationsbcurve*unit_tangents, dim=1)
 
         bcurve_msg : BezierCurve = C.toBezierCurveMsg(bcurve[0],posemsg.header)
         path_msg : Path = Path(header=posemsg.header) 
-        traj_msg : Trajectory = Trajectory(header=path_msg.header) 
         up : np.ndarray = np.asarray( [0.0, 0.0, 1.0] )
         unit_tangents_np : np.ndarray = unit_tangents.cpu().numpy()
         for i in range(positionsbcurve.shape[0]):
             pose : PoseStamped = PoseStamped(header=path_msg.header)
-            traj_point : TrajectoryPoint = TrajectoryPoint()
-            pose.pose.position.x=traj_point.x=positionsbcurve[i,0].item()
-            pose.pose.position.y=traj_point.y=positionsbcurve[i,1].item()
-            pose.pose.position.z=traj_point.z=positionsbcurve[i,2].item()
+            fracpart, intpart = math.modf((dt*self.tsamp[0,i]).item())
+            pose.header.stamp = builtin_interfaces.msg.Time(sec=int(intpart), nanosec=int(fracpart*1E9))
+            pose.pose.position.x=positionsbcurve[i,0].item()
+            pose.pose.position.y=positionsbcurve[i,1].item()
+            pose.pose.position.z=positionsbcurve[i,2].item()
 
             Rmat : np.ndarray = np.eye(3)
             Rmat[0:3,0]=unit_tangents_np[i]
@@ -267,21 +266,15 @@ class OraclePathServer(PathServerROS):
             Rmat[0:3,2]=np.cross(Rmat[0:3,0], Rmat[0:3,1])
             rot : Rot = Rot.from_matrix(Rmat)
             quat : np.ndarray = rot.as_quat()
-            quat[0:2]=0.0
-            quat = quat/np.linalg.norm(quat,ord=2)
+            # quat[0:2]=0.0
+            # quat = quat/np.linalg.norm(quat,ord=2)
             pose.pose.orientation.x=float(quat[0])
             pose.pose.orientation.y=float(quat[1])
-            pose.pose.orientation.z=traj_point.heading.imag=float(quat[2])
-            pose.pose.orientation.w=traj_point.heading.real=float(quat[3])
-
-            fracpart, intpart = math.modf((dt*self.tsamp[0,i]).item())
-            traj_point.time_from_start=builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
-            traj_point.longitudinal_velocity_mps=speedsbcurve[i].item()
-            traj_point.acceleration_mps2=longitudinal_accels[i].item()
+            pose.pose.orientation.z=float(quat[2])
+            pose.pose.orientation.w=float(quat[3])
 
             path_msg.poses.append(pose)
-            traj_msg.points.append(traj_point)
 
-        final_point : TrajectoryPoint = traj_msg.points[-1]
-        bcurve_msg.delta_t = final_point.time_from_start
-        return bcurve_msg, path_msg, traj_msg
+        fracpart, intpart = math.modf(dt)
+        bcurve_msg.delta_t = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
+        return bcurve_msg, path_msg

@@ -1,7 +1,6 @@
 from torch.functional import Tensor
 import deepracing_msgs.msg as drmsgs # BezierCurve, TimestampedPacketMotionData, PacketMotionData, CarMotionData, PacketHeader
 import geometry_msgs.msg as geo_msgs#  Point, PointStamped, Vector3, Vector3Stamped
-import autoware_auto_msgs.msg as autoware_msgs
 import nav_msgs.msg as nav_msgs
 import tf2_msgs.msg as tf2_msgs
 from sensor_msgs.msg import PointCloud2, PointField
