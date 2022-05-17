@@ -64,22 +64,26 @@ class NodeWrapperTfUpdater_
      Json::Value angular_vel_cov_json = root["angular_vel_cov"];
      Json::Value linear_accel_cov_json = root["linear_accel_cov"];
      Json::Value euler_angles_cov_json = root["euler_angles_cov"];
+     std::array<double, 9> position_cov, linear_vel_cov;
      for (unsigned int i = 0; i < imu_msg_.angular_velocity_covariance.size(); i++)
      {
        imu_msg_.angular_velocity_covariance[i] = angular_vel_cov_json[i].asDouble();
        imu_msg_.orientation_covariance[i] = euler_angles_cov_json[i].asDouble();
        imu_msg_.linear_acceleration_covariance[i] = linear_accel_cov_json[i].asDouble();
+       position_cov[i] = position_cov_json[i].asDouble();
+       linear_vel_cov[i] = linear_vel_cov_json[i].asDouble();
      }
-     Json::Value pose_cov_json = root["pose_cov"];
-     Json::Value all_vel_cov_json = root["all_vel_cov"];
-     for (unsigned int i = 0; i < odom_msg_.pose.covariance.size(); i++)
-     {
-       odom_msg_.pose.covariance[i] = pose_cov_json[i].asDouble();
-       odom_msg_.twist.covariance[i] = all_vel_cov_json[i].asDouble();
-     }
-
-
-     
+     Eigen::MatrixXd pose_cov_matrix(6,6);
+     pose_cov_matrix.setZero();
+     pose_cov_matrix.block<3,3>(0,0) = Eigen::Matrix3d(position_cov.data());
+     pose_cov_matrix.block<3,3>(3,3) = Eigen::Matrix3d(imu_msg_.orientation_covariance.data());
+     Eigen::MatrixXd vel_cov_matrix(6,6);
+     vel_cov_matrix.setZero();
+     vel_cov_matrix.block<3,3>(0,0) = Eigen::Matrix3d(linear_vel_cov.data());
+     vel_cov_matrix.block<3,3>(3,3) = Eigen::Matrix3d(imu_msg_.angular_velocity_covariance.data());
+     std::copy_n(pose_cov_matrix.data(), odom_msg_.pose.covariance.size(), odom_msg_.pose.covariance.begin());
+     std::copy_n(vel_cov_matrix.data(), odom_msg_.twist.covariance.size(), odom_msg_.twist.covariance.begin());
+    
 
 
 
