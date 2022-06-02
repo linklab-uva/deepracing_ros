@@ -92,7 +92,7 @@ class OraclePathServer(PathServerROS):
         plot_param : Parameter = self.declare_parameter("plot", value=False)
         self.plot : bool = plot_param.get_parameter_value().bool_value
 
-        dt_param : Parameter = self.declare_parameter("dt", value=2.75)
+        dt_param : Parameter = self.declare_parameter("dt", value=2.25)
         self.dt : float = dt_param.get_parameter_value().double_value
 
         sample_indices_descriptor : ParameterDescriptor = ParameterDescriptor()
