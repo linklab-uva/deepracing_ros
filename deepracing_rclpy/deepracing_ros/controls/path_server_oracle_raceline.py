@@ -102,7 +102,7 @@ class OraclePathServer(PathServerROS):
         sample_indices_param : Parameter = self.declare_parameter(sample_indices_descriptor.name, value=100)
         self.sample_indices : int = sample_indices_param.get_parameter_value().integer_value
         
-        bezier_order_param : Parameter = self.declare_parameter("bezier_order", value=5)
+        bezier_order_param : Parameter = self.declare_parameter("bezier_order", value=7)
         self.bezier_order : int = bezier_order_param.get_parameter_value().integer_value
 
         self.rlservice : Service = self.create_service(SetRaceline, "set_raceline", self.set_raceline_cb)
