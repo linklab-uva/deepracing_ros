@@ -171,7 +171,8 @@ deepracing_msgs::msg::PacketSessionData deepracing_ros::F1MsgUtils::toROS(const 
 {
   deepracing_msgs::msg::PacketSessionData rtn;
   rtn.header=toROS(session_data.m_header);
-  for (unsigned int i = 0; i < 21; i++)
+  rtn.num_marshal_zones = session_data.m_numMarshalZones;
+  for (uint8_t i = 0; i < rtn.num_marshal_zones; i++)
   {
     rtn.marshal_zones[i] = toROS(session_data.m_marshalZones[i]);
   }
@@ -180,7 +181,6 @@ deepracing_msgs::msg::PacketSessionData deepracing_ros::F1MsgUtils::toROS(const 
   rtn.game_paused  = session_data.m_gamePaused;
   rtn.is_spectating = session_data.m_isSpectating;
   rtn.network_game = session_data.m_networkGame;
-  rtn.num_marshal_zones = session_data.m_numMarshalZones;
   rtn.pit_speed_limit = session_data.m_pitSpeedLimit;
   rtn.safety_car_status = session_data.m_safetyCarStatus;
   rtn.session_duration = session_data.m_sessionDuration;
