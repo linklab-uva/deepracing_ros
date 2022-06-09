@@ -106,6 +106,13 @@ if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge
   f1_datalogger::f1_datalogger
   )
   list(APPEND nodes_to_install_ ros_rebroadcaster)
+  if(WIN32)
+    include(${f1_datalogger_DIR}/windows_stuff.cmake)
+    get_WIN32_WINNT(win32_ver)
+    message(STATUS "Win32 version: ${win32_ver}")
+    target_compile_definitions(ros_rebroadcaster PRIVATE "_WIN32_WINNT=${win32_ver}")
+    target_link_libraries(ros_rebroadcaster RuntimeObject)
+  endif()
   ament_export_dependencies(TBB)
   ament_export_dependencies(cv_bridge)
   ament_export_dependencies(image_transport)

@@ -31,6 +31,12 @@
 #include <chrono>
 #include <cmath>
 #include <rosgraph_msgs/msg/clock.hpp>
+#ifdef _MSC_VER
+  #if _WIN32_WINNT>=_WIN32_WINNT_WIN10
+    #include <wrl/wrappers/corewrappers.h>
+    #include <wrl/client.h>
+  #endif
+#endif
 
 // #include <image_transport/camera_publisher.h>
 // #include <image_transport/transport_hints.h>
@@ -350,6 +356,11 @@ class NodeWrapper_
 };
 int main(int argc, char *argv[])
 {
+  #ifdef _MSC_VER
+    #if _WIN32_WINNT>=_WIN32_WINNT_WIN10
+      Microsoft::WRL::Wrappers::RoInitializeWrapper initialize(RO_INIT_MULTITHREADED);
+    #endif
+  #endif
   rclcpp::init(argc, argv);
   NodeWrapper_ nw;
   const std::shared_ptr<rclcpp::Node>& node = nw.node_;
