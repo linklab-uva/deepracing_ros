@@ -28,6 +28,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(Boost REQUIRED COMPONENTS date_time random thread)
+find_package(control_msgs REQUIRED)
 find_package(control_toolbox REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)
@@ -43,13 +44,13 @@ find_package(std_srvs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_eigen REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_sensor_msgs REQUIRED)
 
 #Provides imported targets for f1_datalogger, armadillo, Boost, Eigen3, Opencv, and (on Windows) vJoy_plusplus
 find_package(f1_datalogger CONFIG REQUIRED)
 find_package(Eigen3 REQUIRED)
-
 
 add_library(utils SHARED src/utils/f1_msg_utils.cpp src/utils/file_utils.cpp)
 ament_target_dependencies(utils PUBLIC sensor_msgs std_msgs deepracing_msgs rclcpp rosidl_default_runtime)
@@ -73,7 +74,7 @@ if(NOT HAS_STDCXXFS)
 endif()
 
 add_executable(tf_updater src/tf_updater.cpp)
-ament_target_dependencies(tf_updater deepracing_msgs geometry_msgs nav_msgs random_numbers rclcpp tf2 tf2_eigen tf2_ros tf2_sensor_msgs)
+ament_target_dependencies(tf_updater deepracing_msgs geometry_msgs nav_msgs random_numbers rclcpp tf2 tf2_geometry_msgs tf2_eigen tf2_ros tf2_sensor_msgs)
 target_link_libraries(tf_updater
  utils
  Eigen3::Eigen
@@ -85,7 +86,7 @@ else()
 endif()
 
 add_executable(velocity_control_node src/velocity_control_node.cpp)
-ament_target_dependencies(velocity_control_node control_toolbox deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
+ament_target_dependencies(velocity_control_node control_msgs control_toolbox deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
 target_link_libraries(velocity_control_node
  Eigen3::Eigen
 )
@@ -121,7 +122,7 @@ endif()
 find_package(ackermann_msgs)
 if(TARGET f1_datalogger::f1_datalogger_controllers AND ${ackermann_msgs_FOUND})
   add_executable(control_node src/control_node.cpp)
-  ament_target_dependencies(control_node ackermann_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp)
+  ament_target_dependencies(control_node ackermann_msgs control_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp)
   target_link_libraries(control_node
   utils
   f1_datalogger::f1_datalogger_controllers
