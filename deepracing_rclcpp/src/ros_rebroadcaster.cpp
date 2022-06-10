@@ -300,14 +300,16 @@ public:
     }
 
     cv_bridge::CvImage bridge_image(header, "rgb8", rgbimage);
+    sensor_msgs::msg::Image image_msg;
+    bridge_image.toImageMsg(image_msg);
 
-    sensor_msgs::msg::CameraInfo camera_info;
-    camera_info.distortion_model="plumbob";
-    camera_info.header = header;
-    camera_info.height=static_cast<sensor_msgs::msg::CameraInfo::_height_type>(rgbimage.rows);
-    camera_info.width=static_cast<sensor_msgs::msg::CameraInfo::_width_type>(rgbimage.cols);
-    sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info_ptr = std::make_shared<sensor_msgs::msg::CameraInfo const>(camera_info);
-    this->it_publisher_.publish( bridge_image.toImageMsg(), camera_info_ptr);
+    sensor_msgs::msg::CameraInfo camera_info_msg;
+    camera_info_msg.distortion_model="plumbob";
+    camera_info_msg.header = header;
+    camera_info_msg.height=static_cast<sensor_msgs::msg::CameraInfo::_height_type>(rgbimage.rows);
+    camera_info_msg.width=static_cast<sensor_msgs::msg::CameraInfo::_width_type>(rgbimage.cols);
+    // sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info_ptr = std::make_shared<sensor_msgs::msg::CameraInfo const>(camera_info);
+    this->it_publisher_.publish( image_msg, camera_info_msg);
 
     // this->it_publisher_.publish( bridge_image.toImageMsg() );
     
