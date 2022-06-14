@@ -35,6 +35,7 @@ setup(
               ])),
     entry_points={
         'console_scripts': [
+            'initial_raceline_setter = %s.scripts.initial_raceline_setter:main' % (python_pkg_name),
             'admiralnet_path_server = %s.scripts.admiralnet_path_server:main' % (python_pkg_name),
             'oracle_path_server = %s.scripts.oracle_path_server:main' % (python_pkg_name),
             'vehicle_state_publisher = %s.scripts.vehicle_state_publisher:main' % (python_pkg_name),
