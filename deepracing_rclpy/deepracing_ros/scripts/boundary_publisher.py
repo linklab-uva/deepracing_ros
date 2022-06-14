@@ -16,6 +16,7 @@ import sensor_msgs.msg
 import nav_msgs.msg
 import std_msgs.msg
 import tf2_ros
+import sensor_msgs_py.point_cloud2
 
 
 
@@ -48,13 +49,25 @@ class BoundaryPubNode(Node):
         self.current_track_id=-1
         self.current_innerboundary : nav_msgs.msg.Path = None
         self.current_outerboundary : nav_msgs.msg.Path = None
+        self.current_innerboundary_pc2 : sensor_msgs.msg.PointCloud2 = None
+        self.current_outerboundary_pc2 : sensor_msgs.msg.PointCloud2 = None
+        self.pc2_fields = []
+        self.pc2_fields.append(sensor_msgs.msg.PointField(name='x', offset=0, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
+        self.pc2_fields.append(sensor_msgs.msg.PointField(name='y', offset=4, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
+        self.pc2_fields.append(sensor_msgs.msg.PointField(name='z', offset=8, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
+        self.pc2_fields.append(sensor_msgs.msg.PointField(name='nx', offset=12, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
+        self.pc2_fields.append(sensor_msgs.msg.PointField(name='ny', offset=16, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
+        self.pc2_fields.append(sensor_msgs.msg.PointField(name='nz', offset=20, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1))
 
         self.inner_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(nav_msgs.msg.Path, "/inner_boundary", 1)
         self.outer_boundary_pub : rclpy.publisher.Publisher = self.create_publisher(nav_msgs.msg.Path, "/outer_boundary", 1)
+        self.inner_boundary_pc2_pub : rclpy.publisher.Publisher = self.create_publisher(sensor_msgs.msg.PointCloud2, "/inner_boundary/pc2", 1)
+        self.outer_boundary_pc2_pub : rclpy.publisher.Publisher = self.create_publisher(sensor_msgs.msg.PointCloud2, "/outer_boundary/pc2", 1)
         self.session_data_sub : rclpy.subscription.Subscription = self.create_subscription(deepracing_msgs.msg.TimestampedPacketSessionData, "session_data", self.sessionDataCB, 1)
 
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time=Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
+              
 
 
 
@@ -94,6 +107,8 @@ class BoundaryPubNode(Node):
             innerboundary_rotmats[:,:,0] = innerboundary_xvecs
             innerboundary_rotmats[:,:,1] = innerboundary_yvecs
             innerboundary_rotmats[:,:,2] = innerboundary_zvecs
+
+            innerboundary_arr : np.ndarray = np.concatenate([innerboundary_points, innerboundary_yvecs], axis=1).astype(np.float32)
 
             innerboundary_rotations : Rotation = Rotation.from_matrix(innerboundary_rotmats)
             innerboundary_quaternions : np.ndarray = innerboundary_rotations.as_quat()
@@ -142,6 +157,8 @@ class BoundaryPubNode(Node):
             outerboundary_rotations : Rotation = Rotation.from_matrix(outerboundary_rotmats)
             outerboundary_quaternions : np.ndarray = outerboundary_rotations.as_quat()
 
+            outerboundary_arr : np.ndarray = np.concatenate([outerboundary_points, outerboundary_yvecs], axis=1).astype(np.float32)
+
             outerboundary_msg : nav_msgs.msg.Path = nav_msgs.msg.Path()
             outerboundary_msg.header.frame_id=transform_msg.header.frame_id
             for i in range(outerboundary_quaternions.shape[0]):
@@ -164,6 +181,8 @@ class BoundaryPubNode(Node):
             self.current_track_id = idx
             self.current_innerboundary = innerboundary_msg
             self.current_outerboundary = outerboundary_msg
+            self.current_innerboundary_pc2 = sensor_msgs_py.point_cloud2.create_cloud(innerboundary_msg.header, self.pc2_fields, innerboundary_arr.tolist())
+            self.current_outerboundary_pc2 = sensor_msgs_py.point_cloud2.create_cloud(outerboundary_msg.header, self.pc2_fields, outerboundary_arr.tolist())
 
     def timerCB(self):
         now = self.get_clock().now()
@@ -173,6 +192,12 @@ class BoundaryPubNode(Node):
         if self.current_outerboundary is not None:
             self.current_outerboundary.header.stamp=now.to_msg()
             self.outer_boundary_pub.publish(self.current_outerboundary)
+        if self.current_innerboundary_pc2 is not None:
+            self.current_innerboundary_pc2.header.stamp=now.to_msg()
+            self.inner_boundary_pc2_pub.publish(self.current_innerboundary_pc2)
+        if self.current_outerboundary_pc2 is not None:
+            self.current_outerboundary_pc2.header.stamp=now.to_msg()
+            self.outer_boundary_pc2_pub.publish(self.current_outerboundary_pc2)
     
 
 
