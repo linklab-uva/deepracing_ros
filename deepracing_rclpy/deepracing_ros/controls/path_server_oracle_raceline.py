@@ -230,12 +230,13 @@ class OraclePathServer(PathServerROS):
             pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
         else:
             pose_curr : torch.Tensor = map_to_car
-
+        pose_curr_inv : torch.Tensor = torch.inverse(pose_curr)
         Imin = torch.argmin(torch.norm(self.raceline[:,0:3] - pose_curr[0:3,3], p=2, dim=1))
         t0 = self.racelinetimes[Imin]
         tf = t0+self.dt
         tvec : np.ndarray = np.linspace(t0, tf, num=300)
         rlpiece : torch.Tensor = torch.from_numpy(self.racelinespline(tvec)).type_as(self.tsamp).to(self.tsamp.device)
+        rlpiecebaselink : torch.Tensor = torch.matmul(rlpiece, pose_curr_inv[0:3,0:3].t()) + pose_curr_inv[0:3,3]
         
         # if tf<=self.racelinetimes[-1]:
         #     Imax = torch.argmin(torch.abs(self.racelinetimes - tf))
@@ -255,9 +256,10 @@ class OraclePathServer(PathServerROS):
         dt = tfit[-1]
         sfit = tfit/dt
         
-        _, bcurve = mu.bezierLsqfit(rlpiece.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
+        _, bcurve = mu.bezierLsqfit(rlpiecebaselink.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
+        bcurve[0] = torch.matmul(bcurve[0], pose_curr[0:3,0:3].t()) + pose_curr[0:3,3]
         bcurve_msg : BezierCurve = C.toBezierCurveMsg(bcurve[0],posemsg.header)
-        fracpart, intpart = math.modf(self.dt)
+        fracpart, intpart = math.modf(dt.item())
         bcurve_msg.delta_t = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
         return bcurve_msg
 
