@@ -159,10 +159,21 @@ class OraclePathServer(PathServerROS):
             racelinenp : np.ndarray = np.row_stack([np.asarray(racelinedict["x"], dtype=rmat.dtype), np.asarray(racelinedict["y"], dtype=rmat.dtype), np.asarray(racelinedict["z"], dtype=rmat.dtype)])
             racelinenp = (np.matmul(rmat, racelinenp) + transformvec[:,np.newaxis])
             racelinenp = racelinenp.T
+            racelinespeeds : np.ndarray = np.asarray(racelinedict["speeds"], dtype=racelinenp.dtype)
             racelinet : np.ndarray = np.asarray(racelinedict["t"], dtype=racelinenp.dtype)
-            racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(racelinet, racelinenp)
-            racelinesplineder : scipy.interpolate.BSpline = racelinespline.derivative()
-            tangent_vectors : np.ndarray = racelinesplineder(racelinet)
+            dsfinal : float = np.linalg.norm(racelinenp[0] - racelinenp[-1], ord=2)
+            accelfinal : float = (racelinespeeds[0]**2 - racelinespeeds[-1]**2)/(2.0*dsfinal)
+            try:
+                finaldeltat = (-racelinespeeds[-1] + np.sqrt(racelinespeeds[-1]**2 + 2.0*accelfinal*dsfinal))/accelfinal
+            except Exception as e:
+                finaldeltat = dsfinal/racelinespeeds[-1]
+            finalt = racelinet[-1] + finaldeltat
+            self.get_logger().info("finaldeltat: %f" %(finaldeltat,))
+            splinet : np.ndarray = np.concatenate([racelinet, np.asarray([finalt])], axis=0)
+            splinepts : np.ndarray =  np.concatenate([racelinenp, np.expand_dims(racelinenp[0], axis=0)], axis=0) 
+            self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(splinet, splinepts, k=3, bc_type='periodic')
+            self.racelinesplineder : scipy.interpolate.BSpline = self.racelinespline.derivative()
+            tangent_vectors : np.ndarray = self.racelinesplineder(racelinet)
             tangent_vectors[:,2]=0.0
             tangent_vectors = tangent_vectors/(np.linalg.norm(tangent_vectors, ord=2, axis=1)[:,np.newaxis])
             up : np.ndarray = np.zeros_like(tangent_vectors)
@@ -182,6 +193,7 @@ class OraclePathServer(PathServerROS):
             self.racelinespeeds = torch.as_tensor(racelinedict["speeds"], dtype=self.tsamp.dtype, device=self.tsamp.device)
             self.racelinetangents = torch.as_tensor(tangent_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
             self.racelinenormals = torch.as_tensor(normal_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
+
             response.message="yay"
             response.error_code=SetRaceline.Response.SUCCESS
             return response
@@ -189,14 +201,14 @@ class OraclePathServer(PathServerROS):
     def getTrajectory(self):
         if (self.racelineframe is None) or (self.raceline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None) or (self.racelinetangents is None) or (self.racelinenormals is None):
             self.get_logger().error("Returning None because raceline not yet received")
-            return None, None
+            return None
         if self.current_odom is None:
             self.get_logger().error("Returning None because odometry not yet received")
-            return None, None
+            return None
         posemsg = deepcopy(self.current_odom)
         if not (posemsg.header.frame_id==self.racelineframe):
             self.get_logger().error("Returning None because current odometry is in the %f frame, but the raceline is in the %f frame" % (posemsg.header.frame_id,self.racelineframe))
-            return None, None
+            return None
         map_to_car : torch.Tensor = C.poseMsgToTorch(posemsg.pose.pose, dtype=self.tsamp.dtype, device=self.device)
 
         if not posemsg.child_frame_id==self.base_link_id:
@@ -206,69 +218,71 @@ class OraclePathServer(PathServerROS):
         else:
             pose_curr : torch.Tensor = map_to_car
 
-        pose_inv : torch.Tensor = torch.linalg.inv(pose_curr)
-        raceline_base_link : torch.Tensor = torch.matmul(self.raceline, pose_inv.T)
-        Imin = torch.argmin(torch.norm(raceline_base_link[:,0:3], p=2, dim=1))
+        Imin = torch.argmin(torch.norm(self.raceline[:,0:3] - pose_curr[0:3,3], p=2, dim=1))
         t0 = self.racelinetimes[Imin]
         tf = t0+self.dt
+        tvec : np.ndarray = np.linspace(t0, tf, num=300)
+        rlpiece : torch.Tensor = torch.from_numpy(self.racelinespline(tvec)).type_as(self.tsamp).to(self.tsamp.device)
         
-        if tf<=self.racelinetimes[-1]:
-            Imax = torch.argmin(torch.abs(self.racelinetimes - tf))
-            tfit = self.racelinetimes[Imin:Imax]
-            rlpiecebaselink = raceline_base_link[Imin:Imax]
-        else:
-            dsfinal = torch.norm(self.raceline[0,0:3] - self.raceline[-1,0:3], p=2)
-            dtfinal = dsfinal/self.racelinespeeds[-1]
-            Imax = torch.argmin(torch.abs(self.racelinetimes - (tf - self.racelinetimes[-1])) )
-            tfit = torch.cat([self.racelinetimes[Imin:], self.racelinetimes[:Imax]+self.racelinetimes[-1]+dtfinal], dim=0)
-            rlpiecebaselink = torch.cat([raceline_base_link[Imin:], raceline_base_link[:Imax]], dim=0)
-        rlpiecebaselink[:,2]=0.0
-        rlpiece = torch.matmul(rlpiecebaselink, pose_curr[0:3].T)
+        # if tf<=self.racelinetimes[-1]:
+        #     Imax = torch.argmin(torch.abs(self.racelinetimes - tf))
+        #     tfit = self.racelinetimes[Imin:Imax]
+        #     rlpiecebaselink = raceline_base_link[Imin:Imax]
+        # else:
+        #     dsfinal = torch.norm(self.raceline[0,0:3] - self.raceline[-1,0:3], p=2)
+        #     dtfinal = dsfinal/self.racelinespeeds[-1]
+        #     Imax = torch.argmin(torch.abs(self.racelinetimes - (tf - self.racelinetimes[-1])) )
+        #     tfit = torch.cat([self.racelinetimes[Imin:], self.racelinetimes[:Imax]+self.racelinetimes[-1]+dtfinal], dim=0)
+        #     rlpiecebaselink = torch.cat([raceline_base_link[Imin:], raceline_base_link[:Imax]], dim=0)
+        # rlpiecebaselink[:,2]=0.0
+        # rlpiece = torch.matmul(rlpiecebaselink, pose_curr[0:3].T)
+
+        tfit = torch.from_numpy(tvec).type_as(self.tsamp).to(self.tsamp.device)
         tfit = tfit-tfit[0]
         dt = tfit[-1]
         sfit = tfit/dt
         
         _, bcurve = mu.bezierLsqfit(rlpiece.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
+        bcurve_msg : BezierCurve = C.toBezierCurveMsg(bcurve[0],posemsg.header)
+        fracpart, intpart = math.modf(self.dt)
+        bcurve_msg.delta_t = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
+        return bcurve_msg
 
+        # positionsbcurve : torch.Tensor = torch.matmul(self.Msamp, bcurve)[0]
 
-        positionsbcurve : torch.Tensor = torch.matmul(self.Msamp, bcurve)[0]
-
-        _, bcurvderiv = mu.bezierDerivative(bcurve, M=self.Msampderiv)
-        velocitiesbcurve : torch.Tensor = (bcurvderiv[0]/dt)
-        speedsbcurve : torch.Tensor = torch.norm(velocitiesbcurve, p=2, dim=1)
-        unit_tangents : torch.Tensor = velocitiesbcurve/speedsbcurve[:,None]
-        up : torch.Tensor = torch.zeros_like(unit_tangents)
-        up[:,2]=1.0
-        unit_normals : torch.Tensor = torch.cross(up, unit_tangents)
-        unit_normals = unit_normals/(torch.norm(unit_normals, p=2, dim=1)[:,None])
+        # _, bcurvderiv = mu.bezierDerivative(bcurve, M=self.Msampderiv)
+        # velocitiesbcurve : torch.Tensor = (bcurvderiv[0]/dt)
+        # speedsbcurve : torch.Tensor = torch.norm(velocitiesbcurve, p=2, dim=1)
+        # unit_tangents : torch.Tensor = velocitiesbcurve/speedsbcurve[:,None]
+        # up : torch.Tensor = torch.zeros_like(unit_tangents)
+        # up[:,2]=1.0
+        # unit_normals : torch.Tensor = torch.cross(up, unit_tangents)
+        # unit_normals = unit_normals/(torch.norm(unit_normals, p=2, dim=1)[:,None])
         
 
-        bcurve_msg : BezierCurve = C.toBezierCurveMsg(bcurve[0],posemsg.header)
-        path_msg : Path = Path(header=posemsg.header) 
-        up : np.ndarray = np.asarray( [0.0, 0.0, 1.0] )
-        unit_tangents_np : np.ndarray = unit_tangents.cpu().numpy()
-        unit_normals_np : np.ndarray = unit_normals.cpu().numpy()
-        for i in range(positionsbcurve.shape[0]):
-            pose : PoseStamped = PoseStamped(header=path_msg.header)
-            fracpart, intpart = math.modf((dt*self.tsamp[0,i]).item())
-            pose.header.stamp = builtin_interfaces.msg.Time(sec=int(intpart), nanosec=int(fracpart*1E9))
-            pose.pose.position.x=positionsbcurve[i,0].item()
-            pose.pose.position.y=positionsbcurve[i,1].item()
-            pose.pose.position.z=positionsbcurve[i,2].item()
+        # path_msg : Path = Path(header=posemsg.header) 
+        # up : np.ndarray = np.asarray( [0.0, 0.0, 1.0] )
+        # unit_tangents_np : np.ndarray = unit_tangents.cpu().numpy()
+        # unit_normals_np : np.ndarray = unit_normals.cpu().numpy()
+        # for i in range(positionsbcurve.shape[0]):
+        #     pose : PoseStamped = PoseStamped(header=path_msg.header)
+        #     fracpart, intpart = math.modf((dt*self.tsamp[0,i]).item())
+        #     pose.header.stamp = builtin_interfaces.msg.Time(sec=int(intpart), nanosec=int(fracpart*1E9))
+        #     pose.pose.position.x=positionsbcurve[i,0].item()
+        #     pose.pose.position.y=positionsbcurve[i,1].item()
+        #     pose.pose.position.z=positionsbcurve[i,2].item()
 
-            Rmat : np.ndarray = np.eye(3)
-            Rmat[0:3,0]=unit_tangents_np[i]
-            Rmat[0:3,1]=unit_normals_np[i]
-            Rmat[0:3,2]=np.cross(Rmat[0:3,0], Rmat[0:3,1])
-            rot : Rot = Rot.from_matrix(Rmat)
-            quat : np.ndarray = rot.as_quat()
-            pose.pose.orientation.x=float(quat[0])
-            pose.pose.orientation.y=float(quat[1])
-            pose.pose.orientation.z=float(quat[2])
-            pose.pose.orientation.w=float(quat[3])
+        #     Rmat : np.ndarray = np.eye(3)
+        #     Rmat[0:3,0]=unit_tangents_np[i]
+        #     Rmat[0:3,1]=unit_normals_np[i]
+        #     Rmat[0:3,2]=np.cross(Rmat[0:3,0], Rmat[0:3,1])
+        #     rot : Rot = Rot.from_matrix(Rmat)
+        #     quat : np.ndarray = rot.as_quat()
+        #     pose.pose.orientation.x=float(quat[0])
+        #     pose.pose.orientation.y=float(quat[1])
+        #     pose.pose.orientation.z=float(quat[2])
+        #     pose.pose.orientation.w=float(quat[3])
 
-            path_msg.poses.append(pose)
+        #     path_msg.poses.append(pose)
 
-        fracpart, intpart = math.modf(dt)
-        bcurve_msg.delta_t = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
-        return bcurve_msg, path_msg
+        # return bcurve_msg, path_msg

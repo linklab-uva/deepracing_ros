@@ -31,7 +31,6 @@ def main(args=None):
     spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor())
     node = OraclePathServer()
     bcurve_pub : Publisher = node.create_publisher(BezierCurve, "oraclebeziercurves", 1)
-    path_pub : Publisher = node.create_publisher(Path, "oraclepaths", 1)
     spinner.add_node(node)
     node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
     spinner.spin()
@@ -40,10 +39,9 @@ def main(args=None):
     try:
         while rclpy.ok():
             rate.sleep()
-            bcurve_msg, path_msg = node.getTrajectory()
-            if (bcurve_msg is not None) and (path_msg is not None):
+            bcurve_msg = node.getTrajectory()
+            if bcurve_msg is not None:
                 bcurve_pub.publish(bcurve_msg)
-                path_pub.publish(path_msg)
     except KeyboardInterrupt:
         pass
     spinner.shutdown()
