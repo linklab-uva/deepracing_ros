@@ -17,6 +17,7 @@
         <param name="carname" value="$(var carname)"/>
         <param name="use_sim_time" value="$(var use_sim_time)"/>
         <remap from="odom" to="$(var odomtopic)"/>
+        <param from="$(find-pkg-share deepracing_launch)/config/oracle_raceline.yaml"/>
    </node>
    <node pkg="deepracing_rclpy" exec="bezier_curve_pure_pursuit" name="pure_pursuit_node" output="screen" namespace="$(var carname)">
         <param name="carname" value="$(var carname)"/>
