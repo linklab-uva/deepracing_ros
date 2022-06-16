@@ -163,9 +163,9 @@ class OraclePathServer(PathServerROS):
             racelinet : np.ndarray = np.asarray(racelinedict["t"], dtype=racelinenp.dtype)
             dsfinal : float = np.linalg.norm(racelinenp[0] - racelinenp[-1], ord=2)
             accelfinal : float = (racelinespeeds[0]**2 - racelinespeeds[-1]**2)/(2.0*dsfinal)
-            try:
+            if np.abs(accelfinal)>1E-4:
                 finaldeltat = (-racelinespeeds[-1] + np.sqrt(racelinespeeds[-1]**2 + 2.0*accelfinal*dsfinal))/accelfinal
-            except Exception as e:
+            else:
                 finaldeltat = dsfinal/racelinespeeds[-1]
             finalt = racelinet[-1] + finaldeltat
             self.get_logger().info("finaldeltat: %f" %(finaldeltat,))
