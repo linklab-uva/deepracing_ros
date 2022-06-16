@@ -13,7 +13,7 @@ class ControlNode : public rclcpp::Node
 
   public:
     ControlNode( const rclcpp::NodeOptions & options )
-     : rclcpp::Node("autoware_control_node", options), m_current_speed_(0.0)
+     : rclcpp::Node("control_node", options), m_current_speed_(0.0)
     {
     }
     void init(std::shared_ptr<control_toolbox::PidROS> pid)
