@@ -1,7 +1,9 @@
 <launch>
    <arg name="carname" default=""/>
+   <arg name="default_trackfile" default=""/>
    <arg name="use_sim_time" default="false"/>
    <arg name="tf_from_odom" default="false"/>
+   <arg name="rate" default="10.0"/>
    <group scoped="false" if="$(var tf_from_odom)">
       <let name="odomtopic" value="odom/filtered"/>
    </group>
@@ -9,6 +11,7 @@
       <let name="odomtopic" value="odom"/>
    </group>
    <node pkg="deepracing_rclpy" exec="initial_raceline_setter" name="initial_raceline_setter" output="screen" namespace="$(var carname)">
+        <param name="default_trackfile" value="$(var default_trackfile)"/>
    </node>
    <node pkg="deepracing_rclpy" exec="oracle_path_server" name="oracle_path_server_node" output="screen" namespace="$(var carname)">
         <param name="carname" value="$(var carname)"/>
@@ -18,6 +21,7 @@
    <node pkg="deepracing_rclpy" exec="bezier_curve_pure_pursuit" name="pure_pursuit_node" output="screen" namespace="$(var carname)">
         <param name="carname" value="$(var carname)"/>
         <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="rate" value="$(var rate)"/>
         <remap from="odom" to="$(var odomtopic)"/>
         <remap from="beziercurves_in" to="oraclebeziercurves"/>
         <param from="$(find-pkg-share deepracing_launch)/config/pure_pursuit.yaml"/>
