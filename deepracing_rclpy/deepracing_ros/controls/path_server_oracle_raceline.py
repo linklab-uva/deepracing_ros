@@ -159,11 +159,24 @@ class OraclePathServer(PathServerROS):
             racelinenp : np.ndarray = np.row_stack([np.asarray(racelinedict["x"], dtype=rmat.dtype), np.asarray(racelinedict["y"], dtype=rmat.dtype), np.asarray(racelinedict["z"], dtype=rmat.dtype)])
             racelinenp = (np.matmul(rmat, racelinenp) + transformvec[:,np.newaxis])
             racelinenp = racelinenp.T
+            rsamp : np.ndarray = np.asarray(racelinedict["r"], dtype=racelinenp.dtype)
             racelinespeeds : np.ndarray = np.asarray(racelinedict["speeds"], dtype=racelinenp.dtype)
-            racelinet : np.ndarray = np.asarray(racelinedict["t"], dtype=racelinenp.dtype)
+            velsquares : np.ndarray = np.square(racelinespeeds)
+            racelinet : np.ndarray = np.zeros_like(racelinespeeds)
+            for i in range(rsamp.shape[0]-1):
+                ds : float = rsamp[i+1] - rsamp[i]
+                v0 : float = racelinespeeds[i]
+                v0square : float = velsquares[i]
+                vfsquare : float = velsquares[i+1]
+                a0 : float = (vfsquare-v0square)/(2.0*ds)
+                if np.abs(a0)>1E-1:
+                    deltat : float = (-v0 + np.sqrt(v0square + 2.0*a0*ds))/a0
+                else:
+                    deltat : float = ds/v0
+                racelinet[i+1] = racelinet[i]+deltat
             dsfinal : float = np.linalg.norm(racelinenp[0] - racelinenp[-1], ord=2)
             accelfinal : float = (racelinespeeds[0]**2 - racelinespeeds[-1]**2)/(2.0*dsfinal)
-            if np.abs(accelfinal)>1E-4:
+            if np.abs(accelfinal)>1E-1:
                 finaldeltat = (-racelinespeeds[-1] + np.sqrt(racelinespeeds[-1]**2 + 2.0*accelfinal*dsfinal))/accelfinal
             else:
                 finaldeltat = dsfinal/racelinespeeds[-1]
