@@ -35,10 +35,14 @@ def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
     node = RacelineSetter()
+    default_trackname_param : rclpy.Parameter = node.declare_parameter("default_trackfile", value="")
+    default_trackname : str = default_trackname_param.get_parameter_value().string_value
+    if default_trackname=="":
+        exit(0)
     serviceclient : rclpy.client.Client = node.create_client(deepracing_msgs.srv.SetRaceline, "set_raceline")
     serviceclient.wait_for_service()
     req : deepracing_msgs.srv.SetRaceline.Request = deepracing_msgs.srv.SetRaceline.Request()
-    req.filename="Australia_baseline.json"
+    req.filename=default_trackname
     serviceclient.call_async(req)
     rclpy.spin_once(node)
 if __name__ == '__main__':
