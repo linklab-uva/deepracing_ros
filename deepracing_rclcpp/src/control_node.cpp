@@ -4,6 +4,7 @@
 #include <deepracing_msgs/msg/timestamped_packet_car_telemetry_data.hpp>
 #include <deepracing_msgs/msg/timestamped_packet_car_status_data.hpp>
 #include <ackermann_msgs/msg/ackermann_drive_stamped.hpp>
+#include <std_msgs/msg/float64.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <control_toolbox/pid_ros.hpp>
 #include <f1_datalogger/controllers/f1_interface_factory.h>
@@ -13,7 +14,7 @@ class ControlNode : public rclcpp::Node
 
   public:
     ControlNode( const rclcpp::NodeOptions & options )
-     : rclcpp::Node("autoware_control_node", options), m_current_speed_(0.0)
+     : rclcpp::Node("autoware_control_node", options), m_current_speed_(0.0), m_longitudinal_error_(0.0)
     {
     }
     void init(std::shared_ptr<control_toolbox::PidROS> pid)
@@ -24,6 +25,8 @@ class ControlNode : public rclcpp::Node
       m_full_lock_right_ = declare_parameter<double>("full_lock_right", -0.2659);
       m_safe_steer_max_ = declare_parameter<double>("safe_steer_max", m_full_lock_left_);
       m_safe_steer_min_ = declare_parameter<double>("safe_steer_min", m_full_lock_right_);
+      m_use_external_error_ = declare_parameter<bool>("use_external_error", false);
+
 
       m_velocity_pid_ = pid;
       m_velocity_pid_->initPid(0.5, 0.05, 0.00, 1.0, -1.0, true);
@@ -49,6 +52,7 @@ class ControlNode : public rclcpp::Node
         std::bind(&ControlNode::odomCallback, this, std::placeholders::_1), listner_options);
 
     }
+
     inline void controlLoop(const rclcpp::Duration& dt)
     {
       double steercommand = m_setpoints.drive.steering_angle;
@@ -95,6 +99,10 @@ class ControlNode : public rclcpp::Node
     }
   private:
 
+    inline void longitudinalErrorCB(const std_msgs::msg::Float64::SharedPtr error_value)
+    {
+      m_longitudinal_error_ = error_value->data;
+    }
     inline void telemetryCallback(const deepracing_msgs::msg::TimestampedPacketCarTelemetryData::SharedPtr telemetry_data)
     {
       m_drs_enabled_ = telemetry_data->udp_packet.car_telemetry_data.at(telemetry_data->udp_packet.header.player_car_index).drs>0;
@@ -120,11 +128,12 @@ class ControlNode : public rclcpp::Node
       //                               odom->twist.twist.linear.z*odom->twist.twist.linear.z );
       m_current_speed_ = odom->twist.twist.linear.x;
     }
-    double m_current_speed_, m_safe_steer_max_, m_safe_steer_min_, m_safe_vel_, m_full_lock_left_, m_full_lock_right_;
-    bool m_drs_allowed_, m_drs_enabled_;
+    double m_current_speed_, m_safe_steer_max_, m_safe_steer_min_, m_safe_vel_, m_full_lock_left_, m_full_lock_right_, m_longitudinal_error_;
+    bool m_drs_allowed_, m_drs_enabled_, m_use_external_error_;
     std::shared_ptr<control_toolbox::PidROS> m_velocity_pid_;
     std::shared_ptr<deepf1::F1Interface> m_game_interface_;
     ackermann_msgs::msg::AckermannDriveStamped m_setpoints;
+    rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr error_listener;
     rclcpp::Subscription<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr command_listener;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_listener;
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketCarStatusData>::SharedPtr status_listener;
