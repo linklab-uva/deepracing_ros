@@ -57,6 +57,33 @@ class ControlNode : public rclcpp::Node
         error_listener = create_subscription<std_msgs::msg::Float64>("external_error", rclcpp::QoS{1},
           std::bind(&ControlNode::longitudinalErrorCB, this, std::placeholders::_1), listner_options);
       }
+      add_on_set_parameters_callback(std::bind(&ControlNode::parameterCB, this, std::placeholders::_1));
+    }
+    rcl_interfaces::msg::SetParametersResult parameterCB(const std::vector<rclcpp::Parameter> & new_parameters)
+    {
+      rcl_interfaces::msg::SetParametersResult result;
+      for (const rclcpp::Parameter& parameter : new_parameters)
+      {
+        if (parameter.get_name().compare("use_external_error")==0)
+        {
+          bool new_use_external_error = parameter.get_value<bool>();
+          if (new_use_external_error && !error_listener)
+          {
+            rclcpp::SubscriptionOptions listner_options;
+            listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+            error_listener = create_subscription<std_msgs::msg::Float64>("external_error", rclcpp::QoS{1},
+            std::bind(&ControlNode::longitudinalErrorCB, this, std::placeholders::_1), listner_options);
+          }
+          if (!new_use_external_error && bool(error_listener))
+          {
+            error_listener.reset();
+          }
+          m_use_external_error_ = new_use_external_error;
+        }
+      }
+      result.set__reason("Yay.");
+      result.set__successful(true);
+      return result;
     }
 
     inline void controlLoop(const rclcpp::Duration& dt)
