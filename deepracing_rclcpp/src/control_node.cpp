@@ -50,22 +50,34 @@ class ControlNode : public rclcpp::Node
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
       odom_listener = create_subscription<nav_msgs::msg::Odometry>("odom", rclcpp::QoS{1},
         std::bind(&ControlNode::odomCallback, this, std::placeholders::_1), listner_options);
-
+      if(m_use_external_error_)
+      {
+        listner_options = rclcpp::SubscriptionOptions();
+        listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+        error_listener = create_subscription<std_msgs::msg::Float64>("external_error", rclcpp::QoS{1},
+          std::bind(&ControlNode::longitudinalErrorCB, this, std::placeholders::_1), listner_options);
+      }
     }
 
     inline void controlLoop(const rclcpp::Duration& dt)
     {
       double steercommand = m_setpoints.drive.steering_angle;
       double error;
-      if (steercommand<=m_safe_steer_max_ && steercommand>=m_safe_steer_min_)
+      if(m_use_external_error_)
       {
-        error = m_setpoints.drive.speed-m_current_speed_;
+        error = m_longitudinal_error_;
       }
       else
       {
-        error = m_safe_vel_-m_current_speed_;
+        if (steercommand<=m_safe_steer_max_ && steercommand>=m_safe_steer_min_)
+        {
+          error = m_setpoints.drive.speed-m_current_speed_;
+        }
+        else
+        {
+          error = m_safe_vel_-m_current_speed_;
+        }
       }
-
       double throttlecommand = m_velocity_pid_->computeCommand(error, dt);
       if (m_setpoints.drive.speed>=79.5)
       {
