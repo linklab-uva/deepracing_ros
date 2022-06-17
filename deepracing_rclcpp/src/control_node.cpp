@@ -87,7 +87,7 @@ class ControlNode : public rclcpp::Node
         }
       }
       double throttlecommand = m_velocity_pid_->computeCommand(error, dt);
-      if (m_setpoints.drive.speed>=79.5)
+      if (m_setpoints.drive.speed>=86.0)
       {
         throttlecommand=1.0;
       }
