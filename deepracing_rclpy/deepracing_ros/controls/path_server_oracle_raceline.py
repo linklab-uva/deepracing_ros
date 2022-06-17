@@ -159,13 +159,26 @@ class OraclePathServer(PathServerROS):
             racelinenp : np.ndarray = np.row_stack([np.asarray(racelinedict["x"], dtype=rmat.dtype), np.asarray(racelinedict["y"], dtype=rmat.dtype), np.asarray(racelinedict["z"], dtype=rmat.dtype)])
             racelinenp = (np.matmul(rmat, racelinenp) + transformvec[:,np.newaxis])
             racelinenp = racelinenp.T
+            rsamp : np.ndarray = np.asarray(racelinedict["r"], dtype=racelinenp.dtype)
             racelinespeeds : np.ndarray = np.asarray(racelinedict["speeds"], dtype=racelinenp.dtype)
-            racelinet : np.ndarray = np.asarray(racelinedict["t"], dtype=racelinenp.dtype)
+            velsquares : np.ndarray = np.square(racelinespeeds)
+            racelinet : np.ndarray = np.zeros_like(racelinespeeds)
+            for i in range(rsamp.shape[0]-1):
+                ds : float = rsamp[i+1] - rsamp[i]
+                v0 : float = racelinespeeds[i]
+                v0square : float = velsquares[i]
+                vfsquare : float = velsquares[i+1]
+                a0 : float = (vfsquare-v0square)/(2.0*ds)
+                if np.abs(a0)>1E-1:
+                    deltat : float = (-v0 + np.sqrt(v0square + 2.0*a0*ds))/a0
+                else:
+                    deltat : float = ds/v0
+                racelinet[i+1] = racelinet[i]+deltat
             dsfinal : float = np.linalg.norm(racelinenp[0] - racelinenp[-1], ord=2)
             accelfinal : float = (racelinespeeds[0]**2 - racelinespeeds[-1]**2)/(2.0*dsfinal)
-            try:
+            if np.abs(accelfinal)>1E-1:
                 finaldeltat = (-racelinespeeds[-1] + np.sqrt(racelinespeeds[-1]**2 + 2.0*accelfinal*dsfinal))/accelfinal
-            except Exception as e:
+            else:
                 finaldeltat = dsfinal/racelinespeeds[-1]
             finalt = racelinet[-1] + finaldeltat
             self.get_logger().info("finaldeltat: %f" %(finaldeltat,))
@@ -217,12 +230,13 @@ class OraclePathServer(PathServerROS):
             pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
         else:
             pose_curr : torch.Tensor = map_to_car
-
+        pose_curr_inv : torch.Tensor = torch.inverse(pose_curr)
         Imin = torch.argmin(torch.norm(self.raceline[:,0:3] - pose_curr[0:3,3], p=2, dim=1))
         t0 = self.racelinetimes[Imin]
         tf = t0+self.dt
         tvec : np.ndarray = np.linspace(t0, tf, num=300)
         rlpiece : torch.Tensor = torch.from_numpy(self.racelinespline(tvec)).type_as(self.tsamp).to(self.tsamp.device)
+        rlpiecebaselink : torch.Tensor = torch.matmul(rlpiece, pose_curr_inv[0:3,0:3].t()) + pose_curr_inv[0:3,3]
         
         # if tf<=self.racelinetimes[-1]:
         #     Imax = torch.argmin(torch.abs(self.racelinetimes - tf))
@@ -242,9 +256,10 @@ class OraclePathServer(PathServerROS):
         dt = tfit[-1]
         sfit = tfit/dt
         
-        _, bcurve = mu.bezierLsqfit(rlpiece.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
+        _, bcurve = mu.bezierLsqfit(rlpiecebaselink.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
+        bcurve[0] = torch.matmul(bcurve[0], pose_curr[0:3,0:3].t()) + pose_curr[0:3,3]
         bcurve_msg : BezierCurve = C.toBezierCurveMsg(bcurve[0],posemsg.header)
-        fracpart, intpart = math.modf(self.dt)
+        fracpart, intpart = math.modf(dt.item())
         bcurve_msg.delta_t = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
         return bcurve_msg
 
