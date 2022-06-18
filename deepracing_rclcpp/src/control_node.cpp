@@ -30,17 +30,22 @@ class ControlNode : public rclcpp::Node
       use_external_setpoint_description.type=rclcpp::PARAMETER_BOOL;
       m_use_external_setpoint_ = declare_parameter<bool>(use_external_setpoint_description.name, false, use_external_setpoint_description);    
     }
-    void initParameterCallbacks()
-    {
-      cb_handle_ = add_on_set_parameters_callback(std::bind(&ControlNode::setParamsCB_, this, std::placeholders::_1));
-    }
     void init(std::shared_ptr<control_toolbox::PidROS> pid)
     {
-
       m_velocity_pid_ = pid;
-      m_velocity_pid_->initPid(0.5, 0.05, 0.00, 1.0, -1.0, true);
+      double p, i, d, i_clamp_min, i_clamp_max;
+      bool antiwindup;
+      get_parameter_or<double>("p", p, 0.5);
+      get_parameter_or<double>("i", i, 0.0);
+      get_parameter_or<double>("d", d, 0.0);
+      get_parameter_or<double>("i_clamp_min", i_clamp_min, -1.0);
+      get_parameter_or<double>("i_clamp_max", i_clamp_max, 1.0);
+      get_parameter_or<bool>("antiwindup", antiwindup, true);
+      m_velocity_pid_->initPid(p, i, d, i_clamp_min, i_clamp_max, antiwindup);
       m_velocity_pid_->setCurrentCmd(0.0);
       m_velocity_pid_->computeCommand(0.0, rclcpp::Duration::from_seconds(0.0));
+      remove_on_set_parameters_callback(m_velocity_pid_->getParametersCallbackHandle().get());
+      cb_handle_ = add_on_set_parameters_callback(std::bind(&ControlNode::setParamsCB_, this, std::placeholders::_1));
 
       m_game_interface_ = deepf1::F1InterfaceFactory::getDefaultInterface();
       rclcpp::SubscriptionOptions listner_options;
@@ -219,17 +224,6 @@ int main(int argc, char *argv[]) {
   rclcpp::Clock::SharedPtr clock = node->get_clock();
   std::shared_ptr<control_toolbox::PidROS> pid_controller(new control_toolbox::PidROS(node));
   node->init(pid_controller);
-  node->remove_on_set_parameters_callback(pid_controller->getParametersCallbackHandle().get());
-  double p, i, d, i_clamp_min, i_clamp_max;
-  bool antiwindup;
-  node->get_parameter_or<double>("p", p, 0.5);
-  node->get_parameter_or<double>("i", i, 0.0);
-  node->get_parameter_or<double>("d", d, 0.0);
-  node->get_parameter_or<double>("i_clamp_min", i_clamp_min, -1.0);
-  node->get_parameter_or<double>("i_clamp_max", i_clamp_max, 1.0);
-  node->get_parameter_or<bool>("antiwindup", antiwindup, true);
-  pid_controller->setGains(p, i, d, i_clamp_min, i_clamp_max, antiwindup);
-  node->initParameterCallbacks();
   std::thread spinthread = std::thread(std::bind(&rclcpp::executors::MultiThreadedExecutor::spin, executor));
   rclcpp::Time t0 = node->now();
   rclcpp::Time t1;
