@@ -164,8 +164,12 @@ class NodeWrapperTfUpdater_
     {
       if((session_msg->udp_packet.track_id>=0) && (session_msg->udp_packet.track_id!=current_track_id))
       {
-        
-        std::vector<std::string> search_dirs = deepracing_ros::FileUtils::split(std::string(std::getenv("F1_TRACK_DIRS")));
+        char* envrtn = std::getenv("F1_TRACK_DIRS");
+        std::vector<std::string> search_dirs;
+        if (envrtn)
+        {
+          search_dirs = deepracing_ros::FileUtils::split(std::string(envrtn));
+        }
         try
         {
           std::filesystem::path f1_datalogger_path = std::filesystem::path(ament_index_cpp::get_package_share_directory("f1_datalogger"));
@@ -176,10 +180,17 @@ class NodeWrapperTfUpdater_
         {
           
         }
+        std::stringstream ss;
+        for (const std::string& dir : search_dirs)
+        {
+          ss << dir <<", ";
+        }
+        RCLCPP_INFO(node->get_logger(), "Looking for starting pose file in: %s" , ss.str().c_str());
         
         std::array<std::string, 25> tracknames = deepracing_ros::F1MsgUtils::track_names();
         std::string trackname = tracknames[session_msg->udp_packet.track_id];
         std::string starting_pose_filepath = deepracing_ros::FileUtils::findFile(trackname+"_startingpose.json", search_dirs);
+        RCLCPP_INFO(node->get_logger(), "Got starting pose file: %s", starting_pose_filepath.c_str());
         if (starting_pose_filepath.empty())
         {
           RCLCPP_ERROR(node->get_logger(), "Could not find starting pose file for track: %s", trackname.c_str());

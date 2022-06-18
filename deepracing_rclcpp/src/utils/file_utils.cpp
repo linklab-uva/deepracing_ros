@@ -26,6 +26,10 @@ std::string  deepracing_ros::FileUtils::findFile(const std::string& file, const 
 
 std::vector<std::string> deepracing_ros::FileUtils::split(const std::string& str, char delim)
 {
+    if (str.empty())
+    {
+      return std::vector<std::string>();
+    }
     std::vector<std::string> cont;
     std::stringstream ss(str);
     std::string token;
