@@ -72,7 +72,7 @@ class ControlNode : public rclcpp::Node
           std::bind(&ControlNode::longitudinalErrorCB, this, std::placeholders::_1), listner_options);
       }
     }
-    inline void controlLoop(const rclcpp::Duration& dt)
+    inline rclcpp::Time controlLoop(const rclcpp::Duration& dt)
     {
       double steercommand = m_setpoints.drive.steering_angle;
       double error;
@@ -121,6 +121,7 @@ class ControlNode : public rclcpp::Node
       {
         m_game_interface_->pushDRS();
       }
+      return now();
     }
   private:
     rcl_interfaces::msg::SetParametersResult setParamsCB_(const std::vector<rclcpp::Parameter> & parameters)
@@ -217,7 +218,9 @@ class ControlNode : public rclcpp::Node
 };
 int main(int argc, char *argv[]) {
   rclcpp::init(argc,argv);
-  std::shared_ptr<ControlNode> node(new ControlNode(rclcpp::NodeOptions()));
+  rclcpp::NodeOptions opshinz;
+  opshinz = opshinz.allow_undeclared_parameters(true);
+  std::shared_ptr<ControlNode> node(new ControlNode(opshinz));
   rclcpp::Rate rate(node->get_parameter("frequency").as_double());
   std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> executor( new rclcpp::executors::MultiThreadedExecutor(rclcpp::ExecutorOptions(), 3) );
   executor->add_node(node);
@@ -231,8 +234,7 @@ int main(int argc, char *argv[]) {
   {
     rate.sleep();
     t1 = node->now();
-    node->controlLoop(t1 - t0);
-    t0 = t1;
+    t0 = node->controlLoop(t1 - t0);
   }
   spinthread.join();
   
