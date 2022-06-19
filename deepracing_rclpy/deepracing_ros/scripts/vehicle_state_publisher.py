@@ -39,12 +39,13 @@ import deepracing.protobuf_utils
 from typing import List
 import shapely, shapely.geometry
 import json
+import copy
 
 class DriverStatePublisher(Node):
     def __init__(self,):
         super(DriverStatePublisher,self).__init__('driver_state_publisher')
         self.lap_data_semaphore : Semaphore = Semaphore()
-        self.valid_indices : np.ndarray = None
+        self.current_lap_data : PacketLapData = None
         self.lap_data_sub : Subscription = self.create_subscription(TimestampedPacketLapData, "lap_data", self.lapDataCB, 1)
         self.motion_data_sub : Subscription = self.create_subscription(TimestampedPacketMotionData, "motion_data", self.motionPacketCB, 1)
         self.session_data_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "session_data", self.sessionDataCB, 1)
@@ -92,14 +93,14 @@ class DriverStatePublisher(Node):
         if not self.lap_data_semaphore.acquire(timeout = 2.0):
             self.get_logger().error("Unable to acquire lap_data_semaphore in lapDataCB")
             return
-        self.valid_indices : np.ndarray = np.asarray( [i for i in range(len(timestamped_lap_data.udp_packet.lap_data)) if ( (timestamped_lap_data.udp_packet.lap_data[i].result_status not in {0,1}) and (not i==ego_idx) ) ] , dtype=np.int32)
+        self.current_lap_data : PacketLapData = timestamped_lap_data.udp_packet
         self.lap_data_semaphore.release()
     def motionPacketCB(self, timestamped_motion_data : TimestampedPacketMotionData):
         if self.centerline_ring is None:
             self.get_logger().error("Have not yet received any session data to infer track data")
             return
         ego_idx = timestamped_motion_data.udp_packet.header.player_car_index
-        if self.valid_indices is None:
+        if self.current_lap_data is None:
             self.get_logger().error("Have not yet received any lap data to infer vehicle indices")
             return
         self.get_logger().debug("Processing motion packet")
@@ -108,8 +109,9 @@ class DriverStatePublisher(Node):
         if not self.lap_data_semaphore.acquire(timeout = 2.0):
             self.get_logger().error("Unable to acquire lap_data_semaphore in lapDataCB")
             return
-        valid_indices = self.valid_indices.copy()
+        lap_data_packet : PacketLapData = copy.deepcopy(self.current_lap_data)
         self.lap_data_semaphore.release()
+        valid_indices : np.ndarray = np.asarray( [i for i in range(len(lap_data_packet.lap_data)) if ( (lap_data_packet.lap_data[i].result_status not in {0,1}) and (not i==ego_idx) ) ] , dtype=np.int32)
         driver_states : DriverStates = DriverStates(ego_vehicle_index = ego_idx)
         driver_states.header.stamp = timestamped_motion_data.header.stamp
         driver_states.header.frame_id="map"
@@ -134,6 +136,7 @@ class DriverStatePublisher(Node):
             linearvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], linearveltrack)
             driver_states.other_agent_velocities.append(Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]))
             driver_states.vehicle_indices.append(car_index)
+            driver_states.other_agent_sectors.append(lap_data_packet.lap_data[car_index].sector)
             ptshapely : shapely.geometry.Point = shapely.geometry.Point(positionmapmsg.x, positionmapmsg.y)
             ring_distance : float = self.centerline_ring.project(ptshapely)
             if ring_distance>self.ring_length/2.0:
@@ -160,6 +163,7 @@ class DriverStatePublisher(Node):
         if ring_distance>self.ring_length/2.0:
             ring_distance-=self.ring_length
         driver_states.ego_track_progress=ring_distance
+        driver_states.ego_current_sector=lap_data_packet.lap_data[ego_idx].sector
         self.pose_array_pub.publish(pose_array)
         self.driver_state_pub.publish(driver_states)
 
