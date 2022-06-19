@@ -84,8 +84,8 @@ class DriverStatePublisher(Node):
             self.transform = np.eye(4, dtype=centerline.dtype)
             self.transform[0:3,0:3] = Rot.from_quat(np.asarray([transform_msg.rotation.x, transform_msg.rotation.y, transform_msg.rotation.z, transform_msg.rotation.w], dtype=centerline.dtype)).as_matrix()
             self.transform[0:3,3] = np.asarray([transform_msg.translation.x, transform_msg.translation.y, transform_msg.translation.z], dtype=centerline.dtype)
-            self.centerline = np.matmul(self.transform, centerline)[0:3].T
-            self.centerline_ring = shapely.geometry.LinearRing(self.centerline[:,[0,1]].tolist())
+            self.centerline : np.ndarray = np.matmul(self.transform, centerline)[0:3].T.copy()
+            self.centerline_ring : shapely.geometry.LinearRing = shapely.geometry.LinearRing(self.centerline[:,[0,1]].copy().tolist())
             self.ring_length = self.centerline_ring.length
             self.destroy_subscription(self.session_data_sub)
     def lapDataCB(self, timestamped_lap_data : TimestampedPacketLapData):
