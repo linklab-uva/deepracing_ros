@@ -23,6 +23,16 @@ class ControlNode : public rclcpp::Node
       m_safe_steer_min_ = declare_parameter<double>("safe_steer_min", m_full_lock_right_);
       m_frequency_ = declare_parameter<double>("frequency", 25.0);
 
+      rcl_interfaces::msg::ParameterDescriptor scale_factor_description;
+      scale_factor_description.name="scale_factor";
+      scale_factor_description.read_only=false;
+      scale_factor_description.dynamic_typing=false;
+      scale_factor_description.type=rclcpp::PARAMETER_DOUBLE;
+      scale_factor_description.floating_point_range.resize(1);
+      scale_factor_description.floating_point_range[0].set__from_value(0.0);
+      scale_factor_description.floating_point_range[0].set__to_value(1.0);
+      m_scale_factor_ = declare_parameter<double>(scale_factor_description.name, 1.0, scale_factor_description);
+
       rcl_interfaces::msg::ParameterDescriptor use_external_setpoint_description;
       use_external_setpoint_description.name="use_external_setpoint";
       use_external_setpoint_description.read_only=false;
@@ -41,13 +51,15 @@ class ControlNode : public rclcpp::Node
       get_parameter_or<double>("i_clamp_min", i_clamp_min, -1.0);
       get_parameter_or<double>("i_clamp_max", i_clamp_max, 1.0);
       get_parameter_or<bool>("antiwindup", antiwindup, true);
+      m_game_interface_ = deepf1::F1InterfaceFactory::getDefaultInterface();
+      m_game_interface_->setCommands(deepf1::F1ControlCommand());
+    
       m_velocity_pid_->initPid(p, i, d, i_clamp_min, i_clamp_max, antiwindup);
       m_velocity_pid_->setCurrentCmd(0.0);
       m_velocity_pid_->computeCommand(0.0, rclcpp::Duration::from_seconds(0.0));
       remove_on_set_parameters_callback(m_velocity_pid_->getParametersCallbackHandle().get());
       cb_handle_ = add_on_set_parameters_callback(std::bind(&ControlNode::setParamsCB_, this, std::placeholders::_1));
 
-      m_game_interface_ = deepf1::F1InterfaceFactory::getDefaultInterface();
       rclcpp::SubscriptionOptions listner_options;
       listner_options.callback_group=create_callback_group(rclcpp::CallbackGroupType::Reentrant);
       command_listener = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>("ctrl_cmd", rclcpp::QoS{1},
@@ -84,7 +96,7 @@ class ControlNode : public rclcpp::Node
       {
         if (steercommand<=m_safe_steer_max_ && steercommand>=m_safe_steer_min_)
         {
-          error = m_setpoints.drive.speed-m_current_speed_;
+          error = m_scale_factor_*m_setpoints.drive.speed-m_current_speed_;
         }
         else
         {
@@ -163,6 +175,8 @@ class ControlNode : public rclcpp::Node
             setpoint_listener.reset();
           }
           m_use_external_setpoint_ = new_use_external_setpoint;
+        } else if (param_name == "scale_factor") {
+          m_scale_factor_ = parameter.get_value<double>();
         }  
       }
       if (update_gains)
@@ -203,7 +217,7 @@ class ControlNode : public rclcpp::Node
       //                               odom->twist.twist.linear.z*odom->twist.twist.linear.z );
       m_current_speed_ = odom->twist.twist.linear.x;
     }
-    double m_current_speed_, m_safe_steer_max_, m_safe_steer_min_, m_safe_vel_, m_full_lock_left_, m_full_lock_right_, m_external_setpoint_, m_frequency_;
+    double m_current_speed_, m_safe_steer_max_, m_safe_steer_min_, m_safe_vel_, m_full_lock_left_, m_full_lock_right_, m_external_setpoint_, m_frequency_, m_scale_factor_;
     bool m_drs_allowed_, m_drs_enabled_, m_use_external_setpoint_;
     std::shared_ptr<control_toolbox::PidROS> m_velocity_pid_;
     std::shared_ptr<deepf1::F1Interface> m_game_interface_;
