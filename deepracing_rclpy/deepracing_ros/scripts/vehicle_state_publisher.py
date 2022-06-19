@@ -142,6 +142,7 @@ class DriverStatePublisher(Node):
             if ring_distance>self.ring_length/2.0:
                 ring_distance-=self.ring_length
             driver_states.other_agent_track_progress.append(ring_distance)
+            driver_states.other_agent_total_distance.append(lap_data_packet.lap_data[car_index].total_distance)
         #now grab data for ego vehicle
         ego_rotation = C.extractOrientation(udp_packet)
         posetrack[0:3,0:3] = ego_rotation.as_matrix()
@@ -164,6 +165,7 @@ class DriverStatePublisher(Node):
             ring_distance-=self.ring_length
         driver_states.ego_track_progress=ring_distance
         driver_states.ego_current_sector=lap_data_packet.lap_data[ego_idx].sector
+        driver_states.ego_total_distance=lap_data_packet.lap_data[ego_idx].total_distance
         self.pose_array_pub.publish(pose_array)
         self.driver_state_pub.publish(driver_states)
 

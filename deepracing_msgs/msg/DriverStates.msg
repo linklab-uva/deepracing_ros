@@ -11,6 +11,8 @@ geometry_msgs/Pose[<=19] other_agent_poses
 geometry_msgs/Vector3[<=19] other_agent_velocities
 #Linear projection distances along the centerline of the track, negative implies behind starting line, positive implies forward past the starting line
 float64[<=19] other_agent_track_progress
+#Total distance the other agents have travelled in this session. Can start out negative for some stupid reason.
+float64[<=19] other_agent_total_distance
 
 #vehicle index for the ego vehicle
 uint8 ego_vehicle_index
@@ -22,3 +24,5 @@ geometry_msgs/Pose ego_pose
 geometry_msgs/Twist ego_velocity
 #Linear projection distance along the centerline of the track for the ego vehicle, negative implies behind starting line, positive implies forward past the starting line
 float64 ego_track_progress
+#Total distance the ego vehicle has travelled in this session. Can start out negative for some stupid reason.
+float64 ego_total_distance
