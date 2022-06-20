@@ -1,6 +1,6 @@
 import argparse
 from ctypes import ArgumentError
-from typing import Generator
+from typing import Generator, Sequence
 from scipy.spatial.transform.rotation import Rotation
 import skimage
 import skimage.io as io
@@ -241,6 +241,57 @@ class OraclePathServer(PathServerROS):
             self.racelinetangents = torch.as_tensor(tangent_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
             self.racelinenormals = torch.as_tensor(normal_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
             self.raceline = raceline
+        else:
+            try:
+                transform_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", request.new_raceline.header.frame_id, time=Time(), timeout=Duration(seconds=5))
+            except Exception as e:
+                response.message="TF2 lookup error. Underlying exception: %s" % (str(e),)
+                response.error_code=SetRaceline.Response.TF_FAILURE
+                return response
+            self.get_logger().info("Got transform")
+            transformnp : np.ndarray = np.eye(4, dtype=np.float64)
+            transformnp[0:3,3] = np.asarray([transform_msg.transform.translation.x, transform_msg.transform.translation.y, transform_msg.transform.translation.z], dtype=rmat.dtype)
+            transformnp[0:3,0:3] = Rotation.from_quat([transform_msg.transform.rotation.x, transform_msg.transform.rotation.y, transform_msg.transform.rotation.z, transform_msg.transform.rotation.w]).as_matrix().astype(np.float64)
+            transform : torch.Tensor = torch.from_numpy(transformnp).type_as(self.tsamp).to(self.tsamp.device)
+            posemsgs : Sequence[geometry_msgs.msg.PoseStamped] = request.new_raceline.poses
+            racelineposes : torch.Tensor = torch.zeros( (len(posemsgs), 4, 4) , dtype=transform.dtype, device=transform.device)
+            racelineposes[:,0,0]=racelineposes[:,1,1]=racelineposes[:,2,2]=racelineposes[:,3,3]=1.0
+            racelinetimes : torch.Tensor = torch.zeros_like(racelineposes[:,0,0])
+            for i in range(racelineposes.shape[0]):
+                posein : torch.Tensor = torch.eye(4, dtype=racelineposes.dtype, device=racelineposes.device)
+                poseinpositionmsg : geometry_msgs.msg.Point = posemsgs[i].pose.position
+                poseinquaternionmsg : geometry_msgs.msg.Quaternion = posemsgs[i].pose.orientation
+                posein[0:3,3] = torch.as_tensor([poseinpositionmsg.x, poseinpositionmsg.y, poseinpositionmsg.z], dtype=posein.dtype, device=posein.device)
+                posein[0:3,0:3] = torch.as_tensor(Rot.from_quat([poseinquaternionmsg.x, poseinquaternionmsg.y, poseinquaternionmsg.z, poseinquaternionmsg.w]).as_matrix(), dtype=posein.dtype, device=posein.device)
+                racelineposes[i] = torch.matmul(transform, posein)
+                t_i : Time = Time.from_msg(posemsgs[i].header.stamp)
+                racelinetimes[i] = float(t_i.nanoseconds*1E-9)
+            spline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(racelinetimes.cpu().numpy(), racelineposes[:,0:3,3].cpu().numpy(), k=3, bc_type="periodic")
+            splineder : scipy.interpolate.BSpline = spline.derivative()
+
+            velocities : torch.Tensor = torch.as_tensor(splineder(racelinetimes.cpu().numpy()), dtype=transform.dtype, device=transform.device)
+            speeds : torch.Tensor = torch.norm(velocities, p=2, dim=1)
+            
+
+            tangent_vectors = posein[:,0:3,0]
+            tangent_vectors[:,2]=0.0
+            tangent_vectors = tangent_vectors/torch.norm(tangent_vectors, p=2, dim=1)[:,None]
+
+            up : torch.Tensor = torch.zeros_like(tangent_vectors)
+            up[:,2]=1.0
+
+            normal_vectors : torch.Tensor = torch.cross(up, tangent_vectors, dim=1)
+            normal_vectors[:,2]=0.0
+            normal_vectors = normal_vectors/torch.norm(normal_vectors, p=2, dim=1)[:,None]
+
+            tangent_vectors = tangent_vectors[:,[0,1]]
+            normal_vectors = normal_vectors[:,[0,1]]
+            self.racelineframe = str(transform_msg.header.frame_id)
+            self.racelinetimes = racelinetimes[:-1]
+            self.racelinespeeds = speeds[:-1]
+            self.racelinetangents = tangent_vectors[:-1]
+            self.racelinenormals = normal_vectors[:-1]
+            self.raceline = racelineposes[:-1,0:3,3]
         self.rlpublisher.publish(self.rl_as_pathmsg())
         response.message="yay"
         response.error_code=SetRaceline.Response.SUCCESS
