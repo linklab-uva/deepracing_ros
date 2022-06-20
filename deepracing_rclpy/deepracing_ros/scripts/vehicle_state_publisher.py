@@ -37,7 +37,6 @@ import deepracing
 import deepracing_ros, deepracing_ros.convert as C
 import deepracing.protobuf_utils
 from typing import List
-import shapely, shapely.geometry
 import json
 import copy
 
@@ -58,12 +57,11 @@ class DriverStatePublisher(Node):
 
         self.transform : np.ndarray = None
         self.centerline : np.ndarray = None
-        self.ring_length : float = 0.0
-        self.centerline_ring : shapely.geometry.LinearRing = None
+        self.track_length : float = None
 
 
     def sessionDataCB(self, timestamped_session_data : TimestampedPacketSessionData):
-        if self.centerline_ring is None:
+        if self.centerline is None:
             session_data : PacketSessionData = timestamped_session_data.udp_packet
             trackname : str = deepracing.trackNames[session_data.track_id]
             env_track_dirs = os.getenv("F1_TRACK_DIRS", None)
@@ -75,18 +73,18 @@ class DriverStatePublisher(Node):
                 search_dirs.append(os.path.join(ament_index_python.get_package_share_directory("f1_datalogger"), "f1_tracks"))
             except Exception as e:
                 pass
+            self.get_logger().info("Looking for centerline file in: %s" % (",".join(search_dirs),))
             centerline_file : str = deepracing.searchForFile("%s_centerline.json" %(trackname,), search_dirs)
             with open(centerline_file, "r") as f:
                 d : dict = json.load(f)
             centerline : np.ndarray = np.row_stack([d["xin"], d["yin"], d["zin"], np.ones_like(d["zin"])]).astype(np.float64)
             transform_stamped_msg : TransformStamped = self.tf2_buffer.lookup_transform("map", "track", rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=3))
             transform_msg : Transform = transform_stamped_msg.transform
+            self.track_length : float = float(session_data.track_length)
             self.transform = np.eye(4, dtype=centerline.dtype)
             self.transform[0:3,0:3] = Rot.from_quat(np.asarray([transform_msg.rotation.x, transform_msg.rotation.y, transform_msg.rotation.z, transform_msg.rotation.w], dtype=centerline.dtype)).as_matrix()
             self.transform[0:3,3] = np.asarray([transform_msg.translation.x, transform_msg.translation.y, transform_msg.translation.z], dtype=centerline.dtype)
             self.centerline : np.ndarray = np.matmul(self.transform, centerline)[0:3].T.copy()
-            self.centerline_ring : shapely.geometry.LinearRing = shapely.geometry.LinearRing(self.centerline[:,[0,1]].copy().tolist())
-            self.ring_length = self.centerline_ring.length
             self.destroy_subscription(self.session_data_sub)
     def lapDataCB(self, timestamped_lap_data : TimestampedPacketLapData):
         ego_idx = timestamped_lap_data.udp_packet.header.player_car_index
@@ -96,7 +94,7 @@ class DriverStatePublisher(Node):
         self.current_lap_data : PacketLapData = timestamped_lap_data.udp_packet
         self.lap_data_semaphore.release()
     def motionPacketCB(self, timestamped_motion_data : TimestampedPacketMotionData):
-        if self.centerline_ring is None:
+        if self.centerline is None:
             self.get_logger().error("Have not yet received any session data to infer track data")
             return
         ego_idx = timestamped_motion_data.udp_packet.header.player_car_index
@@ -137,10 +135,9 @@ class DriverStatePublisher(Node):
             driver_states.other_agent_velocities.append(Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]))
             driver_states.vehicle_indices.append(car_index)
             driver_states.other_agent_sectors.append(lap_data_packet.lap_data[car_index].sector)
-            ptshapely : shapely.geometry.Point = shapely.geometry.Point(positionmapmsg.x, positionmapmsg.y)
-            ring_distance : float = self.centerline_ring.project(ptshapely)
-            if ring_distance>self.ring_length/2.0:
-                ring_distance-=self.ring_length
+            ring_distance : float = lap_data_packet.lap_data[car_index].lap_distance
+            if ring_distance>self.track_length/2.0:
+                ring_distance-=self.track_length
             driver_states.other_agent_track_progress.append(ring_distance)
             driver_states.other_agent_total_distance.append(lap_data_packet.lap_data[car_index].total_distance)
         #now grab data for ego vehicle
@@ -159,10 +156,9 @@ class DriverStatePublisher(Node):
         angularvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], angularveltrack)
         driver_states.ego_velocity.linear = Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]) 
         driver_states.ego_velocity.angular = Vector3(x=angularvelmap[0], y=angularvelmap[1], z=angularvelmap[2]) 
-        ptshapely : shapely.geometry.Point = shapely.geometry.Point(positionmapmsg.x, positionmapmsg.y)
-        ring_distance : float = self.centerline_ring.project(ptshapely)
-        if ring_distance>self.ring_length/2.0:
-            ring_distance-=self.ring_length
+        ring_distance : float = lap_data_packet.lap_data[ego_idx].lap_distance
+        if ring_distance>self.track_length/2.0:
+            ring_distance-=self.track_length
         driver_states.ego_track_progress=ring_distance
         driver_states.ego_current_sector=lap_data_packet.lap_data[ego_idx].sector
         driver_states.ego_total_distance=lap_data_packet.lap_data[ego_idx].total_distance
