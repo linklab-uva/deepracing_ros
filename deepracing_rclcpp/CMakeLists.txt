@@ -24,7 +24,6 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 # find dependencies
-
 find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(Boost REQUIRED COMPONENTS date_time random thread)
@@ -47,6 +46,10 @@ find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_sensor_msgs REQUIRED)
+#optional stuff
+find_package(ackermann_msgs)
+find_package(cv_bridge)
+find_package(image_transport)
 
 #Provides imported targets for f1_datalogger, armadillo, Boost, Eigen3, Opencv, and (on Windows) vJoy_plusplus
 find_package(f1_datalogger CONFIG REQUIRED)
@@ -90,15 +93,21 @@ ament_target_dependencies(velocity_control_node control_msgs control_toolbox dee
 target_link_libraries(velocity_control_node
  Eigen3::Eigen
 )
-
 set(nodes_to_install_
   tf_updater
   velocity_control_node
 )
 
+if (ackermann_msgs_FOUND)
+  add_executable(race_supervisor_node src/race_supervisor.cpp)
+  ament_target_dependencies(race_supervisor_node ackermann_msgs deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
+  target_link_libraries(race_supervisor_node
+  Eigen3::Eigen
+  )
+  list(APPEND nodes_to_install_ race_supervisor_node)
+endif()
 
-find_package(cv_bridge QUIET)
-find_package(image_transport QUIET)
+
 if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge_FOUND)
   add_executable(ros_rebroadcaster src/ros_rebroadcaster.cpp)
   ament_target_dependencies(ros_rebroadcaster cv_bridge image_transport sensor_msgs std_msgs std_srvs deepracing_msgs)
@@ -119,7 +128,6 @@ if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge
   ament_export_dependencies(image_transport)
   ament_export_dependencies(std_srvs)
 endif()
-find_package(ackermann_msgs)
 if(TARGET f1_datalogger::f1_datalogger_controllers AND ${ackermann_msgs_FOUND})
   add_executable(control_node src/control_node.cpp)
   ament_target_dependencies(control_node ackermann_msgs control_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp)
