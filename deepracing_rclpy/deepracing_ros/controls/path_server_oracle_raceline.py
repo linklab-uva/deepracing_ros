@@ -55,7 +55,7 @@ from deepracing_msgs.msg import BezierCurve
 import deepracing_ros.convert as C
 import deepracing.raceline_utils as raceline_utils
 import pickle as pkl
-from deepracing_msgs.srv import SetRaceline
+from deepracing_msgs.srv import SetRaceline, GetRaceline
 import deepracing_models.math_utils as mu
 import math
 import builtin_interfaces.msg
@@ -105,7 +105,8 @@ class OraclePathServer(PathServerROS):
         bezier_order_param : Parameter = self.declare_parameter("bezier_order", value=7)
         self.bezier_order : int = bezier_order_param.get_parameter_value().integer_value
 
-        self.rlservice : Service = self.create_service(SetRaceline, "set_raceline", self.set_raceline_cb)
+        self.setrlservice : Service = self.create_service(SetRaceline, "set_raceline", self.set_raceline_cb)
+        self.getrlservice : Service = self.create_service(GetRaceline, "get_raceline", self.get_raceline_cb)
         self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, steps=30, dtype=torch.float64, device=self.device).unsqueeze(0)
         self.Msamp : torch.Tensor = mu.bezierM(self.tsamp, self.bezier_order)
         self.Msampsquare : torch.Tensor = torch.square(self.Msamp)
@@ -118,6 +119,32 @@ class OraclePathServer(PathServerROS):
         longitudinalnoise_param : Parameter = self.declare_parameter("longitudinalnoise", value=0.0)
         self.longitudinalnoise : float = longitudinalnoise_param.get_parameter_value().double_value
 
+    def get_raceline_cb(self, request : GetRaceline.Request , response : GetRaceline.Response):
+        self.get_logger().info("GetRaceline callback")
+        if (self.raceline is None) or (self.racelinetangents is None) or (self.racelinenormals is None) or (self.racelinetimes is None) or (self.racelineframe is None):
+            response.message="Raceline not yet set"
+            response.error_code=GetRaceline.Response.NO_RACELINE_RECEIVED
+            return response
+        self.get_logger().info("Getting current raceline from PyTorch tensors")
+        normals3d : torch.Tensor = torch.cat([self.racelinenormals, torch.zeros_like(self.racelinenormals[:,0]).unsqueeze(1)], dim=1)
+        tangents3d : torch.Tensor = torch.cat([self.racelinetangents, torch.zeros_like(self.racelinetangents[:,0]).unsqueeze(1)], dim=1)
+        up3d : torch.Tensor = torch.cross(tangents3d, normals3d, dim=1)
+        up3d = up3d/(torch.norm(up3d, p=2, dim=1)[:,None])
+        rotmats : torch.Tensor = torch.stack([tangents3d, normals3d, up3d], dim=2)
+        response.current_raceline.header.stamp = self.get_clock().now().to_msg()
+        response.current_raceline.header.frame_id = self.racelineframe
+        for i in range(rotmats.shape[0]):
+            p : PoseStamped = PoseStamped()
+            p.header.frame_id = response.current_raceline.header.frame_id
+            fracpart, intpart  = math.modf(self.racelinetimes[i].item())
+            p.header.stamp = builtin_interfaces.msg.Time(sec=int(intpart), nanosec=int(1.0E9*fracpart)) 
+            p.pose.position = geometry_msgs.msg.Point(x=self.raceline[i,0].item(), y=self.raceline[i,1].item(), z=self.raceline[i,2].item())
+            qnp : np.ndarray = Rot.from_matrix(rotmats[i].cpu().numpy()).as_quat()
+            p.pose.orientation = geometry_msgs.msg.Quaternion(x=qnp[0], y=qnp[1], z=qnp[2], w=qnp[3])
+            response.current_raceline.poses.append(p)
+        response.message="Yay"
+        response.error_code=GetRaceline.Response.SUCCESS
+        return response
     def set_raceline_cb(self, request : SetRaceline.Request , response : SetRaceline.Response):
         self.get_logger().info("Processing set raceline request")
         if (request.filename=="") and (len(request.new_raceline.poses)==0):
@@ -200,12 +227,12 @@ class OraclePathServer(PathServerROS):
             
             raceline = torch.ones( (racelinenp.shape[0], 4) , dtype=self.tsamp.dtype, device=self.tsamp.device)
             raceline[:,0:3] = torch.as_tensor(racelinenp, dtype=self.tsamp.dtype, device=self.tsamp.device)
-            self.racelineframe=transform_msg.header.frame_id
-            self.raceline = raceline
+            self.racelineframe = str(transform_msg.header.frame_id)
             self.racelinetimes = torch.as_tensor(racelinet, dtype=self.tsamp.dtype, device=self.tsamp.device)
             self.racelinespeeds = torch.as_tensor(racelinedict["speeds"], dtype=self.tsamp.dtype, device=self.tsamp.device)
             self.racelinetangents = torch.as_tensor(tangent_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
             self.racelinenormals = torch.as_tensor(normal_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
+            self.raceline = raceline
 
             response.message="yay"
             response.error_code=SetRaceline.Response.SUCCESS
