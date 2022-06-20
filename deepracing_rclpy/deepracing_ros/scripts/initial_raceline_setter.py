@@ -43,6 +43,7 @@ def main(args=None):
     serviceclient.wait_for_service()
     req : deepracing_msgs.srv.SetRaceline.Request = deepracing_msgs.srv.SetRaceline.Request()
     req.filename=default_trackname
+    req.frame_id="track"
     rclpy.spin_until_future_complete(node, serviceclient.call_async(req))
 if __name__ == '__main__':
     main()

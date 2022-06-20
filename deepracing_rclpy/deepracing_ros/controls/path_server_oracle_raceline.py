@@ -182,7 +182,7 @@ class OraclePathServer(PathServerROS):
 
             self.get_logger().info("Looking up transform")
             try:
-                transform_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", "track", time=Time(), timeout=Duration(seconds=2))
+                transform_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", request.frame_id, time=Time(), timeout=Duration(seconds=5))
             except Exception as e:
                 response.message="TF2 lookup error. Underlying exception: %s" % (str(e),)
                 response.error_code=SetRaceline.Response.TF_FAILURE
@@ -241,10 +241,10 @@ class OraclePathServer(PathServerROS):
             self.racelinetangents = torch.as_tensor(tangent_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
             self.racelinenormals = torch.as_tensor(normal_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
             self.raceline = raceline
-            self.rlpublisher.publish(self.rl_as_pathmsg())
-            response.message="yay"
-            response.error_code=SetRaceline.Response.SUCCESS
-            return response
+        self.rlpublisher.publish(self.rl_as_pathmsg())
+        response.message="yay"
+        response.error_code=SetRaceline.Response.SUCCESS
+        return response
 
     def getTrajectory(self):
         if (self.racelineframe is None) or (self.raceline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None) or (self.racelinetangents is None) or (self.racelinenormals is None):
