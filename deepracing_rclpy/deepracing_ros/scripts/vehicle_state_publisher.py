@@ -113,9 +113,7 @@ class DriverStatePublisher(Node):
         driver_states : DriverStates = DriverStates(ego_vehicle_index = ego_idx)
         driver_states.header.stamp = timestamped_motion_data.header.stamp
         driver_states.header.frame_id="map"
-        pose_array : PoseArray = PoseArray()
-        pose_array.header.stamp = timestamped_motion_data.header.stamp
-        pose_array.header.frame_id="map"
+        pose_array : PoseArray = PoseArray(header=driver_states.header)
         posetrack : np.ndarray = np.eye(4, dtype=self.centerline.dtype)
         linearveltrack : np.ndarray = np.zeros_like(posetrack[0:3,3])
         for i in range(valid_indices.shape[0]):
