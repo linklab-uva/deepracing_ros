@@ -5,6 +5,8 @@ std_msgs/Header header
 uint8[<=19] vehicle_indices
 #Which sector the other agents are in
 uint8[<=19] other_agent_sectors
+#Race position of the other agents
+uint8[<=19] other_agent_race_positions
 #Pose information for the other agents on the track (could be empty in the case of a time trial)
 geometry_msgs/Pose[<=19] other_agent_poses
 #Linear velocity information for the other agents on the track (could be empty in the case of a time trial)
@@ -18,6 +20,8 @@ float64[<=19] other_agent_total_distance
 uint8 ego_vehicle_index
 #Which sector the ego vehicle is in.
 uint8 ego_current_sector
+#Race position of the ego vehicle
+uint8 ego_race_position
 #Pose information for the ego vehicle. 
 geometry_msgs/Pose ego_pose
 #Linear & Angular velocity information for the ego vehicle (the UDP stream makes the angular component only available for the ego vehicle)

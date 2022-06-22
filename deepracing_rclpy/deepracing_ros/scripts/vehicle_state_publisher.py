@@ -133,6 +133,7 @@ class DriverStatePublisher(Node):
             driver_states.other_agent_velocities.append(Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]))
             driver_states.vehicle_indices.append(car_index)
             driver_states.other_agent_sectors.append(lap_data_packet.lap_data[car_index].sector)
+            driver_states.other_agent_race_positions.append(lap_data_packet.lap_data[car_index].car_position)
             ring_distance : float = lap_data_packet.lap_data[car_index].lap_distance
             if ring_distance>self.track_length/2.0:
                 ring_distance-=self.track_length
@@ -160,6 +161,7 @@ class DriverStatePublisher(Node):
         driver_states.ego_track_progress=ring_distance
         driver_states.ego_current_sector=lap_data_packet.lap_data[ego_idx].sector
         driver_states.ego_total_distance=lap_data_packet.lap_data[ego_idx].total_distance
+        driver_states.ego_race_position=lap_data_packet.lap_data[ego_idx].car_position
         self.pose_array_pub.publish(pose_array)
         self.driver_state_pub.publish(driver_states)
 
