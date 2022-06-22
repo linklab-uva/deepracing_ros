@@ -1,0 +1,5 @@
+### race supervisor config file ###
+/**:
+    ros__parameters:
+        car_names: ["hamilton", "bottas"]
+
