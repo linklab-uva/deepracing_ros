@@ -5,6 +5,9 @@
 #include <std_msgs/msg/float64.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <deepracing_msgs/msg/race_supervisor_state.hpp>
+#include <deepracing_msgs/msg/driver_states.hpp>
+#include <deepracing_msgs/srv/set_raceline.hpp>
+#include <deepracing_msgs/srv/get_raceline.hpp>
 #include <chrono>
 
 using namespace std::chrono_literals;
@@ -28,8 +31,12 @@ class RaceSupervisorNode : public rclcpp::Node
       car_names_descriptor.set__read_only(false);
       car_names_descriptor.set__description("The names of the two cars to manage, each should have it's own namespace of various ROS2 schtuff");
       std::vector<std::string> car_names = declare_parameter<std::vector<std::string>>(car_names_descriptor.name, car_names_descriptor);
-      
-      
+
+      std::string car1_state_topic = "/" + car_names[0] + "/driver_states";
+      m_car1_states_listener_ = create_subscription<deepracing_msgs::msg::DriverStates>(car1_state_topic, rclcpp::QoS{1}, std::bind(&RaceSupervisorNode::car1StatesCB_, this, std::placeholders::_1));
+
+      std::string car2_state_topic = "/" + car_names[1] + "/driver_states";
+      m_car2_states_listener_ = create_subscription<deepracing_msgs::msg::DriverStates>(car2_state_topic, rclcpp::QoS{1}, std::bind(&RaceSupervisorNode::car2StatesCB_, this, std::placeholders::_1));
     }
   private:
     void main_loop()
@@ -37,10 +44,29 @@ class RaceSupervisorNode : public rclcpp::Node
       RCLCPP_DEBUG(this->get_logger(), "Race supervisor main loop");
       m_current_state_publisher_->publish(m_current_state_);
     }
+    void car1StatesCB_(const deepracing_msgs::msg::DriverStates::ConstSharedPtr& car1_states)
+    {
+      m_car1_states_=*car1_states;
+    }
+    void car2StatesCB_(const deepracing_msgs::msg::DriverStates::ConstSharedPtr& car2_states)
+    {
+      m_car2_states_=*car2_states;
+    }
     double m_frequency_;
     rclcpp::TimerBase::SharedPtr m_timer_;
     deepracing_msgs::msg::RaceSupervisorState m_current_state_;
     rclcpp::Publisher<deepracing_msgs::msg::RaceSupervisorState>::SharedPtr m_current_state_publisher_;
+
+    deepracing_msgs::msg::DriverStates m_car1_states_;
+    rclcpp::Subscription<deepracing_msgs::msg::DriverStates>::SharedPtr m_car1_states_listener_;
+    rclcpp::Client<deepracing_msgs::srv::SetRaceline>::SharedPtr m_car1_raceline_setter_;
+    rclcpp::Client<deepracing_msgs::srv::GetRaceline>::SharedPtr m_car1_raceline_getter_;
+
+    deepracing_msgs::msg::DriverStates m_car2_states_;
+    rclcpp::Subscription<deepracing_msgs::msg::DriverStates>::SharedPtr m_car2_states_listener_;
+    rclcpp::Client<deepracing_msgs::srv::SetRaceline>::SharedPtr m_car2_raceline_setter_;
+    rclcpp::Client<deepracing_msgs::srv::GetRaceline>::SharedPtr m_car2_raceline_getter_;
+
 };
 int main(int argc, char *argv[]) {
   rclcpp::init(argc,argv);
