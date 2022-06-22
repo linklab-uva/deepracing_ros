@@ -34,7 +34,7 @@ class RaceSupervisorNode : public rclcpp::Node
   private:
     void main_loop()
     {
-      RCLCPP_INFO(this->get_logger(), "Hello, world!");
+      RCLCPP_DEBUG(this->get_logger(), "Race supervisor main loop");
       m_current_state_publisher_->publish(m_current_state_);
     }
     double m_frequency_;
