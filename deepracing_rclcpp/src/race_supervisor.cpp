@@ -74,6 +74,25 @@ class RaceSupervisorNode : public rclcpp::Node
         RCLCPP_ERROR(this->get_logger(), "No driver state data received");
         return;
       }
+      if (m_car1_states_->ego_race_position < m_car2_states_->ego_race_position)
+      {
+        //car1 is defending (ahead) and car2 is attacking (behind)
+        m_current_state_.defending_car_index=m_car1_states_->ego_vehicle_index; 
+        m_current_state_.attacking_car_index=m_car2_states_->ego_vehicle_index; 
+        m_current_state_.defending_car_name=m_car1_name_;
+        m_current_state_.attacking_car_name=m_car2_name_;
+      }
+      else
+      {
+        //car2 is defending (ahead) and car1 is attacking (behind)
+        m_current_state_.defending_car_index=m_car2_states_->ego_vehicle_index; 
+        m_current_state_.attacking_car_index=m_car1_states_->ego_vehicle_index; 
+        m_current_state_.defending_car_name=m_car2_name_;
+        m_current_state_.attacking_car_name=m_car1_name_;
+      }
+      m_current_state_.description = "Following racelines at full speed. " + m_current_state_.defending_car_name + " is defending and " + m_current_state_.attacking_car_name + " is attacking.";
+      RCLCPP_DEBUG(this->get_logger(), "transition to state: Following racelines");
+      m_current_state_.current_state = deepracing_msgs::msg::RaceSupervisorState::STATE_FOLLOWING_RACELINES;
     }
     void car1_states_CB_(const deepracing_msgs::msg::DriverStates::ConstSharedPtr& car1_states)
     {
