@@ -30,12 +30,27 @@ class RaceSupervisorNode : public rclcpp::Node
       car_names_descriptor.set__read_only(false);
       car_names_descriptor.set__description("The names of the two cars to manage, each should have it's own namespace of various ROS2 schtuff");
       std::vector<std::string> car_names = declare_parameter<std::vector<std::string>>(car_names_descriptor.name, car_names_descriptor);
+      m_car1_name_ = car_names[0];
 
-      std::string car1_state_topic = "/" + car_names[0] + "/driver_states";
+      std::string car1_state_topic = "/" + m_car1_name_ + "/driver_states";
       m_car1_states_listener_ = create_subscription<deepracing_msgs::msg::DriverStates>(car1_state_topic, rclcpp::QoS{1}, std::bind(&RaceSupervisorNode::car1_states_CB_, this, std::placeholders::_1));
+      std::string car1_get_raceline_service = "/" + m_car1_name_ + "/get_raceline";
+      m_car1_raceline_getter_ = create_client<deepracing_msgs::srv::GetRaceline>(car1_get_raceline_service);
+      std::string car1_set_raceline_service = "/" + m_car1_name_ + "/set_raceline";
+      m_car1_raceline_setter_ = create_client<deepracing_msgs::srv::SetRaceline>(car1_set_raceline_service);
+      std::string car1_set_params_service = "/" + m_car1_name_ + "/set_parameters";
+      m_car1_param_setter_ = create_client<rcl_interfaces::srv::SetParameters>(car1_set_params_service);
 
-      std::string car2_state_topic = "/" + car_names[1] + "/driver_states";
+      m_car2_name_ = car_names[1];
+      std::string car2_state_topic = "/" + m_car2_name_ + "/driver_states";
       m_car2_states_listener_ = create_subscription<deepracing_msgs::msg::DriverStates>(car2_state_topic, rclcpp::QoS{1}, std::bind(&RaceSupervisorNode::car2_states_CB_, this, std::placeholders::_1));
+      std::string car2_get_raceline_service = "/" + m_car2_name_ + "/get_raceline";
+      m_car2_raceline_getter_ = create_client<deepracing_msgs::srv::GetRaceline>(car2_get_raceline_service);
+      std::string car2_set_raceline_service = "/" + m_car2_name_ + "/set_raceline";
+      m_car2_raceline_setter_ = create_client<deepracing_msgs::srv::SetRaceline>(car2_set_raceline_service);
+      std::string car2_set_params_service = "/" + m_car2_name_ + "/set_parameters";
+      m_car2_param_setter_ = create_client<rcl_interfaces::srv::SetParameters>(car2_set_params_service);
+
     }
     void start()
     {
@@ -53,31 +68,40 @@ class RaceSupervisorNode : public rclcpp::Node
     }
     void handle_uninitialized()
     {
-
+      RCLCPP_DEBUG(this->get_logger(), "handle_uninitialized");
+      if (!m_car1_states_ || !m_car2_states_)
+      {
+        RCLCPP_ERROR(this->get_logger(), "No driver state data received");
+        return;
+      }
     }
     void car1_states_CB_(const deepracing_msgs::msg::DriverStates::ConstSharedPtr& car1_states)
     {
       RCLCPP_DEBUG(this->get_logger(), "Got some car1 state data");
-      m_car1_states_=*car1_states;
+      m_car1_states_=car1_states;
     }
     void car2_states_CB_(const deepracing_msgs::msg::DriverStates::ConstSharedPtr& car2_states)
     {
       RCLCPP_DEBUG(this->get_logger(), "Got some car2 state data");
-      m_car2_states_=*car2_states;
+      m_car2_states_=car2_states;
     }
     double m_frequency_;
     rclcpp::TimerBase::SharedPtr m_timer_;
     deepracing_msgs::msg::RaceSupervisorState m_current_state_;
     rclcpp::Publisher<deepracing_msgs::msg::RaceSupervisorState>::SharedPtr m_current_state_publisher_;
 
-    deepracing_msgs::msg::DriverStates m_car1_states_;
+    deepracing_msgs::msg::DriverStates::ConstSharedPtr m_car1_states_;
+    std::string m_car1_name_;
     rclcpp::Subscription<deepracing_msgs::msg::DriverStates>::SharedPtr m_car1_states_listener_;
     rclcpp::Client<deepracing_msgs::srv::SetRaceline>::SharedPtr m_car1_raceline_setter_;
+    rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr m_car1_param_setter_;
     rclcpp::Client<deepracing_msgs::srv::GetRaceline>::SharedPtr m_car1_raceline_getter_;
 
-    deepracing_msgs::msg::DriverStates m_car2_states_;
+    deepracing_msgs::msg::DriverStates::ConstSharedPtr m_car2_states_;
+    std::string m_car2_name_;
     rclcpp::Subscription<deepracing_msgs::msg::DriverStates>::SharedPtr m_car2_states_listener_;
     rclcpp::Client<deepracing_msgs::srv::SetRaceline>::SharedPtr m_car2_raceline_setter_;
+    rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr m_car2_param_setter_;
     rclcpp::Client<deepracing_msgs::srv::GetRaceline>::SharedPtr m_car2_raceline_getter_;
 
 };
