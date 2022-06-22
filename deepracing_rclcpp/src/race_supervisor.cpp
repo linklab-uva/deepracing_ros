@@ -20,7 +20,6 @@ class RaceSupervisorNode : public rclcpp::Node
      : rclcpp::Node("race_supervisor", options)
     {
       m_frequency_ = declare_parameter<double>("frequency", 10.0);
-      m_timer_ = create_wall_timer(std::chrono::microseconds((int)std::round(1.0E6/m_frequency_)), std::bind(&RaceSupervisorNode::main_loop, this));
       m_current_state_.description = "Uninitialized";
       m_current_state_.current_state = deepracing_msgs::msg::RaceSupervisorState::STATE_UNINITIALIZED;
       m_current_state_publisher_ = create_publisher<deepracing_msgs::msg::RaceSupervisorState>("race_supervisor_state", 1);
@@ -33,23 +32,37 @@ class RaceSupervisorNode : public rclcpp::Node
       std::vector<std::string> car_names = declare_parameter<std::vector<std::string>>(car_names_descriptor.name, car_names_descriptor);
 
       std::string car1_state_topic = "/" + car_names[0] + "/driver_states";
-      m_car1_states_listener_ = create_subscription<deepracing_msgs::msg::DriverStates>(car1_state_topic, rclcpp::QoS{1}, std::bind(&RaceSupervisorNode::car1StatesCB_, this, std::placeholders::_1));
+      m_car1_states_listener_ = create_subscription<deepracing_msgs::msg::DriverStates>(car1_state_topic, rclcpp::QoS{1}, std::bind(&RaceSupervisorNode::car1_states_CB_, this, std::placeholders::_1));
 
       std::string car2_state_topic = "/" + car_names[1] + "/driver_states";
-      m_car2_states_listener_ = create_subscription<deepracing_msgs::msg::DriverStates>(car2_state_topic, rclcpp::QoS{1}, std::bind(&RaceSupervisorNode::car2StatesCB_, this, std::placeholders::_1));
+      m_car2_states_listener_ = create_subscription<deepracing_msgs::msg::DriverStates>(car2_state_topic, rclcpp::QoS{1}, std::bind(&RaceSupervisorNode::car2_states_CB_, this, std::placeholders::_1));
+    }
+    void start()
+    {
+      m_timer_ = create_wall_timer(std::chrono::microseconds((uint64_t)std::round(1.0E6/m_frequency_)), std::bind(&RaceSupervisorNode::main_loop, this));
     }
   private:
     void main_loop()
     {
       RCLCPP_DEBUG(this->get_logger(), "Race supervisor main loop");
+      if (m_current_state_.current_state==deepracing_msgs::msg::RaceSupervisorState::STATE_UNINITIALIZED)
+      {
+        handle_uninitialized();
+      }
       m_current_state_publisher_->publish(m_current_state_);
     }
-    void car1StatesCB_(const deepracing_msgs::msg::DriverStates::ConstSharedPtr& car1_states)
+    void handle_uninitialized()
     {
+
+    }
+    void car1_states_CB_(const deepracing_msgs::msg::DriverStates::ConstSharedPtr& car1_states)
+    {
+      RCLCPP_DEBUG(this->get_logger(), "Got some car1 state data");
       m_car1_states_=*car1_states;
     }
-    void car2StatesCB_(const deepracing_msgs::msg::DriverStates::ConstSharedPtr& car2_states)
+    void car2_states_CB_(const deepracing_msgs::msg::DriverStates::ConstSharedPtr& car2_states)
     {
+      RCLCPP_DEBUG(this->get_logger(), "Got some car2 state data");
       m_car2_states_=*car2_states;
     }
     double m_frequency_;
@@ -84,5 +97,6 @@ int main(int argc, char *argv[]) {
   }
   std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> executor( new rclcpp::executors::MultiThreadedExecutor(rclcpp::ExecutorOptions(), num_threads) );
   executor->add_node(node);
+  node->start();
   executor->spin();
 }
