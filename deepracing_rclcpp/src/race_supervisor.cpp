@@ -18,14 +18,29 @@ class RaceSupervisorNode : public rclcpp::Node
     {
       m_frequency_ = declare_parameter<double>("frequency", 10.0);
       m_timer_ = create_wall_timer(std::chrono::microseconds((int)std::round(1.0E6/m_frequency_)), std::bind(&RaceSupervisorNode::main_loop, this));
+      m_current_state_.description = "Uninitialized";
+      m_current_state_.current_state = deepracing_msgs::msg::RaceSupervisorState::STATE_UNINITIALIZED;
+      m_current_state_publisher_ = create_publisher<deepracing_msgs::msg::RaceSupervisorState>("race_supervisor_state", 1);
+      
+      rcl_interfaces::msg::ParameterDescriptor car_names_descriptor;
+      car_names_descriptor.set__name("car_names");
+      car_names_descriptor.set__type(rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY);
+      car_names_descriptor.set__read_only(false);
+      car_names_descriptor.set__description("The names of the two cars to manage, each should have it's own namespace of various ROS2 schtuff");
+      std::vector<std::string> car_names = declare_parameter<std::vector<std::string>>(car_names_descriptor.name, car_names_descriptor);
+      
+      
     }
   private:
     void main_loop()
     {
       RCLCPP_INFO(this->get_logger(), "Hello, world!");
+      m_current_state_publisher_->publish(m_current_state_);
     }
     double m_frequency_;
     rclcpp::TimerBase::SharedPtr m_timer_;
+    deepracing_msgs::msg::RaceSupervisorState m_current_state_;
+    rclcpp::Publisher<deepracing_msgs::msg::RaceSupervisorState>::SharedPtr m_current_state_publisher_;
 };
 int main(int argc, char *argv[]) {
   rclcpp::init(argc,argv);
