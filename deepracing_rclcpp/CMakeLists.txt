@@ -100,7 +100,7 @@ set(nodes_to_install_
 
 if (ackermann_msgs_FOUND)
   add_executable(race_supervisor_node src/race_supervisor.cpp)
-  ament_target_dependencies(race_supervisor_node ackermann_msgs deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
+  ament_target_dependencies(race_supervisor_node ackermann_msgs deepracing_msgs geometry_msgs message_filters nav_msgs random_numbers rclcpp std_msgs tf2_eigen)
   target_link_libraries(race_supervisor_node
   Eigen3::Eigen
   )

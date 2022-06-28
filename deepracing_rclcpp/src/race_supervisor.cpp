@@ -1,4 +1,5 @@
 #include <rclcpp/rclcpp.hpp>
+#include <random_numbers/random_numbers.h>
 #include <deepracing_msgs/msg/timestamped_packet_car_telemetry_data.hpp>
 #include <deepracing_msgs/msg/timestamped_packet_car_status_data.hpp>
 #include <ackermann_msgs/msg/ackermann_drive_stamped.hpp>
@@ -104,6 +105,7 @@ class RaceSupervisorNode : public rclcpp::Node
       RCLCPP_DEBUG(this->get_logger(), "Got some car2 state data");
       m_car2_states_=car2_states;
     }
+    random_numbers::RandomNumberGenerator m_rng_;
     double m_frequency_;
     rclcpp::TimerBase::SharedPtr m_timer_;
     deepracing_msgs::msg::RaceSupervisorState m_current_state_;
