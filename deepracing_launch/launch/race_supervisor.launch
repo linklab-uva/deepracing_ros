@@ -1,8 +1,5 @@
 <launch>
-   <arg name="car1name" default="hamilton"/>
-   <arg name="car2name" default="bottas"/>
    <node pkg="deepracing_rclcpp" exec="race_supervisor_node" name="race_supervisor_node" output="screen">
-        <param name="car1name" value="$(var car1name)"/>
-        <param name="car2name" value="$(var car2name)"/>
+        <param from="$(find-pkg-share deepracing_launch)/config/race_supervisor.yaml"/>
    </node>
 </launch>
