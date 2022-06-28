@@ -7,6 +7,8 @@ uint8[<=19] vehicle_indices
 uint8[<=19] other_agent_sectors
 #Race position of the other agents
 uint8[<=19] other_agent_race_positions
+#Lap number of the other agents
+uint8[<=19] other_agent_lap_numbers
 #Pose information for the other agents on the track (could be empty in the case of a time trial)
 geometry_msgs/Pose[<=19] other_agent_poses
 #Linear velocity information for the other agents on the track (could be empty in the case of a time trial)
@@ -22,6 +24,8 @@ uint8 ego_vehicle_index
 uint8 ego_current_sector
 #Race position of the ego vehicle
 uint8 ego_race_position
+#Lap number of the ego vehicle
+uint8 ego_lap_number
 #Pose information for the ego vehicle. 
 geometry_msgs/Pose ego_pose
 #Linear & Angular velocity information for the ego vehicle (the UDP stream makes the angular component only available for the ego vehicle)
