@@ -36,7 +36,7 @@ from threading import Semaphore
 import deepracing
 import deepracing_ros, deepracing_ros.convert as C
 import deepracing.protobuf_utils
-from typing import List
+from typing import List, Sequence
 import json
 import copy
 
@@ -109,7 +109,8 @@ class DriverStatePublisher(Node):
             return
         lap_data_packet : PacketLapData = copy.deepcopy(self.current_lap_data)
         self.lap_data_semaphore.release()
-        valid_indices : np.ndarray = np.asarray( [i for i in range(len(lap_data_packet.lap_data)) if ( (lap_data_packet.lap_data[i].result_status not in {0,1}) and (not i==ego_idx) ) ] , dtype=np.int32)
+        lap_data_array : Sequence[LapData] = lap_data_packet.lap_data
+        valid_indices : np.ndarray = np.asarray( [i for i in range(len(lap_data_array)) if ( (lap_data_array[i].result_status not in {0,1}) and (not i==ego_idx) ) ] , dtype=np.int32)
         driver_states : DriverStates = DriverStates(ego_vehicle_index = ego_idx)
         driver_states.header.stamp = timestamped_motion_data.header.stamp
         driver_states.header.frame_id="map"
@@ -132,13 +133,14 @@ class DriverStatePublisher(Node):
             linearvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], linearveltrack)
             driver_states.other_agent_velocities.append(Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]))
             driver_states.vehicle_indices.append(car_index)
-            driver_states.other_agent_sectors.append(lap_data_packet.lap_data[car_index].sector)
-            driver_states.other_agent_race_positions.append(lap_data_packet.lap_data[car_index].car_position)
-            ring_distance : float = lap_data_packet.lap_data[car_index].lap_distance
+            driver_states.other_agent_sectors.append(lap_data_array[car_index].sector)
+            driver_states.other_agent_race_positions.append(lap_data_array[car_index].car_position)
+            driver_states.other_agent_race_positions.append(lap_data_array[car_index].current_lap_num)
+            ring_distance : float = lap_data_array[car_index].lap_distance
             if ring_distance>self.track_length/2.0:
                 ring_distance-=self.track_length
             driver_states.other_agent_track_progress.append(ring_distance)
-            driver_states.other_agent_total_distance.append(lap_data_packet.lap_data[car_index].total_distance)
+            driver_states.other_agent_total_distance.append(lap_data_array[car_index].total_distance)
         #now grab data for ego vehicle
         ego_rotation = C.extractOrientation(udp_packet)
         posetrack[0:3,0:3] = ego_rotation.as_matrix()
@@ -155,13 +157,14 @@ class DriverStatePublisher(Node):
         angularvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], angularveltrack)
         driver_states.ego_velocity.linear = Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]) 
         driver_states.ego_velocity.angular = Vector3(x=angularvelmap[0], y=angularvelmap[1], z=angularvelmap[2]) 
-        ring_distance : float = lap_data_packet.lap_data[ego_idx].lap_distance
+        ring_distance : float = lap_data_array[ego_idx].lap_distance
         if ring_distance>self.track_length/2.0:
             ring_distance-=self.track_length
         driver_states.ego_track_progress=ring_distance
-        driver_states.ego_current_sector=lap_data_packet.lap_data[ego_idx].sector
-        driver_states.ego_total_distance=lap_data_packet.lap_data[ego_idx].total_distance
-        driver_states.ego_race_position=lap_data_packet.lap_data[ego_idx].car_position
+        driver_states.ego_current_sector= lap_data_array[ego_idx].sector
+        driver_states.ego_total_distance= lap_data_array[ego_idx].total_distance
+        driver_states.ego_race_position= lap_data_array[ego_idx].car_position
+        driver_states.ego_lap_number = lap_data_array[car_index].current_lap_num
         self.pose_array_pub.publish(pose_array)
         self.driver_state_pub.publish(driver_states)
 
