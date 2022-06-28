@@ -115,8 +115,7 @@ class RaceSupervisorNode : public rclcpp::Node
     }
     void handle_following_racelines()
     {
-      double random = m_rng_.uniform01();
-      if( random<0.035)
+      if( this->get_clock()->now() > m_time_of_next_overtake_)
       {
         RCLCPP_INFO(this->get_logger(), "Starting an overtake.");
         if (m_car1_states_->ego_race_position < m_car2_states_->ego_race_position)
@@ -149,7 +148,7 @@ class RaceSupervisorNode : public rclcpp::Node
         attacker_states = m_car2_states_;
       }
       double offset = attacker_states->ego_total_distance - attacker_states->other_agent_total_distance.at(0);
-      if ((attacker_states->ego_race_position < attacker_states->other_agent_race_positions.at(0)) && offset>75.0)
+      if ((attacker_states->ego_race_position < attacker_states->other_agent_race_positions.at(0)) && offset>30.0)
       {
         //overtake is done, transition back to follow raceline and swap roles.
         set_car1_speedfactor(1.0);
@@ -159,6 +158,8 @@ class RaceSupervisorNode : public rclcpp::Node
         m_current_state_.attacking_car_name=temp;
         m_current_state_.description = "Following racelines at full speed. " + m_current_state_.defending_car_name + " is defending and " + m_current_state_.attacking_car_name + " is attacking.";
         RCLCPP_DEBUG(this->get_logger(), "transition to state: Following racelines");
+        double deltat = 5.0 + 5.0*m_rng_.uniform01();
+        m_time_of_next_overtake_ = this->get_clock()->now() + rclcpp::Duration((uint64_t)deltat*1.0E9);
         m_current_state_.current_state=deepracing_msgs::msg::RaceSupervisorState::STATE_FOLLOWING_RACELINES;
       }
     }
@@ -226,6 +227,8 @@ class RaceSupervisorNode : public rclcpp::Node
       RCLCPP_DEBUG(this->get_logger(), "transition to state: Following racelines");
       set_car1_speedfactor(1.0);
       set_car2_speedfactor(1.0);
+      double deltat = 5.0 + 5.0*m_rng_.uniform01();
+      m_time_of_next_overtake_ = this->get_clock()->now() + rclcpp::Duration((uint64_t)deltat*1.0E9);
       m_current_state_.current_state = deepracing_msgs::msg::RaceSupervisorState::STATE_FOLLOWING_RACELINES;
     }
     void car1_states_CB_(const deepracing_msgs::msg::DriverStates::SharedPtr car1_states)
@@ -238,6 +241,7 @@ class RaceSupervisorNode : public rclcpp::Node
       RCLCPP_DEBUG(this->get_logger(), "Got some car2 state data");
       m_car2_states_=car2_states;
     }
+    rclcpp::Time m_time_of_next_overtake_;
     random_numbers::RandomNumberGenerator m_rng_;
     double m_frequency_;
     rclcpp::TimerBase::SharedPtr m_timer_;
