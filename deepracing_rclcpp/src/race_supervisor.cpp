@@ -21,7 +21,7 @@ class RaceSupervisorNode : public rclcpp::Node
 
   public:
     RaceSupervisorNode( const rclcpp::NodeOptions & options )
-     : rclcpp::Node("race_supervisor", options)
+     : rclcpp::Node("race_supervisor", options), m_time_of_next_overtake_(0)
     {
       m_frequency_ = declare_parameter<double>("frequency", 10.0);
       m_current_state_.description = "Uninitialized";
@@ -115,6 +115,11 @@ class RaceSupervisorNode : public rclcpp::Node
     }
     void handle_following_racelines()
     {
+      if (m_car1_states_->ego_lap_number<2  ||  m_car2_states_->ego_lap_number<2)
+      {
+        RCLCPP_DEBUG(this->get_logger(), "don't start overtaking until lap 2");
+        return;
+      }
       if( this->get_clock()->now() > m_time_of_next_overtake_)
       {
         RCLCPP_INFO(this->get_logger(), "Starting an overtake.");
@@ -158,7 +163,7 @@ class RaceSupervisorNode : public rclcpp::Node
         m_current_state_.attacking_car_name=temp;
         m_current_state_.description = "Following racelines at full speed. " + m_current_state_.defending_car_name + " is defending and " + m_current_state_.attacking_car_name + " is attacking.";
         RCLCPP_DEBUG(this->get_logger(), "transition to state: Following racelines");
-        double deltat = 5.0 + 5.0*m_rng_.uniform01();
+        double deltat = 10.0*(1.0 + m_rng_.uniform01());
         m_time_of_next_overtake_ = this->get_clock()->now() + rclcpp::Duration((uint64_t)deltat*1.0E9);
         m_current_state_.current_state=deepracing_msgs::msg::RaceSupervisorState::STATE_FOLLOWING_RACELINES;
       }
