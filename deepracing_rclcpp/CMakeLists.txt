@@ -28,7 +28,6 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(Boost REQUIRED COMPONENTS date_time random thread)
 find_package(control_msgs REQUIRED)
-find_package(control_toolbox REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)
 find_package(jsoncpp CONFIG REQUIRED)
@@ -50,6 +49,7 @@ find_package(tf2_sensor_msgs REQUIRED)
 find_package(ackermann_msgs)
 find_package(cv_bridge)
 find_package(image_transport)
+find_package(control_toolbox)
 
 #Provides imported targets for f1_datalogger, armadillo, Boost, Eigen3, Opencv, and (on Windows) vJoy_plusplus
 find_package(f1_datalogger CONFIG REQUIRED)
@@ -88,15 +88,18 @@ else()
   target_link_libraries(tf_updater jsoncpp_lib)
 endif()
 
-add_executable(velocity_control_node src/velocity_control_node.cpp)
-ament_target_dependencies(velocity_control_node control_msgs control_toolbox deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
-target_link_libraries(velocity_control_node
- Eigen3::Eigen
-)
 set(nodes_to_install_
   tf_updater
-  velocity_control_node
 )
+
+if(${control_toolbox_FOUND})
+  add_executable(velocity_control_node src/velocity_control_node.cpp)
+  ament_target_dependencies(velocity_control_node control_msgs control_toolbox deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
+  target_link_libraries(velocity_control_node
+  Eigen3::Eigen
+  )
+  list(APPEND nodes_to_install_ velocity_control_node)
+endif()
 
 if (ackermann_msgs_FOUND)
   add_executable(race_supervisor_node src/race_supervisor.cpp)
@@ -128,7 +131,7 @@ if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge
   ament_export_dependencies(image_transport)
   ament_export_dependencies(std_srvs)
 endif()
-if(TARGET f1_datalogger::f1_datalogger_controllers AND ${ackermann_msgs_FOUND})
+if(TARGET f1_datalogger::f1_datalogger_controllers AND ${ackermann_msgs_FOUND} AND ${control_toolbox_FOUND})
   add_executable(control_node src/control_node.cpp)
   ament_target_dependencies(control_node ackermann_msgs control_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp)
   target_link_libraries(control_node
