@@ -44,6 +44,17 @@ def main(args=None):
     req : deepracing_msgs.srv.SetRaceline.Request = deepracing_msgs.srv.SetRaceline.Request()
     req.filename=default_trackname
     req.frame_id="track"
-    rclpy.spin_until_future_complete(node, serviceclient.call_async(req))
+    success = False
+    while not success:
+        future = serviceclient.call_async(req)
+        rclpy.spin_until_future_complete(node, future)
+        response : deepracing_msgs.srv.SetRaceline.Response = future.result()
+        if response.error_code==deepracing_msgs.srv.SetRaceline.Response.SUCCESS:
+            success = True
+            node.get_logger().info("Successfully set the raceline")
+        else:
+            node.get_logger().error("Unable to set the raceline. Error code: %d. Error message: %s" % (response.error_code, response.message))
+
+
 if __name__ == '__main__':
     main()
