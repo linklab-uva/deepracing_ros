@@ -164,7 +164,7 @@ class DriverStatePublisher(Node):
         driver_states.ego_current_sector= lap_data_array[ego_idx].sector
         driver_states.ego_total_distance= lap_data_array[ego_idx].total_distance
         driver_states.ego_race_position= lap_data_array[ego_idx].car_position
-        driver_states.ego_lap_number = lap_data_array[car_index].current_lap_num
+        driver_states.ego_lap_number = lap_data_array[ego_idx].current_lap_num
         self.pose_array_pub.publish(pose_array)
         self.driver_state_pub.publish(driver_states)
 
