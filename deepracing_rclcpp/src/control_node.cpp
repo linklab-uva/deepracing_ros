@@ -22,6 +22,7 @@ class ControlNode : public rclcpp::Node
       m_safe_steer_max_ = declare_parameter<double>("safe_steer_max", m_full_lock_left_);
       m_safe_steer_min_ = declare_parameter<double>("safe_steer_min", m_full_lock_right_);
       m_frequency_ = declare_parameter<double>("frequency", 25.0);
+      m_device_id_ = (unsigned int)declare_parameter<int>("device_id", 1);
 
       rcl_interfaces::msg::ParameterDescriptor scale_factor_description;
       scale_factor_description.name="scale_factor";
@@ -51,7 +52,7 @@ class ControlNode : public rclcpp::Node
       get_parameter_or<double>("i_clamp_min", i_clamp_min, -1.0);
       get_parameter_or<double>("i_clamp_max", i_clamp_max, 1.0);
       get_parameter_or<bool>("antiwindup", antiwindup, true);
-      m_game_interface_ = deepf1::F1InterfaceFactory::getDefaultInterface();
+      m_game_interface_ = deepf1::F1InterfaceFactory::getDefaultInterface(m_device_id_);
       m_game_interface_->setCommands(deepf1::F1ControlCommand());
     
       m_velocity_pid_->initPid(p, i, d, i_clamp_min, i_clamp_max, antiwindup);
@@ -219,6 +220,7 @@ class ControlNode : public rclcpp::Node
     }
     double m_current_speed_, m_safe_steer_max_, m_safe_steer_min_, m_safe_vel_, m_full_lock_left_, m_full_lock_right_, m_external_setpoint_, m_frequency_, m_scale_factor_;
     bool m_drs_allowed_, m_drs_enabled_, m_use_external_setpoint_;
+    unsigned int m_device_id_;
     std::shared_ptr<control_toolbox::PidROS> m_velocity_pid_;
     std::shared_ptr<deepf1::F1Interface> m_game_interface_;
     ackermann_msgs::msg::AckermannDriveStamped m_setpoints;
