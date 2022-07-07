@@ -88,7 +88,7 @@ class EKFMonitor(rclpy.node.Node):
         current_angular_vel : np.ndarray = np.matmul(mapToTrack[0:3,0:3], deepracing_ros.convert.extractAngularVelocity(motion_data.udp_packet))
         current_accel : np.ndarray = np.matmul(poseMap[0:3,0:3], deepracing_ros.convert.extractAcceleration(motion_data.udp_packet))
         state_to_pub : robot_localization.msg.State = robot_localization.msg.State()
-        state_to_pub.update_vector = [True for asdf in range(15)]
+        state_to_pub.update_vector = [True] * 15
         state_to_pub.pose = geometry_msgs.msg.PoseWithCovarianceStamped(header=motion_data.header)
         state_to_pub.twist = geometry_msgs.msg.TwistWithCovarianceStamped(header=motion_data.header)
         state_to_pub.accel = geometry_msgs.msg.AccelWithCovarianceStamped(header=motion_data.header)
