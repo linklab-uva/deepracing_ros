@@ -41,6 +41,7 @@ setup(
             'vehicle_state_publisher = %s.scripts.vehicle_state_publisher:main' % (python_pkg_name),
             'bezier_curve_pure_pursuit = %s.scripts.bezier_curve_pure_pursuit:main' % (python_pkg_name),
             'boundary_publisher = %s.scripts.boundary_publisher:main' % (python_pkg_name),
+            'ekf_monitor = %s.scripts.ekf_monitor:main' % (python_pkg_name),
         ],
     },
 )
