@@ -10,8 +10,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from email.header import Header
-from turtle import shape
 import ament_index_python
 import os
 import rclpy
