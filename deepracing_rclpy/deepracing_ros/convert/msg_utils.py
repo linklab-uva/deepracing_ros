@@ -140,7 +140,7 @@ def extractAcceleration(packet : drmsgs.PacketMotionData , car_index = None) -> 
    else:
       idx = car_index
    motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
-   acceleration = np.array( (motion_data.g_force_longitudinal, motion_data.g_force_lateral, motion_data.g_force_vertical), dtype=np.float64)
+   acceleration = 9.8*np.array( (motion_data.g_force_longitudinal, motion_data.g_force_lateral, motion_data.g_force_vertical), dtype=np.float64)
    return acceleration 
 
 def extractAngularVelocity(packet : drmsgs.PacketMotionData) -> np.ndarray:
