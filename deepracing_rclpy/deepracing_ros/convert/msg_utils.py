@@ -134,6 +134,19 @@ def arrayToPointCloud2(pointsarray : Union[torch.Tensor, np.ndarray], field_name
    pc2out.data = points.flatten().tobytes()
    return pc2out
 
+def extractAcceleration(packet : drmsgs.PacketMotionData , car_index = None) -> np.ndarray:
+   if car_index is None:
+      idx = packet.header.player_car_index
+   else:
+      idx = car_index
+   motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
+   acceleration = np.array( (motion_data.g_force_longitudinal, motion_data.g_force_lateral, motion_data.g_force_vertical), dtype=np.float64)
+   return acceleration 
+
+def extractAngularVelocity(packet : drmsgs.PacketMotionData) -> np.ndarray:
+   angular_velocity = np.array( (packet.angular_velocity.x, packet.angular_velocity.y, packet.angular_velocity.z), dtype=np.float64)
+   return angular_velocity 
+
 def extractVelocity(packet : drmsgs.PacketMotionData , car_index = None) -> np.ndarray:
    if car_index is None:
       idx = packet.header.player_car_index
@@ -173,14 +186,12 @@ def extractOrientation(packet : drmsgs.PacketMotionData, car_index = None) -> sc
    rotationmat = np.column_stack([forwardvector,-rightvector,upvector])
    return scipy.spatial.transform.Rotation.from_matrix(rotationmat)
 
-def extractPose(packet : drmsgs.PacketMotionData, car_index = None):
+def extractPose(packet : drmsgs.PacketMotionData, car_index = None) -> Tuple[np.ndarray, scipy.spatial.transform.Rotation]:
    if car_index is None:
       idx = packet.header.player_car_index
    else:
       idx = car_index
-   p = extractPosition(packet, car_index=idx)
-   q = extractOrientation(packet, car_index=idx)
-   return ( p, q )
+   return extractPosition(packet, car_index=idx).astype(np.float64), extractOrientation(packet, car_index=idx)
 
 def toBezierCurveMsg(control_points : torch.Tensor, header: Header, covars = None, delta_t : Duration = Duration()):
    ptsnp = control_points.detach().cpu().numpy()
