@@ -89,12 +89,12 @@ class RaceSupervisorNode : public rclcpp::Node
       fullspeed.set__name("scale_factor");
       fullspeed.set__value(fullspeedval);
       paramsreq->parameters.push_back(fullspeed);
-      RCLCPP_INFO(this->get_logger(), "Calling set params service");
+      RCLCPP_DEBUG(this->get_logger(), "Calling set params service");
       m_car1_param_setter_->async_send_request(paramsreq, std::bind(&RaceSupervisorNode::handle_car1_serviceresponse, this, std::placeholders::_1));
     }
     void handle_car1_serviceresponse(rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedFuture future)
     {
-      RCLCPP_INFO(this->get_logger(), "Got result. Successful: %u Reason: %s", (uint8_t)future.get()->results.at(0).successful, future.get()->results.at(0).reason.c_str());
+      RCLCPP_DEBUG(this->get_logger(), "Got result. Successful: %u Reason: %s", (uint8_t)future.get()->results.at(0).successful, future.get()->results.at(0).reason.c_str());
     }
     void set_car2_speedfactor(double factor)
     {
@@ -106,12 +106,12 @@ class RaceSupervisorNode : public rclcpp::Node
       fullspeed.set__name("scale_factor");
       fullspeed.set__value(fullspeedval);
       paramsreq->parameters.push_back(fullspeed);
-      RCLCPP_INFO(this->get_logger(), "Calling set params service");
+      RCLCPP_DEBUG(this->get_logger(), "Calling set params service");
       m_car2_param_setter_->async_send_request(paramsreq, std::bind(&RaceSupervisorNode::handle_car2_serviceresponse, this, std::placeholders::_1));
     }
     void handle_car2_serviceresponse(rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedFuture future)
     {
-      RCLCPP_INFO(this->get_logger(), "Got result. Successful: %u Reason: %s", (uint8_t)future.get()->results.at(0).successful, future.get()->results.at(0).reason.c_str());
+      RCLCPP_DEBUG(this->get_logger(), "Got result. Successful: %u Reason: %s", (uint8_t)future.get()->results.at(0).successful, future.get()->results.at(0).reason.c_str());
     }
     void handle_following_racelines()
     {
@@ -122,7 +122,7 @@ class RaceSupervisorNode : public rclcpp::Node
       }
       if( this->get_clock()->now() > m_time_of_next_overtake_)
       {
-        RCLCPP_INFO(this->get_logger(), "Starting an overtake.");
+        RCLCPP_DEBUG(this->get_logger(), "Starting an overtake.");
         if (m_car1_states_->ego_race_position < m_car2_states_->ego_race_position)
         {
           //car1 is defending (ahead) and car2 is attacking (behind)
@@ -164,7 +164,7 @@ class RaceSupervisorNode : public rclcpp::Node
         m_current_state_.description = "Following racelines at full speed. " + m_current_state_.defending_car_name + " is defending and " + m_current_state_.attacking_car_name + " is attacking.";
         RCLCPP_DEBUG(this->get_logger(), "transition to state: Following racelines");
         double deltat = 10.0*(1.0 + m_rng_.uniform01());
-        m_time_of_next_overtake_ = this->get_clock()->now() + rclcpp::Duration((uint64_t)deltat*1.0E9);
+        m_time_of_next_overtake_ = this->get_clock()->now() + rclcpp::Duration::from_seconds(deltat);
         m_current_state_.current_state=deepracing_msgs::msg::RaceSupervisorState::STATE_FOLLOWING_RACELINES;
       }
     }
@@ -233,7 +233,7 @@ class RaceSupervisorNode : public rclcpp::Node
       set_car1_speedfactor(1.0);
       set_car2_speedfactor(1.0);
       double deltat = 5.0 + 5.0*m_rng_.uniform01();
-      m_time_of_next_overtake_ = this->get_clock()->now() + rclcpp::Duration((uint64_t)deltat*1.0E9);
+      m_time_of_next_overtake_ = this->get_clock()->now() + rclcpp::Duration::from_seconds(deltat);
       m_current_state_.current_state = deepracing_msgs::msg::RaceSupervisorState::STATE_FOLLOWING_RACELINES;
     }
     void car1_states_CB_(const deepracing_msgs::msg::DriverStates::SharedPtr car1_states)
