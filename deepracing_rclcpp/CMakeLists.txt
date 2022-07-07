@@ -92,7 +92,7 @@ set(nodes_to_install_
   tf_updater
 )
 
-if(${control_toolbox_FOUND})
+if(control_toolbox_FOUND)
   add_executable(velocity_control_node src/velocity_control_node.cpp)
   ament_target_dependencies(velocity_control_node control_msgs control_toolbox deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
   target_link_libraries(velocity_control_node
@@ -131,7 +131,7 @@ if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge
   ament_export_dependencies(image_transport)
   ament_export_dependencies(std_srvs)
 endif()
-if(TARGET f1_datalogger::f1_datalogger_controllers AND ${ackermann_msgs_FOUND} AND ${control_toolbox_FOUND})
+if(TARGET f1_datalogger::f1_datalogger_controllers AND ackermann_msgs_FOUND AND control_toolbox_FOUND)
   add_executable(control_node src/control_node.cpp)
   ament_target_dependencies(control_node ackermann_msgs control_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp)
   target_link_libraries(control_node
