@@ -51,6 +51,7 @@ class EKFMonitor(rclpy.node.Node):
         self.twist_cov[3:,3:] = np.asarray(covariance_dict["angular_vel_cov"], dtype=self.twist_cov.dtype).reshape(self.twist_cov[0:3,0:3].shape)
         self.accel_cov : np.ndarray = np.eye(6, dtype=self.pose_cov.dtype)
         self.accel_cov[0:3,0:3] = np.asarray(covariance_dict["linear_accel_cov"], dtype=self.accel_cov.dtype).reshape(self.accel_cov[0:3,0:3].shape)
+        self.accel_cov[3:,3:] = -np.ones_like(self.accel_cov[3:,3:])
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time=rclpy.duration.Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
