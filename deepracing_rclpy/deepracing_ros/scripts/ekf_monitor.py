@@ -59,7 +59,14 @@ class EKFMonitor(rclpy.node.Node):
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
     def timerCB(self):
-        pass
+        if self.prev_motion_data is None:
+            return
+        wallclocknow : rclpy.time.Time = self.get_clock().now()
+        dt : rclpy.duration.Duration = wallclocknow - rclpy.time.Time.from_msg(self.prev_motion_data.header.stamp)
+        dtfloat : float = float(dt.nanoseconds*1.0E-9)
+        if dtfloat>1.5:
+            self.get_logger().info("Pause detected, resetting EKF state")
+            self.publishState(self.prev_motion_data)
     def odomCB(self, odom : nav_msgs.msg.Odometry):
         pass
     def odomFilteredCB(self, odom_filtered : nav_msgs.msg.Odometry):
