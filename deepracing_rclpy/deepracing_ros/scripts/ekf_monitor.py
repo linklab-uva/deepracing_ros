@@ -24,6 +24,7 @@ import rclpy.subscription
 import rclpy.logging  
 import rclpy.duration
 import rclpy.time
+import nav_msgs.msg
 import geometry_msgs.msg
 import robot_localization.msg
 import deepracing_msgs.msg  
@@ -38,6 +39,8 @@ class EKFMonitor(rclpy.node.Node):
     def __init__(self, name="ekf_monitor"):
         super(EKFMonitor, self).__init__(name)
         self.motion_data_sub : rclpy.subscription.Subscription = self.create_subscription(deepracing_msgs.msg.TimestampedPacketMotionData, "motion_data", self.motionDataCB, 10)
+        self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(nav_msgs.msg.Odometry, "odom", self.odomCB, 10)
+        self.odom_filtered_sub : rclpy.subscription.Subscription = self.create_subscription(nav_msgs.msg.Odometry, "odom/filtered", self.odomFilteredCB, 10)
         self.set_state_pub : rclpy.publisher.Publisher = self.create_publisher(robot_localization.msg.State, "set_state", 1)
         self.prev_motion_data : deepracing_msgs.msg.TimestampedPacketMotionData = None
         covariances_file : str = deepracing.searchForFile("covariances.json", [os.curdir, os.path.join(ament_index_python.get_package_share_directory("deepracing_launch"), "data")] )
@@ -55,6 +58,43 @@ class EKFMonitor(rclpy.node.Node):
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time=rclpy.duration.Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
+    def timerCB(self):
+        pass
+    def odomCB(self, odom : nav_msgs.msg.Odometry):
+        pass
+    def odomFilteredCB(self, odom_filtered : nav_msgs.msg.Odometry):
+        pass
+    def publishState(self, motion_data : deepracing_msgs.msg.TimestampedPacketMotionData):
+        transform_stamped_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", "track", rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=5))
+        translation_msg : geometry_msgs.msg.Vector3 = transform_stamped_msg.transform.translation
+        rotation_msg : geometry_msgs.msg.Quaternion = transform_stamped_msg.transform.rotation
+        mapToTrack : np.ndarray = np.eye(4, dtype=self.pose_cov.dtype)
+        mapToTrack[0:3,0:3] = Rotation.from_quat([rotation_msg.x, rotation_msg.y, rotation_msg.z, rotation_msg.w]).as_matrix().astype(mapToTrack.dtype)
+        mapToTrack[0:3,3] = np.asarray([translation_msg.x, translation_msg.y, translation_msg.z], dtype=mapToTrack.dtype)
+        current_position : np.ndarray = deepracing_ros.convert.extractPosition(motion_data.udp_packet)
+        current_rotation : Rotation = deepracing_ros.convert.extractOrientation(motion_data.udp_packet)
+        trackToCar : np.ndarray = np.eye(4, dtype=mapToTrack.dtype)
+        trackToCar[0:3,0:3] = current_rotation.as_matrix().astype(trackToCar.dtype)
+        trackToCar[0:3,3] = current_position.astype(trackToCar.dtype)
+        poseMap : np.ndarray = np.matmul(mapToTrack, trackToCar)
+        current_linear_vel : np.ndarray = np.matmul(mapToTrack[0:3,0:3], deepracing_ros.convert.extractVelocity(motion_data.udp_packet))
+        current_angular_vel : np.ndarray = np.matmul(mapToTrack[0:3,0:3], deepracing_ros.convert.extractAngularVelocity(motion_data.udp_packet))
+        current_accel : np.ndarray = np.matmul(poseMap[0:3,0:3], deepracing_ros.convert.extractAcceleration(motion_data.udp_packet))
+        state_to_pub : robot_localization.msg.State = robot_localization.msg.State()
+        state_to_pub.pose = geometry_msgs.msg.PoseWithCovarianceStamped(header=motion_data.header)
+        state_to_pub.twist = geometry_msgs.msg.TwistWithCovarianceStamped(header=motion_data.header)
+        state_to_pub.accel = geometry_msgs.msg.AccelWithCovarianceStamped(header=motion_data.header)
+        state_to_pub.pose.header.frame_id=state_to_pub.twist.header.frame_id=state_to_pub.accel.header.frame_id="map"
+        state_to_pub.pose.pose.pose.position = geometry_msgs.msg.Point(x = poseMap[0,3], y = poseMap[1,3], z = poseMap[2,3])
+        poseMapQuat : np.ndarray = Rotation.from_matrix(poseMap[0:3,0:3]).as_quat()
+        state_to_pub.pose.pose.pose.orientation = geometry_msgs.msg.Quaternion(x=poseMapQuat[0], y=poseMapQuat[1], z=poseMapQuat[2], w=poseMapQuat[3])
+        state_to_pub.pose.pose.covariance = self.pose_cov.flatten()
+        state_to_pub.twist.twist.twist.linear= geometry_msgs.msg.Vector3(x = current_linear_vel[0], y = current_linear_vel[1], z = current_linear_vel[2])
+        state_to_pub.twist.twist.twist.angular= geometry_msgs.msg.Vector3(x = current_angular_vel[0], y = current_angular_vel[1], z = current_angular_vel[2])
+        state_to_pub.twist.twist.covariance = self.twist_cov.flatten()
+        state_to_pub.accel.accel.accel.linear= geometry_msgs.msg.Vector3(x = current_accel[0], y = current_accel[1], z = current_accel[2])
+        state_to_pub.accel.accel.covariance = self.accel_cov.flatten()
+        self.set_state_pub.publish(state_to_pub)
     def motionDataCB(self, motion_data : deepracing_msgs.msg.TimestampedPacketMotionData):
         if self.prev_motion_data is None:
             self.prev_motion_data = copy.deepcopy(motion_data)
@@ -69,42 +109,14 @@ class EKFMonitor(rclpy.node.Node):
         delta_pos : np.ndarray =  predicted_position - current_position
         if np.linalg.norm(delta_pos, ord=2, axis=0)>10.0:
             self.get_logger().info("Unexpected jump in car position, probably a lap reset.  Resetting EKF state")
-            transform_stamped_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", "track", rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=5))
-            translation_msg : geometry_msgs.msg.Vector3 = transform_stamped_msg.transform.translation
-            rotation_msg : geometry_msgs.msg.Quaternion = transform_stamped_msg.transform.rotation
-            mapToTrack : np.ndarray = np.eye(4, dtype=self.pose_cov.dtype)
-            mapToTrack[0:3,0:3] = Rotation.from_quat([rotation_msg.x, rotation_msg.y, rotation_msg.z, rotation_msg.w]).as_matrix().astype(mapToTrack.dtype)
-            mapToTrack[0:3,3] = np.asarray([translation_msg.x, translation_msg.y, translation_msg.z], dtype=mapToTrack.dtype)
-            current_rotation : Rotation = deepracing_ros.convert.extractOrientation(motion_data.udp_packet)
-            trackToCar : np.ndarray = np.eye(4, dtype=mapToTrack.dtype)
-            trackToCar[0:3,0:3] = current_rotation.as_matrix().astype(trackToCar.dtype)
-            trackToCar[0:3,3] = current_position.astype(trackToCar.dtype)
-            poseMap : np.ndarray = np.matmul(mapToTrack, trackToCar)
-            current_linear_vel : np.ndarray = np.matmul(mapToTrack[0:3,0:3], deepracing_ros.convert.extractVelocity(motion_data.udp_packet))
-            current_angular_vel : np.ndarray = np.matmul(mapToTrack[0:3,0:3], deepracing_ros.convert.extractAngularVelocity(motion_data.udp_packet))
-            current_accel : np.ndarray = np.matmul(poseMap[0:3,0:3], deepracing_ros.convert.extractAcceleration(motion_data.udp_packet))
-            state_to_pub : robot_localization.msg.State = robot_localization.msg.State()
-            state_to_pub.pose = geometry_msgs.msg.PoseWithCovarianceStamped(header=motion_data.header)
-            state_to_pub.twist = geometry_msgs.msg.TwistWithCovarianceStamped(header=motion_data.header)
-            state_to_pub.accel = geometry_msgs.msg.AccelWithCovarianceStamped(header=motion_data.header)
-            state_to_pub.pose.header.frame_id=state_to_pub.twist.header.frame_id=state_to_pub.accel.header.frame_id="map"
-            state_to_pub.pose.pose.pose.position = geometry_msgs.msg.Point(x = poseMap[0,3], y = poseMap[1,3], z = poseMap[2,3])
-            poseMapQuat : np.ndarray = Rotation.from_matrix(poseMap[0:3,0:3]).as_quat()
-            state_to_pub.pose.pose.pose.orientation = geometry_msgs.msg.Quaternion(x=poseMapQuat[0], y=poseMapQuat[1], z=poseMapQuat[2], w=poseMapQuat[3])
-            state_to_pub.pose.pose.covariance = self.pose_cov.flatten()
-            state_to_pub.twist.twist.twist.linear= geometry_msgs.msg.Vector3(x = current_linear_vel[0], y = current_linear_vel[1], z = current_linear_vel[2])
-            state_to_pub.twist.twist.twist.angular= geometry_msgs.msg.Vector3(x = current_angular_vel[0], y = current_angular_vel[1], z = current_angular_vel[2])
-            state_to_pub.twist.twist.covariance = self.twist_cov.flatten()
-            state_to_pub.accel.accel.accel.linear= geometry_msgs.msg.Vector3(x = current_accel[0], y = current_accel[1], z = current_accel[2])
-            # state_to_pub.accel.accel.covariance = (-np.ones_like(self.accel_cov)).flatten().tolist()
-            state_to_pub.accel.accel.covariance = self.accel_cov.flatten()
-            self.set_state_pub.publish(state_to_pub)
+            self.publishState(motion_data)
         self.prev_motion_data = copy.deepcopy(motion_data)
 
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
     node = EKFMonitor()
+    node.create_timer(0.5, node.timerCB)
     rclpy.spin(node, rclpy.executors.MultiThreadedExecutor())
 
 if __name__ == '__main__':
