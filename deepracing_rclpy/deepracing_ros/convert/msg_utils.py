@@ -193,18 +193,16 @@ def extractPose(packet : drmsgs.PacketMotionData, car_index = None) -> Tuple[np.
       idx = car_index
    return extractPosition(packet, car_index=idx).astype(np.float64), extractOrientation(packet, car_index=idx)
 
-def toBezierCurveMsg(control_points : torch.Tensor, header: Header, covars = None, delta_t : Duration = Duration()):
-   ptsnp = control_points.detach().cpu().numpy()
+def toBezierCurveMsg(control_points : torch.Tensor, header: Header, covars : Union[torch.Tensor, None] = None, delta_t : Duration = Duration()):
+   ptsnp : np.ndarray = control_points.detach().cpu().numpy()
    if covars is not None:
       assert(ptsnp.shape[0]==covars.shape[0])
-      covarmatsnp = covars.view(covars.shape[0],9).detach().cpu().numpy()
+      covarmatsnp : np.ndarray = covars.view(covars.shape[0],9).detach().cpu().numpy()
    rtn : drmsgs.BezierCurve = drmsgs.BezierCurve(header=header, delta_t=delta_t)
    for i in range(ptsnp.shape[0]):
       rtn.control_points.append(geo_msgs.Point(x=float(ptsnp[i,0]), y=float(ptsnp[i,1]), z=float(ptsnp[i,2])))
       if covars is not None: 
-         covar : drmsgs.CovariancePoint = drmsgs.CovariancePoint()
-         covar.covariance = covarmatsnp[i].tolist()
-         rtn.control_point_covariances.append(covar)
+         rtn.control_point_covariances.append(drmsgs.CovariancePoint(covariance = covarmatsnp[i]))
    return rtn
 def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, device=torch.device("cpu")):
    ptsnp = np.array([[p.x, p.y, p.z ] for p in curve_msg.control_points ], copy=False)
