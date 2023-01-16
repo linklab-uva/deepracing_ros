@@ -11,7 +11,7 @@
 #include <message_filters/time_synchronizer.h>
 #include <message_filters/subscriber.h>
 #include <Eigen/Geometry>
-#include <tf2_eigen/tf2_eigen.h>
+#include <tf2_eigen/tf2_eigen.hpp>
 
 class VelocityControlNode : public rclcpp::Node 
 {

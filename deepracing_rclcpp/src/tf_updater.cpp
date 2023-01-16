@@ -15,8 +15,8 @@
 #include <sensor_msgs/msg/imu.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include "deepracing_ros/utils/f1_msg_utils.h"
-#include <tf2_eigen/tf2_eigen.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_eigen/tf2_eigen.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <random_numbers/random_numbers.h>
 #include <json/json.h>
 #include <deepracing_ros/utils/f1_msg_utils.h>
