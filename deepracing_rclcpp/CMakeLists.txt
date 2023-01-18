@@ -14,9 +14,10 @@ check_cxx_source_compiles("#include <filesystem>
                             int main(int argc, char** argv) { std::filesystem::path p; return 0; }" HAS_STDCXXFS)
 
 # Default to C++14 if the filesystem library isn't available
+set(boost_components_ date_time random thread)
 if(NOT HAS_STDCXXFS)
   set(CMAKE_CXX_STANDARD 14)
-  find_package(Boost REQUIRED COMPONENTS filesystem)
+  list(APPEND boost_components_ filesystem)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -26,7 +27,7 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
-find_package(Boost REQUIRED COMPONENTS date_time random thread)
+find_package(Boost REQUIRED COMPONENTS ${boost_components_})
 find_package(control_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_msgs REQUIRED)

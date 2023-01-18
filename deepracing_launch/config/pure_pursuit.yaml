@@ -4,5 +4,5 @@
         lookahead_gain: 0.35
         velocity_lookahead_gain: 0.225
         wheelbase: 3.726
-        gpu: 0
+        gpu: -1
 

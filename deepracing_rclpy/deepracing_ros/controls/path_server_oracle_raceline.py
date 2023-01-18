@@ -168,10 +168,11 @@ class OraclePathServer(PathServerROS):
             searchdirs : List[str] = str.split(os.getenv("F1_TRACK_DIRS", ""), os.pathsep)
             try:
                 f1_datalogger_dir : str = ament_index_python.get_package_share_directory("f1_datalogger")
-                searchdirs.append(os.path.join(f1_datalogger_dir, "tracks", "minimumcurvature"))
-                searchdirs.append(os.path.join(f1_datalogger_dir, "tracks"))
+                searchdirs.append(os.path.join(f1_datalogger_dir, "f1_tracks", "minimumcurvature"))
+                searchdirs.append(os.path.join(f1_datalogger_dir, "f1_tracks"))
             except ament_index_python.PackageNotFoundError:
                 pass
+            # self.get_logger().info("Searching in: %s" % (str(searchdirs)))
             racelinefile : str = deepracing.searchForFile(request.filename, searchdirs)
             if racelinefile is None:
                 response.message="File %s not found" % (request.filename,)
@@ -189,63 +190,82 @@ class OraclePathServer(PathServerROS):
                 return response
             self.get_logger().info("Got transform")
 
-            rmat : np.ndarray = Rotation.from_quat([transform_msg.transform.rotation.x, transform_msg.transform.rotation.y, transform_msg.transform.rotation.z, transform_msg.transform.rotation.w]).as_matrix().astype(np.float64)
-            transformvec : np.ndarray = np.asarray([transform_msg.transform.translation.x, transform_msg.transform.translation.y, transform_msg.transform.translation.z], dtype=rmat.dtype)
-            racelinenp : np.ndarray = np.row_stack([np.asarray(racelinedict["x"], dtype=rmat.dtype), np.asarray(racelinedict["y"], dtype=rmat.dtype), np.asarray(racelinedict["z"], dtype=rmat.dtype)])
-            racelinenp = (np.matmul(rmat, racelinenp) + transformvec[:,np.newaxis])
-            racelinenp = racelinenp.T
-            rsamp : np.ndarray = np.asarray(racelinedict["r"], dtype=racelinenp.dtype)
-            racelinespeeds : np.ndarray = np.asarray(racelinedict["speeds"], dtype=racelinenp.dtype)
-            velsquares : np.ndarray = np.square(racelinespeeds)
-            racelinet : np.ndarray = np.zeros_like(racelinespeeds)
-            for i in range(rsamp.shape[0]-1):
-                ds : float = rsamp[i+1] - rsamp[i]
-                v0 : float = racelinespeeds[i]
-                v0square : float = velsquares[i]
-                vfsquare : float = velsquares[i+1]
-                a0 : float = (vfsquare-v0square)/(2.0*ds)
-                if np.abs(a0)>1E-1:
-                    deltat : float = (-v0 + np.sqrt(v0square + 2.0*a0*ds))/a0
-                else:
-                    deltat : float = ds/v0
-                racelinet[i+1] = racelinet[i]+deltat
-            dsfinal : float = np.linalg.norm(racelinenp[0] - racelinenp[-1], ord=2)
-            accelfinal : float = (racelinespeeds[0]**2 - racelinespeeds[-1]**2)/(2.0*dsfinal)
-            if np.abs(accelfinal)>1E-1:
-                finaldeltat = (-racelinespeeds[-1] + np.sqrt(racelinespeeds[-1]**2 + 2.0*accelfinal*dsfinal))/accelfinal
-            else:
-                finaldeltat = dsfinal/racelinespeeds[-1]
-            finalt = racelinet[-1] + finaldeltat
-            self.get_logger().info("finaldeltat: %f" %(finaldeltat,))
-            splinet : np.ndarray = np.concatenate([racelinet, np.asarray([finalt])], axis=0)
-            splinepts : np.ndarray =  np.concatenate([racelinenp, np.expand_dims(racelinenp[0], axis=0)], axis=0) 
-            self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(splinet, splinepts, k=3, bc_type='periodic')
-            self.racelinesplineder : scipy.interpolate.BSpline = self.racelinespline.derivative()
-            tangent_vectors : np.ndarray = self.racelinesplineder(racelinet)
-            tangent_vectors[:,2]=0.0
-            tangent_vectors = tangent_vectors/(np.linalg.norm(tangent_vectors, ord=2, axis=1)[:,np.newaxis])
-            up : np.ndarray = np.zeros_like(tangent_vectors)
-            up[:,2]=1.0
-            normal_vectors : np.ndarray = np.cross(up, tangent_vectors)
-            normal_vectors[:,2]=0.0
-            normal_vectors = normal_vectors/(np.linalg.norm(normal_vectors, ord=2, axis=1)[:,np.newaxis])
+            try:
+                rmat : np.ndarray = Rotation.from_quat([transform_msg.transform.rotation.x, transform_msg.transform.rotation.y, transform_msg.transform.rotation.z, transform_msg.transform.rotation.w]).as_matrix().astype(np.float64)
+                transformvec : np.ndarray = np.asarray([transform_msg.transform.translation.x, transform_msg.transform.translation.y, transform_msg.transform.translation.z], dtype=rmat.dtype)
+                racelinenp : np.ndarray = np.row_stack([np.asarray(racelinedict["x"], dtype=rmat.dtype), np.asarray(racelinedict["y"], dtype=rmat.dtype), np.asarray(racelinedict["z"], dtype=rmat.dtype)])
+                racelinenp = (np.matmul(rmat, racelinenp) + transformvec[:,np.newaxis])
+                racelinenp = racelinenp.T
+                rsamp : np.ndarray = np.asarray(racelinedict["r"], dtype=racelinenp.dtype)
+                racelinespeeds : np.ndarray = np.asarray(racelinedict["speeds"], dtype=racelinenp.dtype)
+                velsquares : np.ndarray = np.square(racelinespeeds)
+                racelinet : np.ndarray = np.zeros_like(racelinespeeds)
+                for i in range(rsamp.shape[0]-1):
+                    ds : float = rsamp[i+1] - rsamp[i]
+                    v0 : float = racelinespeeds[i]
+                    vf : float = racelinespeeds[i+1]
+                    v0square : float = velsquares[i]
+                    vfsquare : float = velsquares[i+1]
+                    a0 : float = float((vfsquare-v0square)/(2.0*ds))
+                    if a0>=0.0:
+                        #positive (or no) acceleration
+                        p : np.polynomial.Polynomial = np.polynomial.Polynomial([-ds, v0, 0.5*a0])
+                    else:
+                        #negative acceleration (braking)
+                        p : np.polynomial.Polynomial = np.polynomial.Polynomial([-ds, vf, -0.5*a0])
+                    deltat : float = float(np.max(np.real(p.roots())))
 
-            tangent_vectors = tangent_vectors[:,[0,1]]
-            normal_vectors = normal_vectors[:,[0,1]]
-            
-            raceline = torch.ones( (racelinenp.shape[0], 4) , dtype=self.tsamp.dtype, device=self.tsamp.device)
-            raceline[:,0:3] = torch.as_tensor(racelinenp, dtype=self.tsamp.dtype, device=self.tsamp.device)
-            self.racelineframe = str(transform_msg.header.frame_id)
-            self.racelinetimes = torch.as_tensor(racelinet, dtype=self.tsamp.dtype, device=self.tsamp.device)
-            self.racelinespeeds = torch.as_tensor(racelinedict["speeds"], dtype=self.tsamp.dtype, device=self.tsamp.device)
-            self.racelinetangents = torch.as_tensor(tangent_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
-            self.racelinenormals = torch.as_tensor(normal_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
-            self.raceline = raceline
+                    racelinet[i+1] = racelinet[i]+deltat
+                if np.all(racelinenp[0]==racelinenp[-1]):
+                    splinet : np.ndarray = racelinet
+                    splinepts : np.ndarray = racelinenp
+                else:
+                    dsfinal = np.linalg.norm(racelinenp[0] - racelinenp[-1], ord=2)
+                    vf = racelinespeeds[0] #The "end" of this last segment connecting endpoint to starting point
+                    v0 = racelinespeeds[-1] #The "start" of this last segment connecting endpoint to starting point
+                    afinal : float = float((racelinespeeds[0]**2 - racelinespeeds[-1]**2)/(2.0*dsfinal))
+                    if afinal>=0.0:
+                        #positive (or no) acceleration
+                        p : np.polynomial.Polynomial = np.polynomial.Polynomial([-dsfinal, v0, 0.5*afinal])
+                    else:
+                        #negative acceleration (braking)
+                        p : np.polynomial.Polynomial = np.polynomial.Polynomial([-dsfinal, vf, -0.5*afinal])
+                    finaldeltat : float = float(np.max(np.real(p.roots())))
+                    finalt = racelinet[-1] + finaldeltat
+                    self.get_logger().info("finaldeltat: %f" %(finaldeltat,))
+                    splinet : np.ndarray = np.concatenate([racelinet, np.asarray([finalt])], axis=0)
+                    splinepts : np.ndarray =  np.concatenate([racelinenp, racelinenp[np.newaxis,0]], axis=0) 
+                self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(splinet, splinepts, k=3, bc_type='periodic')
+                self.racelinesplineder : scipy.interpolate.BSpline = self.racelinespline.derivative()
+                tangent_vectors : np.ndarray = self.racelinesplineder(racelinet)
+                tangent_vectors[:,2]=0.0
+                tangent_vectors = tangent_vectors/(np.linalg.norm(tangent_vectors, ord=2, axis=1)[:,np.newaxis])
+                up : np.ndarray = np.zeros_like(tangent_vectors)
+                up[:,2]=1.0
+                normal_vectors : np.ndarray = np.cross(up, tangent_vectors)
+                normal_vectors[:,2]=0.0
+                normal_vectors = normal_vectors/(np.linalg.norm(normal_vectors, ord=2, axis=1)[:,np.newaxis])
+
+                tangent_vectors = tangent_vectors[:,[0,1]]
+                normal_vectors = normal_vectors[:,[0,1]]
+                
+                raceline = torch.ones( (racelinenp.shape[0], 4) , dtype=self.tsamp.dtype, device=self.tsamp.device)
+                raceline[:,0:3] = torch.as_tensor(racelinenp, dtype=self.tsamp.dtype, device=self.tsamp.device)
+                self.racelineframe = str(transform_msg.header.frame_id)
+                self.racelinetimes = torch.as_tensor(racelinet, dtype=self.tsamp.dtype, device=self.tsamp.device)
+                self.racelinespeeds = torch.as_tensor(racelinedict["speeds"], dtype=self.tsamp.dtype, device=self.tsamp.device)
+                self.racelinetangents = torch.as_tensor(tangent_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
+                self.racelinenormals = torch.as_tensor(normal_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
+                self.raceline = raceline
+            except Exception as e:
+                response.message="Unknown error. Underlying exception: %s" % (str(e),)
+                response.error_code=SetRaceline.Response.UNKNOWN_ERROR
+                return response
         else:
             try:
                 transform_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", request.new_raceline.header.frame_id, time=Time(), timeout=Duration(seconds=5))
             except Exception as e:
-                response.message="TF2 lookup error. Underlying exception: %s" % (str(e),)
+                response.message="TF2 lookup error. Underlying exception: %s" % (str(e.with_traceback(None)),)
                 response.error_code=SetRaceline.Response.TF_FAILURE
                 return response
             self.get_logger().info("Got transform")
@@ -322,7 +342,7 @@ class OraclePathServer(PathServerROS):
         tf = t0+self.dt
         tvec : np.ndarray = np.linspace(t0, tf, num=300)
         rlpiece : torch.Tensor = torch.from_numpy(self.racelinespline(tvec)).type_as(self.tsamp).to(self.tsamp.device)
-        rlpiecebaselink : torch.Tensor = torch.matmul(rlpiece, pose_curr_inv[0:3,0:3].t()) + pose_curr_inv[0:3,3]
+        # rlpiecebaselink : torch.Tensor = (torch.matmul(pose_curr_inv[0:3,0:3], rlpiece) + pose_curr_inv[0:3,3,None]).T
         
         # if tf<=self.racelinetimes[-1]:
         #     Imax = torch.argmin(torch.abs(self.racelinetimes - tf))
@@ -342,8 +362,8 @@ class OraclePathServer(PathServerROS):
         dt = tfit[-1]
         sfit = tfit/dt
         
-        _, bcurve = mu.bezierLsqfit(rlpiecebaselink.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
-        bcurve[0] = torch.matmul(bcurve[0], pose_curr[0:3,0:3].t()) + pose_curr[0:3,3]
+        _, bcurve = mu.bezierLsqfit(rlpiece.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
+        # bcurve[0] = torch.matmul(bcurve[0], pose_curr[0:3,0:3].t()) + pose_curr[0:3,3]
         bcurve_msg : BezierCurve = C.toBezierCurveMsg(bcurve[0],posemsg.header)
         fracpart, intpart = math.modf(dt.item())
         bcurve_msg.delta_t = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
