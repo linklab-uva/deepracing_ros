@@ -25,3 +25,19 @@ target_include_directories(deepracing_composable_nodes
 
 target_compile_definitions(deepracing_composable_nodes PRIVATE "DEEPRACING_RCLCPP_BUILDING_LIBRARY")
 
+
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::ReceiveMotionData"
+  EXECUTABLE receive_motion_data_exe
+)
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::UdpDemuxer"
+  EXECUTABLE udp_demuxer_exe
+)
+install(TARGETS deepracing_composable_nodes
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+ament_export_libraries(deepracing_composable_nodes)
