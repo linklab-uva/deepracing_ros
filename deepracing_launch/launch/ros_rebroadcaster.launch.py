@@ -12,6 +12,7 @@ def generate_launch_description():
         namespace='',
         package='rclcpp_components',
         executable='component_container_mt',
+        parameters=[{"thread_num" : 6}],
         composable_node_descriptions=[
             launch_ros.descriptions.ComposableNode(
                 package='udp_driver',
