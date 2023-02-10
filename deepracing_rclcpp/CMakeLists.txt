@@ -70,7 +70,7 @@ target_include_directories(utils
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-target_compile_definitions(utils PRIVATE "DEEPRACING_RCLCPP_BUILDING_LIBRARY")
+target_compile_definitions(utils PRIVATE "DEEPRACING_RCLCPP_UTILS_BUILDING_LIBRARY")
 if(NOT HAS_STDCXXFS)
   target_compile_definitions(utils PUBLIC "DEEPRACING_RCLCPP_USE_BOOST_FILESYSTEM")
   target_link_libraries(utils PUBLIC Boost::filesystem)
