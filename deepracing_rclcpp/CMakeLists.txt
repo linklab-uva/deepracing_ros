@@ -173,5 +173,17 @@ install(
   DIRECTORY include/
   DESTINATION include
 )
+
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::ReceiveMotionData"
+  EXECUTABLE receive_motion_data_exe
+)
+install(TARGETS deepracing_composable_nodes
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+ament_export_libraries(deepracing_composable_nodes)
+
 ament_export_targets(${PROJECT_NAME}-export)
 ament_package()
