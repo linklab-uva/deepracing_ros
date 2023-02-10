@@ -24,15 +24,14 @@ namespace composable_nodes
                 m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("udp_in", 10, 
                     std::bind(&ReceiveMotionData::udp_cb, this, std::placeholders::_1));
                 m_time_start_ = get_clock()->now();
-                m_all_cars_param_ = declare_parameter<bool>("all_cars", true);
+                m_all_cars_param_ = declare_parameter<bool>("all_cars", false);
             } 
         private:
             inline DEEPRACING_RCLCPP_LOCAL void udp_cb(const udp_msgs::msg::UdpPacket::ConstPtr& udp_packet)
             {
-                deepf1::twenty_eighteen::PacketMotionData* udp_data = reinterpret_cast<deepf1::twenty_eighteen::PacketMotionData*>((void*)(udp_packet->data.data()));
+                deepf1::twenty_eighteen::PacketMotionData* udp_data = reinterpret_cast<deepf1::twenty_eighteen::PacketMotionData*>((void*)&(udp_packet->data.at(0)));
                 deepracing_msgs::msg::TimestampedPacketMotionData rosdata;
                 rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(*udp_data, m_all_cars_param_); 
-                rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
                 rosdata.header.set__stamp(udp_packet->header.stamp);
                 deepracing_msgs::msg::CarMotionData& ego_motion_data = rosdata.udp_packet.car_motion_data.at(rosdata.udp_packet.header.player_car_index);
                 ego_motion_data.world_forward_dir.header.stamp =
@@ -51,7 +50,7 @@ namespace composable_nodes
                         motion_data.world_velocity.header.stamp = rosdata.header.stamp;
                     }
                 }
-                m_motion_data_publisher_->publish(rosdata);
+                m_motion_data_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketMotionData>(rosdata));
             }
             
             rclcpp::Subscription<udp_msgs::msg::UdpPacket>::SharedPtr m_udp_subscription_;

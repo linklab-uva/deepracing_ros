@@ -25,14 +25,14 @@ namespace composable_nodes
                 m_time_start_ = get_clock()->now();
             } 
         private:
-            inline DEEPRACING_RCLCPP_LOCAL void udp_cb(const udp_msgs::msg::UdpPacket::ConstPtr& udp_packet)
+            inline DEEPRACING_RCLCPP_LOCAL void udp_cb(const udp_msgs::msg::UdpPacket::UniquePtr& udp_packet)
             {
                 deepf1::twenty_eighteen::PacketHeader* header = reinterpret_cast<deepf1::twenty_eighteen::PacketHeader*>((void*)(udp_packet->data.data()));
                 switch (header->m_packetId)
                 {
                     case deepf1::twenty_eighteen::PacketID::MOTION:
                     {
-                        m_motion_data_udp_publisher_->publish(*udp_packet);
+                        m_motion_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
                     }
                     default:
                     {
