@@ -39,30 +39,37 @@ namespace composable_nodes
                     case deepf1::twenty_eighteen::PacketID::MOTION:
                     {
                         m_motion_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        break;
                     }
                     case deepf1::twenty_eighteen::PacketID::CARTELEMETRY:
                     {
                         m_telemetry_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        break;
                     }
                     case deepf1::twenty_eighteen::PacketID::CARSETUPS:
                     {
                         m_car_setup_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        break;
                     }
                     case deepf1::twenty_eighteen::PacketID::CARSTATUS:
                     {
                         m_car_status_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        break;
                     }
                     case deepf1::twenty_eighteen::PacketID::LAPDATA:
                     {
                         m_lap_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        break;
                     }
                     case deepf1::twenty_eighteen::PacketID::SESSION:
                     {
                         m_session_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        break;
                     }
                     case deepf1::twenty_eighteen::PacketID::PARTICIPANTS:
                     {
                         m_participants_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        break;
                     }
                     default:
                     {
