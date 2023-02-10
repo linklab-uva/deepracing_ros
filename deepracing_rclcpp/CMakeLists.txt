@@ -77,6 +77,8 @@ if(NOT HAS_STDCXXFS)
   ament_export_dependencies(Boost)
 endif()
 
+add_subdirectory(src/composable_nodes)
+
 add_executable(tf_updater src/tf_updater.cpp)
 ament_target_dependencies(tf_updater deepracing_msgs geometry_msgs nav_msgs random_numbers rclcpp tf2 tf2_geometry_msgs tf2_eigen tf2_ros tf2_sensor_msgs)
 target_link_libraries(tf_updater
