@@ -9,7 +9,9 @@ def generate_launch_description():
     # rebroadcasternode = launch_ros.actions.Node(package='deepracing_rclcpp', node_executable='ros_rebroadcaster', output='screen', node_name="f1_data_broadcaster")
     # return launch.LaunchDescription([rebroadcasternode,]) 
     use_intra_process_comms = True
+    ip = launch.actions.DeclareLaunchArgument("ns", default_value="127.0.0.1")
     namespace = launch.actions.DeclareLaunchArgument("ns", default_value="")
+    
     container = launch_ros.actions.ComposableNodeContainer(
         name='game_udp_container',
         namespace=launch.substitutions.LaunchConfiguration(namespace.name),
@@ -23,7 +25,7 @@ def generate_launch_description():
                 name='raw_udp_receiver_node',
                 namespace=launch.substitutions.LaunchConfiguration(namespace.name),
                 remappings=[('udp_read', 'all_raw_udp')],
-                parameters=[{'ip': "127.0.0.1", 'port': 20777}],
+                parameters=[{'ip': launch.substitutions.LaunchConfiguration(ip.name), 'port': 20777}],
                 extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
             launch_ros.descriptions.ComposableNode(
                 package='deepracing_rclcpp',
@@ -56,4 +58,4 @@ def generate_launch_description():
         output='both',
     )
     
-    return launch.LaunchDescription([namespace, container])
+    return launch.LaunchDescription([ip, namespace, container])
