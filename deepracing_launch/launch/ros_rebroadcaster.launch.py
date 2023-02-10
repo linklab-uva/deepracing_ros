@@ -31,7 +31,12 @@ def generate_launch_description():
                 package='deepracing_rclcpp',
                 plugin='deepracing::composable_nodes::ReceiveMotionData',
                 name='motion_data_node',
-                remappings=[('udp_in', 'motion_data/raw_udp')],
+                parameters=[{'all_cars': True}],
+                extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
+            launch_ros.descriptions.ComposableNode(
+                package='deepracing_rclcpp',
+                plugin='deepracing::composable_nodes::ReceiveTelemetryData',
+                name='telemetry_data_node',
                 parameters=[{'all_cars': True}],
                 extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}])
         ],
