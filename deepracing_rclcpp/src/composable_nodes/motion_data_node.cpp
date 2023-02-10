@@ -21,7 +21,7 @@ namespace composable_nodes
             {
                 // rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().history();
                 m_motion_data_publisher_ = create_publisher<deepracing_msgs::msg::TimestampedPacketMotionData>("motion_data", 10);
-                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("udp_in", 10, 
+                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("motion_data/raw_udp", 10, 
                     std::bind(&ReceiveMotionData::udp_cb, this, std::placeholders::_1));
                 m_time_start_ = get_clock()->now();
                 m_all_cars_param_ = declare_parameter<bool>("all_cars", false);
