@@ -9,7 +9,7 @@ def generate_launch_description():
     # rebroadcasternode = launch_ros.actions.Node(package='deepracing_rclcpp', node_executable='ros_rebroadcaster', output='screen', node_name="f1_data_broadcaster")
     # return launch.LaunchDescription([rebroadcasternode,]) 
     use_intra_process_comms = True
-    ip = launch.actions.DeclareLaunchArgument("ns", default_value="127.0.0.1")
+    ip = launch.actions.DeclareLaunchArgument("ip", default_value="127.0.0.1")
     namespace = launch.actions.DeclareLaunchArgument("ns", default_value="")
     
     container = launch_ros.actions.ComposableNodeContainer(
