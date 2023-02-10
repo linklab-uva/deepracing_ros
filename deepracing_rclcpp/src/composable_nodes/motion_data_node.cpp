@@ -33,6 +33,7 @@ namespace composable_nodes
                 deepracing_msgs::msg::TimestampedPacketMotionData rosdata;
                 rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(*udp_data, m_all_cars_param_); 
                 rosdata.header.set__stamp(udp_packet->header.stamp);
+                rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
                 deepracing_msgs::msg::CarMotionData& ego_motion_data = rosdata.udp_packet.car_motion_data.at(rosdata.udp_packet.header.player_car_index);
                 ego_motion_data.world_forward_dir.header.stamp =
                 ego_motion_data.world_position.header.stamp = 

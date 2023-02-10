@@ -33,6 +33,7 @@ namespace composable_nodes
                 deepracing_msgs::msg::TimestampedPacketSessionData rosdata;
                 rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(*udp_data); 
                 rosdata.header.set__stamp(udp_packet->header.stamp);
+                rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
                 m_session_data_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketSessionData>(rosdata));
             }
             
