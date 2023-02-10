@@ -18,20 +18,25 @@ def generate_launch_description():
                 package='udp_driver',
                 plugin='drivers::udp_driver::UdpReceiverNode',
                 name='raw_udp_receiver_node',
-                remappings=[('udp_read', 'all_udp')],
+                remappings=[('udp_read', 'all_raw_udp')],
                 parameters=[{'ip': "127.0.0.1", 'port': 20777}],
                 extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
             launch_ros.descriptions.ComposableNode(
                 package='deepracing_rclcpp',
                 plugin='deepracing::composable_nodes::UdpDemuxer',
                 name='udp_demuxer_node',
-                remappings=[('udp_in', 'all_udp')],
+                remappings=[('udp_in', 'all_raw_udp')],
                 extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
             launch_ros.descriptions.ComposableNode(
                 package='deepracing_rclcpp',
                 plugin='deepracing::composable_nodes::ReceiveMotionData',
                 name='motion_data_node',
                 parameters=[{'all_cars': True}],
+                extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
+            launch_ros.descriptions.ComposableNode(
+                package='deepracing_rclcpp',
+                plugin='deepracing::composable_nodes::ReceiveSessionData',
+                name='session_data_node',
                 extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
             launch_ros.descriptions.ComposableNode(
                 package='deepracing_rclcpp',
@@ -42,4 +47,5 @@ def generate_launch_description():
         ],
         output='both',
     )
+    
     return launch.LaunchDescription([container])

@@ -176,12 +176,16 @@ install(
 
 
 rclcpp_components_register_node(deepracing_composable_nodes
-  PLUGIN "deepracing::composable_nodes::ReceiveTelemetryData"
-  EXECUTABLE receive_telemetry_data_exe
-)
-rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::ReceiveMotionData"
   EXECUTABLE receive_motion_data_exe
+)
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::ReceiveSessionData"
+  EXECUTABLE receive_session_data_exe
+)
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::ReceiveTelemetryData"
+  EXECUTABLE receive_telemetry_data_exe
 )
 rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::UdpDemuxer"

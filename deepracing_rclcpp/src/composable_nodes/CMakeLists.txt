@@ -2,6 +2,7 @@ find_package(udp_msgs REQUIRED)
 
 add_library(deepracing_composable_nodes SHARED
   motion_data_node.cpp
+  session_data_node.cpp
   telemetry_data_node.cpp
   udp_demuxer_node.cpp
 )
