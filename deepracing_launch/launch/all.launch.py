@@ -22,7 +22,7 @@ def generate_launch_description():
     argz.append(use_sim_time)
     tf_from_odom = DeclareLaunchArgument("tf_from_odom", default_value="false")
     argz.append(tf_from_odom)
-    carname = DeclareLaunchArgument("carname", default_value="")
+    carname = DeclareLaunchArgument("carname")
     argz.append(carname)
     default_trackfile = DeclareLaunchArgument("default_trackfile", default_value="")
     argz.append(default_trackfile)
