@@ -16,7 +16,7 @@ def generate_launch_description():
     argz.append(port)
     namespace = launch.actions.DeclareLaunchArgument("ns", default_value="")
     argz.append(namespace)
-    nodez = [
+    composable_nodez = [
         launch_ros.descriptions.ComposableNode(
             package='udp_driver',
             plugin='drivers::udp_driver::UdpReceiverNode',
@@ -79,9 +79,11 @@ def generate_launch_description():
         namespace=launch.substitutions.LaunchConfiguration(namespace.name),
         package='rclcpp_components',
         executable='component_container_mt',
-        parameters=[{"thread_num" : len(nodez)+1}],
-        composable_node_descriptions=nodez,
+        parameters=[{"thread_num" : len(composable_nodez)+1}],
+        composable_node_descriptions=composable_nodez,
         output='both',
     )
+    nodez = []
+    nodez.append(launch_ros.actions.Node(package='deepracing_rclpy', name='initialize_udp_receiver', executable='initialize_udp_receiver', output='screen', namespace=launch.substitutions.LaunchConfiguration(namespace.name)))
     
-    return launch.LaunchDescription(argz + [container])
+    return launch.LaunchDescription(argz + nodez + [container])
