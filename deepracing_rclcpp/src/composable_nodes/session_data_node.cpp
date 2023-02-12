@@ -32,8 +32,7 @@ namespace composable_nodes
                 deepf1::twenty_eighteen::PacketSessionData* udp_data = reinterpret_cast<deepf1::twenty_eighteen::PacketSessionData*>((void*)&(udp_packet->data.at(0)));
                 deepracing_msgs::msg::TimestampedPacketSessionData rosdata;
                 rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(*udp_data); 
-                rosdata.header.set__stamp(udp_packet->header.stamp);
-                rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
+                rosdata.header.set__stamp(udp_packet->header.stamp).set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
                 m_session_data_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketSessionData>(rosdata));
             }
             

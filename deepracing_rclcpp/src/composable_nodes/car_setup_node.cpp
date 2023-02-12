@@ -32,8 +32,7 @@ namespace composable_nodes
                 deepf1::twenty_eighteen::PacketCarSetupData* udp_data = reinterpret_cast<deepf1::twenty_eighteen::PacketCarSetupData*>((void*)&(udp_packet->data.at(0)));
                 deepracing_msgs::msg::TimestampedPacketCarSetupData rosdata;
                 rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(*udp_data, m_all_cars_param_); 
-                rosdata.header.set__stamp(udp_packet->header.stamp);
-                rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
+                rosdata.header.set__stamp(udp_packet->header.stamp).set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
                 m_car_setup_data_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketCarSetupData>(rosdata));
             }
             
