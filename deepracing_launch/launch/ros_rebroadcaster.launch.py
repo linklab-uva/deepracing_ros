@@ -12,6 +12,8 @@ def generate_launch_description():
     argz = []
     ip = launch.actions.DeclareLaunchArgument("ip", default_value="127.0.0.1")
     argz.append(ip)
+    port = launch.actions.DeclareLaunchArgument("port", default_value="20777")
+    argz.append(port)
     namespace = launch.actions.DeclareLaunchArgument("ns", default_value="")
     argz.append(namespace)
     nodez = [
@@ -21,7 +23,7 @@ def generate_launch_description():
             name='raw_udp_receiver_node',
             namespace=launch.substitutions.LaunchConfiguration(namespace.name),
             remappings=[('udp_read', 'all_raw_udp')],
-            parameters=[{'ip': launch.substitutions.LaunchConfiguration(ip.name), 'port': 20777}],
+            parameters=[{'ip': launch.substitutions.LaunchConfiguration(ip.name), 'port': launch.substitutions.LaunchConfiguration(port.name)}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
@@ -29,6 +31,20 @@ def generate_launch_description():
             name='udp_demuxer_node',
             namespace=launch.substitutions.LaunchConfiguration(namespace.name),
             remappings=[('udp_in', 'all_raw_udp')],
+            extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
+        launch_ros.descriptions.ComposableNode(
+            package='deepracing_rclcpp',
+            plugin='deepracing::composable_nodes::ReceiveCarSetupData',
+            name='car_setup_node',
+            namespace=launch.substitutions.LaunchConfiguration(namespace.name),
+            parameters=[{'all_cars': True}],
+            extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
+        launch_ros.descriptions.ComposableNode(
+            package='deepracing_rclcpp',
+            plugin='deepracing::composable_nodes::ReceiveCarStatusData',
+            name='car_status_node',
+            namespace=launch.substitutions.LaunchConfiguration(namespace.name),
+            parameters=[{'all_cars': True}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',

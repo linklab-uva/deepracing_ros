@@ -176,6 +176,14 @@ install(
 
 
 rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::ReceiveCarSetupData"
+  EXECUTABLE receive_setup_data_exe
+)
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::ReceiveCarStatusData"
+  EXECUTABLE receive_status_data_exe
+)
+rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::ReceiveLapData"
   EXECUTABLE receive_lap_data_exe
 )
