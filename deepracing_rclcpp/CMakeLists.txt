@@ -176,6 +176,10 @@ install(
 
 
 rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::ReceiveLapData"
+  EXECUTABLE receive_lap_data_exe
+)
+rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::ReceiveMotionData"
   EXECUTABLE receive_motion_data_exe
 )
