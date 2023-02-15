@@ -4,11 +4,9 @@ import launch.actions
 import launch.substitutions
 import launch_ros.actions
 import launch_ros.descriptions
+import launch.conditions
 
 def generate_launch_description():
-    # rebroadcasternode = launch_ros.actions.Node(package='deepracing_rclcpp', node_executable='ros_rebroadcaster', output='screen', node_name="f1_data_broadcaster")
-    # return launch.LaunchDescription([rebroadcasternode,]) 
-    use_intra_process_comms = True
     argz = []
     ip = launch.actions.DeclareLaunchArgument("ip", default_value="127.0.0.1")
     argz.append(ip)
@@ -18,6 +16,22 @@ def generate_launch_description():
     argz.append(carname)
     allcars = launch.actions.DeclareLaunchArgument("publish_all_cars", default_value="false")
     argz.append(allcars)
+    composable_api = launch.actions.DeclareLaunchArgument("composable_api", default_value="true")
+    argz.append(composable_api)
+    node = launch_ros.actions.Node(
+        package='deepracing_rclcpp', 
+        executable='ros_rebroadcaster', 
+        name="f1_data_broadcaster",
+        namespace=launch.substitutions.LaunchConfiguration(carname.name),
+        output='screen', 
+        parameters=[{
+                'hostname': launch.substitutions.LaunchConfiguration(ip.name), 
+                port.name: launch.substitutions.LaunchConfiguration(port.name),
+                allcars.name: launch.substitutions.LaunchConfiguration(allcars.name)
+            }],
+        condition=launch.conditions.UnlessCondition(launch.substitutions.LaunchConfiguration(composable_api.name))
+        )
+    use_intra_process_comms = True
     composable_nodez = [
         launch_ros.descriptions.ComposableNode(
             package='udp_driver',
@@ -84,8 +98,9 @@ def generate_launch_description():
         parameters=[{"thread_num" : len(composable_nodez)+1}],
         composable_node_descriptions=composable_nodez,
         output='both',
+        condition=launch.conditions.IfCondition(launch.substitutions.LaunchConfiguration(composable_api.name))
     )
     nodez = []
     nodez.append(launch_ros.actions.Node(package='deepracing_rclpy', name='initialize_udp_receiver', executable='initialize_udp_receiver', output='screen', namespace=launch.substitutions.LaunchConfiguration(carname.name)))
     
-    return launch.LaunchDescription(argz + nodez + [container])
+    return launch.LaunchDescription(argz + nodez + [node, container])
