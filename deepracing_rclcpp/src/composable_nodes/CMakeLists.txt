@@ -1,6 +1,6 @@
 find_package(udp_msgs REQUIRED)
 
-add_library(deepracing_composable_nodes SHARED
+set(deepracing_composable_node_srcs
   car_setup_node.cpp
   car_status_node.cpp
   lap_data_node.cpp
@@ -9,6 +9,19 @@ add_library(deepracing_composable_nodes SHARED
   telemetry_data_node.cpp
   udp_demuxer_node.cpp
 )
+if(TARGET f1_datalogger::f1_datalogger_controllers)
+  list(APPEND deepracing_composable_node_srcs multiagent_control_node.cpp)
+endif()
+add_library(deepracing_composable_nodes SHARED ${deepracing_composable_node_srcs})
+
+if(TARGET f1_datalogger::f1_datalogger_controllers)
+  target_link_libraries(deepracing_composable_nodes PUBLIC f1_datalogger::f1_datalogger_controllers)
+  
+  rclcpp_components_register_node(deepracing_composable_nodes
+    PLUGIN "deepracing::composable_nodes::MultiagentControlNode"
+    EXECUTABLE multiagent_control_node_exe
+  )
+endif()
 
 ament_target_dependencies(deepracing_composable_nodes
   PUBLIC

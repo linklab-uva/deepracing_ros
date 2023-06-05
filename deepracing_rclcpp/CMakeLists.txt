@@ -142,7 +142,7 @@ if(TARGET f1_datalogger::f1_datalogger_controllers AND ackermann_msgs_FOUND AND 
   f1_datalogger::f1_datalogger_controllers
   )
   if(WIN32)
-    target_compile_definitions(control_node PUBLIC "_USE_MATH_DEFINES" "NOGDI")
+    target_compile_definitions(control_node PUBLIC "_USE_MATH_DEFINES")
   endif()
   list(APPEND nodes_to_install_ control_node)
 endif()
@@ -164,11 +164,12 @@ install(TARGETS ${nodes_to_install_}
     DESTINATION lib/${PROJECT_NAME}
 )
 install(TARGETS utils
-    EXPORT ${PROJECT_NAME}-export
+    EXPORT export_${PROJECT_NAME}
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
+ament_export_targets(export_${PROJECT_NAME})
 install(
   DIRECTORY include/
   DESTINATION include
@@ -203,11 +204,12 @@ rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::UdpDemuxer"
   EXECUTABLE udp_demuxer_exe
 )
+
 install(TARGETS deepracing_composable_nodes
+  EXPORT export_deepracing_composable_nodes
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
-ament_export_libraries(deepracing_composable_nodes)
-ament_export_targets(${PROJECT_NAME}-export)
+ament_export_targets(export_deepracing_composable_nodes)
 ament_package()
