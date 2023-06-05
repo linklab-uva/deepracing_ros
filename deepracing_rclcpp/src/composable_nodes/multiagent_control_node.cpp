@@ -5,6 +5,7 @@
 #include <deepracing_msgs/msg/xinput_state.hpp>
 #include <deepracing_ros/utils/xinput_msg_utils.h>
 #include <memory>
+#include <unordered_map>
 
 #define WIN32_LEAN_AND_MEAN
 #define NOGDI
@@ -44,8 +45,8 @@ class MultiagentControlNode : public rclcpp::Node
     }
   private:
     deepf1::MultiagentF1InterfaceFactory factory_;
-    std::map<std::string, std::shared_ptr<deepf1::VigemInterface>> interfaces_;
-    std::map<std::string, rclcpp::Subscription<deepracing_msgs::msg::XinputState>::SharedPtr> direct_subscriptions_;
+    std::unordered_map<std::string, std::shared_ptr<deepf1::VigemInterface>> interfaces_;
+    std::unordered_map<std::string, rclcpp::Subscription<deepracing_msgs::msg::XinputState>::SharedPtr> direct_subscriptions_;
     rclcpp::TimerBase::SharedPtr timer_;
 
     void setStateDirect_(const deepracing_msgs::msg::XinputState::ConstPtr& state, const std::string& driver)

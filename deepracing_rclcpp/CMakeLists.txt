@@ -151,6 +151,17 @@ if(TARGET f1_datalogger::f1_datalogger_controllers AND ackermann_msgs_FOUND AND 
   list(APPEND nodes_to_install_ control_node)
 endif()
 
+if(WIN32)
+  add_executable(gamepad_multiplexer src/gamepad_multiplexer_node.cpp)
+  ament_target_dependencies(gamepad_multiplexer deepracing_msgs rclcpp)
+  target_link_libraries(gamepad_multiplexer
+    utils
+    setupAPI 
+    xinput
+  )
+  target_compile_definitions(gamepad_multiplexer PUBLIC "NOGDI" "WIN32_LEAN_AND_MEAN")
+  list(APPEND nodes_to_install_ gamepad_multiplexer)
+endif()
 
 
  ament_export_dependencies(ament_cmake)
