@@ -74,8 +74,8 @@ class MultiagentControlNode : public rclcpp::Node
     }
     void setSteering_(const std_msgs::msg::Float64::ConstPtr& steering_angle, const std::string& driver)
     {
-      rclcpp::Time now = get_clock()->now();
-      rclcpp::Duration dt = now - last_direct_input_[driver].header.stamp;
+      const rclcpp::Time& now = get_clock()->now();
+      const rclcpp::Duration& dt = now - last_direct_input_[driver].header.stamp;
       if (dt<rclcpp::Duration::from_seconds(0.25))
       {
         return;
@@ -87,8 +87,8 @@ class MultiagentControlNode : public rclcpp::Node
     }
     void setAcceleration_(const std_msgs::msg::Float64::ConstPtr& accel, const std::string& driver)
     {
-      rclcpp::Time now = get_clock()->now();
-      rclcpp::Duration dt = now - last_direct_input_[driver].header.stamp;
+      const rclcpp::Time& now = get_clock()->now();
+      const rclcpp::Duration& dt = now - last_direct_input_[driver].header.stamp;
       if (dt<rclcpp::Duration::from_seconds(0.25))
       {
         return;
