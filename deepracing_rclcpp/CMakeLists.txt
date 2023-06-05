@@ -57,6 +57,10 @@ find_package(f1_datalogger CONFIG REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 add_library(utils SHARED src/utils/f1_msg_utils.cpp src/utils/file_utils.cpp)
+if(MSVC)
+  target_sources(utils PRIVATE src/utils/xinput_msg_utils.cpp)
+  target_compile_definitions(utils PRIVATE "WIN32_LEAN_AND_MEAN" "NOGDI")
+endif()
 ament_target_dependencies(utils PUBLIC sensor_msgs std_msgs deepracing_msgs rclcpp rosidl_default_runtime)
 target_link_libraries(utils
 PUBLIC
