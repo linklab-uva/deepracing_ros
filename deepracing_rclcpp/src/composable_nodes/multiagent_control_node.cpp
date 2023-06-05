@@ -36,6 +36,7 @@ class MultiagentControlNode : public rclcpp::Node
           std::function<void(const deepracing_msgs::msg::XinputState::ConstPtr&)> func
           = std::bind(&MultiagentControlNode::setStateDirect_, this, std::placeholders::_1,  driver);
           direct_subscriptions_[driver] = create_subscription<deepracing_msgs::msg::XinputState>(direct_topic_name, rclcpp::SensorDataQoS(), func);
+          last_direct_input_[driver] = rclcpp::Time();
         }
       }
       catch(const std::exception& e)
@@ -47,12 +48,14 @@ class MultiagentControlNode : public rclcpp::Node
     deepf1::MultiagentF1InterfaceFactory factory_;
     std::unordered_map<std::string, std::shared_ptr<deepf1::VigemInterface>> interfaces_;
     std::unordered_map<std::string, rclcpp::Subscription<deepracing_msgs::msg::XinputState>::SharedPtr> direct_subscriptions_;
+    std::unordered_map<std::string, rclcpp::Time> last_direct_input_;
     rclcpp::TimerBase::SharedPtr timer_;
 
     void setStateDirect_(const deepracing_msgs::msg::XinputState::ConstPtr& state, const std::string& driver)
     {
       RCLCPP_INFO(get_logger(), "Setting state directly for driver %s", driver.c_str());
       interfaces_[driver]->setStateDirectly(deepracing_ros::XinputMsgUtils::toXinput(*state));
+      last_direct_input_[driver] = state->header.stamp;
     }
 };
 
