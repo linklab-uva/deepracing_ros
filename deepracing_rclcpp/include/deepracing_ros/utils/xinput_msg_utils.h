@@ -10,8 +10,12 @@ namespace deepracing_ros
     {
     public:
         DEEPRACING_RCLCPP_UTILS_PUBLIC XinputMsgUtils() = default;
-        static DEEPRACING_RCLCPP_UTILS_PUBLIC deepracing_msgs::msg::XinputState toMsg(const XINPUT_STATE& xinput_gamepad);
+        static DEEPRACING_RCLCPP_UTILS_PUBLIC deepracing_msgs::msg::XinputState toMsg(const XINPUT_STATE& xinput_state);
         static DEEPRACING_RCLCPP_UTILS_PUBLIC XINPUT_STATE toXinput(const deepracing_msgs::msg::XinputState& xinput_msg);
+
+        
+        static DEEPRACING_RCLCPP_UTILS_PUBLIC deepracing_msgs::msg::XinputGamepad toMsg(const XINPUT_GAMEPAD& xinput_gamepad);
+        static DEEPRACING_RCLCPP_UTILS_PUBLIC XINPUT_GAMEPAD toXinput(const deepracing_msgs::msg::XinputGamepad& xinput_msg);
 
     };
 }
