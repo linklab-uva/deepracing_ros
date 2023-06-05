@@ -5,6 +5,7 @@
 #include <f1_datalogger/controllers/f1_interface.h>
 #include <windows.h>
 #include <Xinput.h>
+
 namespace deepracing_ros
 {
     class XinputMsgUtils
@@ -17,8 +18,6 @@ namespace deepracing_ros
         
         static DEEPRACING_RCLCPP_UTILS_PUBLIC deepracing_msgs::msg::XinputGamepad toMsg(const XINPUT_GAMEPAD& xinput_gamepad);
         static DEEPRACING_RCLCPP_UTILS_PUBLIC XINPUT_GAMEPAD toXinput(const deepracing_msgs::msg::XinputGamepad& xinput_msg);
-        static DEEPRACING_RCLCPP_UTILS_PUBLIC XINPUT_GAMEPAD toXinput(const deepf1::F1ControlCommand& f1_interface_command);
-        static DEEPRACING_RCLCPP_UTILS_PUBLIC void toXinputInplace(const deepf1::F1ControlCommand& f1_interface_command, XINPUT_GAMEPAD& rtn);
 
         
 
