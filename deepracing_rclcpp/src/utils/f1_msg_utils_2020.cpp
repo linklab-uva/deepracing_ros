@@ -236,7 +236,8 @@ deepracing_msgs::msg::CarTelemetryData deepracing_ros::F1MsgUtils2020::toROS(con
   rtn.gear = telemetry_data.gear;
   rtn.rev_lights_percent = telemetry_data.revLightsPercent;
   rtn.speed = telemetry_data.speed;
-  rtn.steer = telemetry_data.steer;
+  //We use a left-positive convention for steering angle, but the F1 UDP uses a right-positive.
+  rtn.steer = -telemetry_data.steer;
   rtn.throttle = telemetry_data.throttle;
   std::copy_n(&(telemetry_data.brakesTemperature[0]), 4, rtn.brakes_temperature.begin());
   std::copy_n(&(telemetry_data.tyresInnerTemperature[0]), 4, rtn.tyres_inner_temperature.begin());
