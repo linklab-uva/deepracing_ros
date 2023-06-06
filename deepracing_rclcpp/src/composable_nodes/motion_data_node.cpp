@@ -33,12 +33,15 @@ namespace composable_nodes
                 deepracing_msgs::msg::TimestampedPacketMotionData rosdata;
                 rosdata.udp_packet = deepracing_ros::F1MsgUtils2020::toROS(*udp_data, m_all_cars_param_); 
                 rosdata.header.set__stamp(udp_packet->header.stamp).set__frame_id(deepracing_ros::F1MsgUtils2020::world_coordinate_name);
-                deepracing_msgs::msg::CarMotionData& ego_motion_data = rosdata.udp_packet.car_motion_data.at(rosdata.udp_packet.header.player_car_index);
-                ego_motion_data.world_forward_dir.header.stamp =
-                ego_motion_data.world_position.header.stamp = 
-                ego_motion_data.world_right_dir.header.stamp =
-                ego_motion_data.world_up_dir.header.stamp = 
-                ego_motion_data.world_velocity.header.stamp = rosdata.header.stamp;
+                if (rosdata.udp_packet.header.player_car_index<22)
+                {
+                    deepracing_msgs::msg::CarMotionData& ego_motion_data = rosdata.udp_packet.car_motion_data.at(rosdata.udp_packet.header.player_car_index);
+                    ego_motion_data.world_forward_dir.header.stamp =
+                    ego_motion_data.world_position.header.stamp = 
+                    ego_motion_data.world_right_dir.header.stamp =
+                    ego_motion_data.world_up_dir.header.stamp = 
+                    ego_motion_data.world_velocity.header.stamp = rosdata.header.stamp;
+                }
                 if (m_all_cars_param_)
                 {
                     for(deepracing_msgs::msg::CarMotionData & motion_data : rosdata.udp_packet.car_motion_data)
@@ -50,6 +53,7 @@ namespace composable_nodes
                         motion_data.world_velocity.header.stamp = rosdata.header.stamp;
                     }
                 }
+                RCLCPP_INFO(get_logger(), "%s", "Publishing on motion data parser");
                 m_motion_data_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketMotionData>(rosdata));
             }
             
