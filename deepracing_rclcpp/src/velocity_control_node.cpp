@@ -65,7 +65,24 @@ class VelocityControlNode : public rclcpp::Node
         m_pid_controller_.computeCommand(0.0, rclcpp::Duration::from_seconds(0.0));
         return;
       }
-      m_pid_controller_.computeCommand(getError(), now - current_time_);
+      if(m_with_acceleration_)
+      {
+        double error = getError(), error_dot;
+        if(error>0)
+        {
+          error_dot = -m_current_accel_;
+        }
+        else
+        {
+          error_dot = m_current_accel_;
+        }
+        m_pid_controller_.computeCommand(error, error_dot, now - current_time_);
+      }
+      else
+      {
+        m_pid_controller_.computeCommand(getError(), now - current_time_);
+      }
+      
       current_time_= now;
     }
 
