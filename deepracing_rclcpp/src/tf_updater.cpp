@@ -237,7 +237,7 @@ class NodeWrapperTfUpdater_
      // std::cout << "Got some data" << std::endl;
       // RCLCPP_INFO(node->get_logger(), "Got some data");
       uint8_t idx;
-      if( motion_data_packet->udp_packet.header.player_car_index<20 )
+      if( motion_data_packet->udp_packet.header.player_car_index<22 )
       {
         idx = motion_data_packet->udp_packet.header.player_car_index;
       }
