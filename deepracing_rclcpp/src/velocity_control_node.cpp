@@ -5,7 +5,7 @@
 #include <deepracing_msgs/msg/timestamped_packet_motion_data.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
-#include <geometry_msgs/msg/accel_stamped.hpp>
+#include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <control_toolbox/pid_ros.hpp>
 #include <std_msgs/msg/float64.hpp>
@@ -24,6 +24,7 @@ class VelocityControlNode : public rclcpp::Node
       m_current_speed_(0.0),
       m_setpoint_(0.0),
       m_error_rate_(0.0),
+      m_current_accel_(0.0),
       m_pid_controller_(get_node_base_interface(),
           get_node_logging_interface(),
           get_node_parameters_interface(),
@@ -36,7 +37,7 @@ class VelocityControlNode : public rclcpp::Node
       {
         odom_synch_listener.subscribe(this, "odom_in", setpoint_listener->get_actual_qos().get_rmw_qos_profile() );
         accel_synch_listener.subscribe(this, "accel_in", setpoint_listener->get_actual_qos().get_rmw_qos_profile() );
-        odom_accel_synchronizer.reset(new message_filters::TimeSynchronizer<nav_msgs::msg::Odometry, geometry_msgs::msg::AccelStamped>(odom_synch_listener, accel_synch_listener, 4));
+        odom_accel_synchronizer.reset(new message_filters::TimeSynchronizer<nav_msgs::msg::Odometry, geometry_msgs::msg::AccelWithCovarianceStamped>(odom_synch_listener, accel_synch_listener, 4));
         odom_accel_synchronizer->registerCallback(std::bind(&VelocityControlNode::synchCallback, this, std::placeholders::_1, std::placeholders::_2));
       }
       else
@@ -78,18 +79,14 @@ class VelocityControlNode : public rclcpp::Node
     rclcpp::Subscription<deepracing_msgs::msg::CarTelemetryData>::SharedPtr telemetry_listener;
 
 
-    std::shared_ptr< message_filters::TimeSynchronizer<nav_msgs::msg::Odometry, geometry_msgs::msg::AccelStamped> > odom_accel_synchronizer;
+    std::shared_ptr< message_filters::TimeSynchronizer<nav_msgs::msg::Odometry, geometry_msgs::msg::AccelWithCovarianceStamped> > odom_accel_synchronizer;
     message_filters::Subscriber<nav_msgs::msg::Odometry> odom_synch_listener;
-    message_filters::Subscriber<geometry_msgs::msg::AccelStamped> accel_synch_listener;
-    inline void synchCallback(const nav_msgs::msg::Odometry::ConstSharedPtr& new_odom, const geometry_msgs::msg::AccelStamped::ConstSharedPtr& new_accel)
+    message_filters::Subscriber<geometry_msgs::msg::AccelWithCovarianceStamped> accel_synch_listener;
+    inline void synchCallback(const nav_msgs::msg::Odometry::ConstSharedPtr& new_odom, const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr& new_accel)
     {
       RCLCPP_DEBUG(get_logger(),"Got a synchronized pair of odom and acceleration");
-      geometry_msgs::msg::Quaternion rotation = new_odom->pose.pose.orientation;
-      Eigen::Quaterniond rotationeig(rotation.w, rotation.x, rotation.y, rotation.z);
-      geometry_msgs::msg::Vector3 accelglobal = new_accel->accel.linear;
-      Eigen::Vector3d accelglobaleig(accelglobal.x, accelglobal.y, accelglobal.z);
-      Eigen::Vector3d accellocaleig = rotationeig.inverse()*accelglobaleig;
       m_current_speed_=new_odom->twist.twist.linear.x;
+      m_current_accel_=new_accel->accel.accel.linear.x;
     }
     inline void odomCallback(const nav_msgs::msg::Odometry::SharedPtr new_odom)
     {
@@ -107,7 +104,7 @@ class VelocityControlNode : public rclcpp::Node
       m_current_telemetry_=*current_telemetry;
     }
 
-    double m_current_speed_, m_setpoint_, m_error_rate_;
+    double m_current_speed_, m_current_accel_, m_setpoint_, m_error_rate_;
 
     deepracing_msgs::msg::CarTelemetryData m_current_telemetry_;
 
