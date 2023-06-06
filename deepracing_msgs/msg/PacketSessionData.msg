@@ -23,3 +23,5 @@ MarshalZone[21] marshal_zones # List of marshal zones – max 21
 uint8 safety_car_status # 0 = no safety car, 1 = full safety car
 											 # 2 = virtual safety car
 uint8 network_game # 0 = offline, 1 = online
+uint8 num_weather_forecast_samples # Number of weather samples to follow
+WeatherForecastSample[20] weather_forecast_samples   # Array of weather forecast samples

@@ -1,5 +1,5 @@
 PacketHeader header # Header
-CarMotionData[20] car_motion_data # Data for all cars on track
+CarMotionData[22] car_motion_data # Data for all cars on track
  # Extra player car ONLY data
 float32[4] suspension_position # Note: All wheel arrays have the following order:
 float32[4] suspension_velocity # RL, RR, FL, FR

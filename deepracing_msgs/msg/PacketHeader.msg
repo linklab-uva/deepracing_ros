@@ -5,3 +5,4 @@ uint64 session_uid# Unique identifier for the session
 float32 session_time# Session timestamp
 uint32 frame_identifier# Identifier for the frame the data was retrieved on
 uint8 player_car_index# Index of player's car in the array
+uint8 secondary_player_car_index# Index of the other car in split-screen mode. 255 if not split-screen. 
