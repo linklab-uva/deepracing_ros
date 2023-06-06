@@ -57,6 +57,10 @@ find_package(f1_datalogger CONFIG REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 add_library(utils SHARED src/utils/f1_msg_utils.cpp src/utils/file_utils.cpp)
+if(MSVC)
+  target_sources(utils PRIVATE src/utils/xinput_msg_utils.cpp)
+  target_compile_definitions(utils PRIVATE "WIN32_LEAN_AND_MEAN" "NOGDI")
+endif()
 ament_target_dependencies(utils PUBLIC sensor_msgs std_msgs deepracing_msgs rclcpp rosidl_default_runtime)
 target_link_libraries(utils
 PUBLIC
@@ -142,19 +146,17 @@ if(TARGET f1_datalogger::f1_datalogger_controllers AND ackermann_msgs_FOUND AND 
   f1_datalogger::f1_datalogger_controllers
   )
   if(WIN32)
-    target_compile_definitions(control_node PUBLIC "_USE_MATH_DEFINES" "NOGDI")
+    target_compile_definitions(control_node PUBLIC "_USE_MATH_DEFINES")
   endif()
   list(APPEND nodes_to_install_ control_node)
 endif()
 
-
-
- ament_export_dependencies(ament_cmake)
- ament_export_dependencies(rclcpp)
- ament_export_dependencies(image_tools)
- ament_export_dependencies(laser_geometry)
- ament_export_dependencies(deepracing_msgs)
- ament_export_dependencies(f1_datalogger)
+ament_export_dependencies(ament_cmake)
+ament_export_dependencies(rclcpp)
+ament_export_dependencies(image_tools)
+ament_export_dependencies(laser_geometry)
+ament_export_dependencies(deepracing_msgs)
+ament_export_dependencies(f1_datalogger)
  
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -164,11 +166,12 @@ install(TARGETS ${nodes_to_install_}
     DESTINATION lib/${PROJECT_NAME}
 )
 install(TARGETS utils
-    EXPORT ${PROJECT_NAME}-export
+    EXPORT export_${PROJECT_NAME}
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
+ament_export_targets(export_${PROJECT_NAME})
 install(
   DIRECTORY include/
   DESTINATION include
@@ -203,11 +206,12 @@ rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::UdpDemuxer"
   EXECUTABLE udp_demuxer_exe
 )
+
 install(TARGETS deepracing_composable_nodes
+  EXPORT export_deepracing_composable_nodes
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
-ament_export_libraries(deepracing_composable_nodes)
-ament_export_targets(${PROJECT_NAME}-export)
+ament_export_targets(export_deepracing_composable_nodes)
 ament_package()
