@@ -140,7 +140,7 @@ deepracing_msgs::msg::PacketLapData deepracing_ros::F1MsgUtils2020::toROS(const 
 {
   deepracing_msgs::msg::PacketLapData rtn;
   rtn.header = deepracing_ros::F1MsgUtils2020::toROS(lap_data.header);
-  if (rtn.header.player_car_index<20)
+  if (rtn.header.player_car_index<22)
   {
     rtn.lap_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2020::toROS(lap_data.lapData[rtn.header.player_car_index]);
   }
