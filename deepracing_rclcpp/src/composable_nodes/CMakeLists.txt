@@ -10,14 +10,6 @@ set(deepracing_composable_node_srcs
   udp_demuxer_node.cpp
 )
 add_library(deepracing_composable_nodes SHARED ${deepracing_composable_node_srcs})
-if(TARGET f1_datalogger::f1_datalogger_controllers)
-  target_sources(deepracing_composable_nodes PRIVATE multiagent_control_node.cpp)
-  target_link_libraries(deepracing_composable_nodes PUBLIC f1_datalogger::f1_datalogger_controllers)
-  rclcpp_components_register_node(deepracing_composable_nodes
-    PLUGIN "deepracing::composable_nodes::MultiagentControlNode"
-    EXECUTABLE multiagent_control_node_exe
-  )
-endif()
 if(WIN32)
   target_sources(deepracing_composable_nodes PRIVATE gamepad_multiplexer_node.cpp)
   target_link_libraries(deepracing_composable_nodes 
@@ -30,6 +22,14 @@ if(WIN32)
     PLUGIN "deepracing::composable_nodes::GamepadMultiplexerNode"
     EXECUTABLE gamepad_multiplexer_node_exe
   )
+  if(TARGET f1_datalogger::f1_datalogger_controllers)
+    target_sources(deepracing_composable_nodes PRIVATE multiagent_control_node.cpp)
+    target_link_libraries(deepracing_composable_nodes PUBLIC f1_datalogger::f1_datalogger_controllers)
+    rclcpp_components_register_node(deepracing_composable_nodes
+      PLUGIN "deepracing::composable_nodes::MultiagentControlNode"
+      EXECUTABLE multiagent_control_node_exe
+    )
+  endif()
 endif()
 
 ament_target_dependencies(deepracing_composable_nodes

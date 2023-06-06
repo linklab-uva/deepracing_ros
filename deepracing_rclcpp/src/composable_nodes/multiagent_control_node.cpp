@@ -8,8 +8,6 @@
 #include <memory>
 #include <unordered_map>
 
-#define WIN32_LEAN_AND_MEAN
-#define NOGDI
 #include <windows.h>
 #include <Xinput.h>
 #include <f1_datalogger/controllers/vigem_interface.h>
