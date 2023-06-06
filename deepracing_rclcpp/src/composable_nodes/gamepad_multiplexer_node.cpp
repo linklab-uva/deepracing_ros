@@ -6,7 +6,10 @@
 #include <deepracing_ros/utils/xinput_msg_utils.h>
 #include <windows.h>
 #include <Xinput.h>
-
+namespace deepracing
+{
+namespace composable_nodes
+{
 class GamepadMultiplexerNode : public rclcpp::Node 
 {
   public:
@@ -61,8 +64,7 @@ class GamepadMultiplexerNode : public rclcpp::Node
     std::vector<std::string> driver_names_;
 
 };
-int main(int argc, char *argv[]) {
-  rclcpp::init(argc,argv);
-  std::shared_ptr<GamepadMultiplexerNode> node(new GamepadMultiplexerNode(rclcpp::NodeOptions()));
-  rclcpp::spin(node);
 }
+}
+#include <rclcpp_components/register_node_macro.hpp>  // NOLINT
+RCLCPP_COMPONENTS_REGISTER_NODE(deepracing::composable_nodes::GamepadMultiplexerNode);

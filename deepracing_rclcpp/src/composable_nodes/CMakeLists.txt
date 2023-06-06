@@ -9,17 +9,26 @@ set(deepracing_composable_node_srcs
   telemetry_data_node.cpp
   udp_demuxer_node.cpp
 )
-if(TARGET f1_datalogger::f1_datalogger_controllers)
-  list(APPEND deepracing_composable_node_srcs multiagent_control_node.cpp)
-endif()
 add_library(deepracing_composable_nodes SHARED ${deepracing_composable_node_srcs})
-
 if(TARGET f1_datalogger::f1_datalogger_controllers)
+  target_sources(deepracing_composable_nodes PRIVATE multiagent_control_node.cpp)
   target_link_libraries(deepracing_composable_nodes PUBLIC f1_datalogger::f1_datalogger_controllers)
-  
   rclcpp_components_register_node(deepracing_composable_nodes
     PLUGIN "deepracing::composable_nodes::MultiagentControlNode"
     EXECUTABLE multiagent_control_node_exe
+  )
+endif()
+if(WIN32)
+  target_sources(deepracing_composable_nodes PRIVATE gamepad_multiplexer_node.cpp)
+  target_link_libraries(deepracing_composable_nodes 
+    PUBLIC 
+      setupAPI 
+      xinput
+  )
+  target_compile_definitions(deepracing_composable_nodes PUBLIC "NOGDI" "WIN32_LEAN_AND_MEAN")
+  rclcpp_components_register_node(deepracing_composable_nodes
+    PLUGIN "deepracing::composable_nodes::GamepadMultiplexerNode"
+    EXECUTABLE gamepad_multiplexer_node_exe
   )
 endif()
 
