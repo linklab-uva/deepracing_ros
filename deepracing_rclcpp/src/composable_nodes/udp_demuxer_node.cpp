@@ -6,7 +6,7 @@
 #include <udp_msgs/msg/udp_packet.hpp>
 #include <deepracing_msgs/msg/timestamped_packet_motion_data.hpp>
 #include <f1_datalogger/car_data/f1_2018/timestamped_car_data.h>
-#include <deepracing_ros/utils/f1_msg_utils.h>
+#include <deepracing_ros/utils/f1_msg_utils_2020.h>
 
 namespace deepracing
 {
@@ -31,44 +31,44 @@ namespace composable_nodes
                 m_time_start_ = get_clock()->now();
             } 
         private:
-            inline DEEPRACING_RCLCPP_LOCAL void udp_cb(const udp_msgs::msg::UdpPacket::ConstPtr& udp_packet)
+            inline DEEPRACING_RCLCPP_LOCAL void udp_cb(udp_msgs::msg::UdpPacket::UniquePtr udp_packet)
             {
-                deepf1::twenty_eighteen::PacketHeader* header = reinterpret_cast<deepf1::twenty_eighteen::PacketHeader*>((void*)&(udp_packet->data.at(0)));
-                switch (header->m_packetId)
+                deepf1::twenty_twenty::PacketHeader* header = reinterpret_cast<deepf1::twenty_twenty::PacketHeader*>((void*)&(udp_packet->data.at(0)));
+                switch (header->packetId)
                 {
-                    case deepf1::twenty_eighteen::PacketID::MOTION:
+                    case deepf1::twenty_twenty::PacketID::MOTION:
                     {
-                        m_motion_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_motion_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::CARTELEMETRY:
+                    case deepf1::twenty_twenty::PacketID::CARTELEMETRY:
                     {
-                        m_telemetry_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_telemetry_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::CARSETUPS:
+                    case deepf1::twenty_twenty::PacketID::CARSETUPS:
                     {
-                        m_car_setup_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_car_setup_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::CARSTATUS:
+                    case deepf1::twenty_twenty::PacketID::CARSTATUS:
                     {
-                        m_car_status_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_car_status_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::LAPDATA:
+                    case deepf1::twenty_twenty::PacketID::LAPDATA:
                     {
-                        m_lap_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_lap_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::SESSION:
+                    case deepf1::twenty_twenty::PacketID::SESSION:
                     {
-                        m_session_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_session_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::PARTICIPANTS:
+                    case deepf1::twenty_twenty::PacketID::PARTICIPANTS:
                     {
-                        m_participants_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_participants_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
                     default:

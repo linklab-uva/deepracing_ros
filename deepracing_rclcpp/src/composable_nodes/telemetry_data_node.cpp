@@ -6,7 +6,7 @@
 #include <udp_msgs/msg/udp_packet.hpp>
 #include <deepracing_msgs/msg/timestamped_packet_car_telemetry_data.hpp>
 #include <f1_datalogger/car_data/f1_2018/timestamped_car_data.h>
-#include <deepracing_ros/utils/f1_msg_utils.h>
+#include <deepracing_ros/utils/f1_msg_utils_2020.h>
 
 namespace deepracing
 {
@@ -29,10 +29,10 @@ namespace composable_nodes
         private:
             inline DEEPRACING_RCLCPP_LOCAL void udp_cb(const udp_msgs::msg::UdpPacket::ConstPtr& udp_packet)
             {
-                deepf1::twenty_eighteen::PacketCarTelemetryData* udp_data = reinterpret_cast<deepf1::twenty_eighteen::PacketCarTelemetryData*>((void*)&(udp_packet->data.at(0)));
+                deepf1::twenty_twenty::PacketCarTelemetryData* udp_data = reinterpret_cast<deepf1::twenty_twenty::PacketCarTelemetryData*>((void*)&(udp_packet->data.at(0)));
                 deepracing_msgs::msg::TimestampedPacketCarTelemetryData rosdata;
-                rosdata.udp_packet = deepracing_ros::F1MsgUtils::toROS(*udp_data, m_all_cars_param_); 
-                rosdata.header.set__stamp(udp_packet->header.stamp).set__frame_id(deepracing_ros::F1MsgUtils::world_coordinate_name);
+                rosdata.udp_packet = deepracing_ros::F1MsgUtils2020::toROS(*udp_data, m_all_cars_param_); 
+                rosdata.header.set__stamp(udp_packet->header.stamp).set__frame_id(deepracing_ros::F1MsgUtils2020::world_coordinate_name);
                 m_telmetry_data_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>(rosdata));
             }
             

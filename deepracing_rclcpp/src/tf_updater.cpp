@@ -14,12 +14,11 @@
 #include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <nav_msgs/msg/odometry.hpp>
-#include "deepracing_ros/utils/f1_msg_utils.h"
+#include "deepracing_ros/utils/f1_msg_utils_2020.h"
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <random_numbers/random_numbers.h>
 #include <json/json.h>
-#include <deepracing_ros/utils/f1_msg_utils.h>
 #include <deepracing_ros/utils/file_utils.h>
 #include <fstream>
 #include <iostream>
@@ -42,7 +41,7 @@ class NodeWrapperTfUpdater_
      statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node));
      tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node));
      mapToTrack.header.frame_id = "map";
-     mapToTrack.child_frame_id = deepracing_ros::F1MsgUtils::world_coordinate_name;
+     mapToTrack.child_frame_id = deepracing_ros::F1MsgUtils2020::world_coordinate_name;
      std::filesystem::path covariance_file_path = std::filesystem::path(ament_index_cpp::get_package_share_directory("deepracing_launch")) / std::filesystem::path("data") / std::filesystem::path("covariances.json");
 
      Json::Value root;
@@ -103,7 +102,7 @@ class NodeWrapperTfUpdater_
      {
        throw rclcpp::exceptions::InvalidParameterValueException("\"centroid_to_base_translation\" must have exactly 3 values");
      }
-     carToBaseLink.header.frame_id = deepracing_ros::F1MsgUtils::car_coordinate_name+"_"+carname;
+     carToBaseLink.header.frame_id = deepracing_ros::F1MsgUtils2020::car_coordinate_name+"_"+carname;
      carToBaseLink.child_frame_id = "base_link_"+carname;
      carToBaseLink.transform.translation.x = car_to_base_translation.at(0);
      carToBaseLink.transform.translation.y = car_to_base_translation.at(1);
@@ -187,7 +186,7 @@ class NodeWrapperTfUpdater_
         }
         RCLCPP_INFO(node->get_logger(), "Looking for starting pose file in: %s" , ss.str().c_str());
         
-        std::array<std::string, 25> tracknames = deepracing_ros::F1MsgUtils::track_names();
+        std::array<std::string, 25> tracknames = deepracing_ros::F1MsgUtils2020::track_names();
         std::string trackname = tracknames[session_msg->udp_packet.track_id];
         std::string starting_pose_filepath = deepracing_ros::FileUtils::findFile(trackname+"_startingpose.json", search_dirs);
         RCLCPP_INFO(node->get_logger(), "Got starting pose file: %s", starting_pose_filepath.c_str());
@@ -267,7 +266,7 @@ class NodeWrapperTfUpdater_
       rotationEigen.normalize();
       geometry_msgs::msg::TransformStamped transformMsg;
       transformMsg.set__header(motion_data_packet->header);
-      transformMsg.set__child_frame_id(deepracing_ros::F1MsgUtils::car_coordinate_name+"_"+carname);
+      transformMsg.set__child_frame_id(deepracing_ros::F1MsgUtils2020::car_coordinate_name+"_"+carname);
       transformMsg.transform.rotation.x = rotationEigen.x();
       transformMsg.transform.rotation.y = rotationEigen.y();
       transformMsg.transform.rotation.z = rotationEigen.z();
