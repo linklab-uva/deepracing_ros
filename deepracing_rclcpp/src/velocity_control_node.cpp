@@ -1,4 +1,5 @@
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp/create_timer.hpp"
 #include <sstream>
 #include <functional>
 #include <deepracing_msgs/msg/timestamped_packet_motion_data.hpp>
@@ -12,6 +13,7 @@
 #include <message_filters/subscriber.h>
 #include <Eigen/Geometry>
 #include <tf2_eigen/tf2_eigen.hpp>
+#include <deepracing_msgs/msg/car_telemetry_data.hpp>
 
 class VelocityControlNode : public rclcpp::Node 
 {
@@ -21,9 +23,14 @@ class VelocityControlNode : public rclcpp::Node
      : rclcpp::Node("velocity_control_node", options),
       m_current_speed_(0.0),
       m_setpoint_(0.0),
-      m_error_rate_(0.0)
+      m_error_rate_(0.0),
+      m_pid_controller_(get_node_base_interface(),
+          get_node_logging_interface(),
+          get_node_parameters_interface(),
+          get_node_topics_interface())
     {
       setpoint_listener = create_subscription<std_msgs::msg::Float64>("setpoint_in", rclcpp::QoS{1}, std::bind(&VelocityControlNode::setpointCallback, this, std::placeholders::_1));
+      telemetry_listener = create_subscription<deepracing_msgs::msg::CarTelemetryData>("telemetry_data", rclcpp::QoS{1}, std::bind(&VelocityControlNode::telemetryCallback, this, std::placeholders::_1));
       m_with_acceleration_ = declare_parameter<bool>("with_acceleration", false);
       if (m_with_acceleration_)
       {
@@ -36,6 +43,7 @@ class VelocityControlNode : public rclcpp::Node
       {
         odom_listener = create_subscription<nav_msgs::msg::Odometry>("odom_in", rclcpp::QoS{1}, std::bind(&VelocityControlNode::odomCallback, this, std::placeholders::_1));
       }
+      
     }
 
     inline double getError()
@@ -46,12 +54,29 @@ class VelocityControlNode : public rclcpp::Node
     {
       return m_with_acceleration_;
     }
+    inline void timerCB()
+    {
+      rclcpp::Time now = get_clock()->now();
+      if (current_time_.nanoseconds()==0)
+      {
+        current_time_= now;
+        m_pid_controller_.setCurrentCmd(0.0);
+        m_pid_controller_.computeCommand(0.0, rclcpp::Duration::from_seconds(0.0));
+        return;
+      }
+      m_pid_controller_.computeCommand(getError(), now - current_time_);
+      current_time_= now;
+    }
+
+    rclcpp::Time current_time_;
 
   private:
     bool m_with_acceleration_;
 
     rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr setpoint_listener;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_listener;
+    rclcpp::Subscription<deepracing_msgs::msg::CarTelemetryData>::SharedPtr telemetry_listener;
+
 
     std::shared_ptr< message_filters::TimeSynchronizer<nav_msgs::msg::Odometry, geometry_msgs::msg::AccelStamped> > odom_accel_synchronizer;
     message_filters::Subscriber<nav_msgs::msg::Odometry> odom_synch_listener;
@@ -76,30 +101,41 @@ class VelocityControlNode : public rclcpp::Node
       RCLCPP_DEBUG(get_logger(),"Got a new setpoint");
       m_setpoint_=new_setpoint->data;
     }
+    inline void telemetryCallback(const deepracing_msgs::msg::CarTelemetryData::SharedPtr current_telemetry)
+    {
+      RCLCPP_DEBUG(get_logger(),"Got a new telemetry msg");
+      m_current_telemetry_=*current_telemetry;
+    }
 
     double m_current_speed_, m_setpoint_, m_error_rate_;
+
+    deepracing_msgs::msg::CarTelemetryData m_current_telemetry_;
+
+    control_toolbox::PidROS m_pid_controller_;
 };
 int main(int argc, char *argv[]) {
   rclcpp::init(argc,argv);
   std::shared_ptr<VelocityControlNode> node(new VelocityControlNode(rclcpp::NodeOptions()));
   std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> executor( new rclcpp::executors::MultiThreadedExecutor(rclcpp::ExecutorOptions(), 3) );
   executor->add_node(node);
-  rclcpp::Rate rate(node->declare_parameter<double>("frequency", 10.0));
-  std::shared_ptr<control_toolbox::PidROS> pid_controller(new control_toolbox::PidROS(node));
-  pid_controller->initPid(0.075, 0.0075, 0.005, 0.75, -0.75, true);
-  std::thread spinthread = std::thread(std::bind(&rclcpp::executors::MultiThreadedExecutor::spin, executor));
-  pid_controller->setCurrentCmd(0.0);
-  pid_controller->computeCommand(node->getError(), rclcpp::Duration::from_seconds(0.0));
-  rclcpp::Time t0 = node->now();
-  rclcpp::Time t1;
-  while(rclcpp::ok())
-  {
-    rate.sleep();
-    double error = node->getError();
-    t1 = node->now();
-    pid_controller->computeCommand(error, t1 - t0);
-    t0 = t1;
-  }
-  spinthread.join();
+  double frequency = node->declare_parameter<double>("frequency", 50.0);
+  // pid_controller->initPid(0.075, 0.0075, 0.005, 0.75, -0.75, true);
+  // pid_controller->setCurrentCmd(0.0);
+  rclcpp::TimerBase::SharedPtr timer = rclcpp::create_timer(node, node->get_clock(), rclcpp::Duration::from_seconds(1.0/frequency),
+    std::bind(&VelocityControlNode::timerCB, node));
+  executor->spin();
+  // std::thread spinthread = std::thread(std::bind(&rclcpp::executors::MultiThreadedExecutor::spin, ));
+  // pid_controller->computeCommand(node->getError(), rclcpp::Duration::from_seconds(0.0));
+  // rclcpp::Time t0 = node->now();
+  // rclcpp::Time t1;
+  // while(rclcpp::ok())
+  // {
+  //   rate.sleep();
+  //   double error = node->getError();
+  //   t1 = node->now();
+  //   pid_controller->computeCommand(error, t1 - t0);
+  //   t0 = t1;
+  // }
+  // spinthread.join();
   
 }
