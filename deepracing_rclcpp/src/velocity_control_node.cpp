@@ -44,7 +44,7 @@ class VelocityControlNode : public rclcpp::Node
       {
         odom_listener = create_subscription<nav_msgs::msg::Odometry>("odom_in", rclcpp::QoS{1}, std::bind(&VelocityControlNode::odomCallback, this, std::placeholders::_1));
       }
-      
+      m_pid_controller_.initPid(1.0, 0.0, 0.0, 100.0, -100.0, true);
     }
 
     inline double getError()
