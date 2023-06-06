@@ -72,7 +72,7 @@ class MultiagentControlNode : public rclcpp::Node
 
     void setStateDirect_(const deepracing_msgs::msg::XinputState::ConstPtr& state, const std::string& driver)
     {
-      RCLCPP_INFO(get_logger(), "Setting state directly for driver %s", driver.c_str());
+      RCLCPP_DEBUG(get_logger(), "Setting state directly for driver %s", driver.c_str());
       interfaces_[driver]->setStateDirectly(deepracing_ros::XinputMsgUtils::toXinput(*state));
       last_direct_input_[driver] = *state;
     }
