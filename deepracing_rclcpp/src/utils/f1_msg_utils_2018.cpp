@@ -1,4 +1,4 @@
-#include "deepracing_ros/utils/f1_msg_utils.h"
+#include "deepracing_ros/utils/f1_msg_utils_2018.h"
 #include <Eigen/Geometry>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/image_encodings.hpp>
@@ -11,9 +11,9 @@
 #include <exception>
 #include <algorithm>
 
-const std::string deepracing_ros::F1MsgUtils::world_coordinate_name("track");
-const std::string deepracing_ros::F1MsgUtils::car_coordinate_name("centroid");
-deepracing_msgs::msg::MarshalZone deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::MarshalZone& marshal_zone)
+const std::string deepracing_ros::F1MsgUtils2018::world_coordinate_name("track");
+const std::string deepracing_ros::F1MsgUtils2018::car_coordinate_name("centroid");
+deepracing_msgs::msg::MarshalZone deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::MarshalZone& marshal_zone)
 {
   deepracing_msgs::msg::MarshalZone rtn;
   rtn.zone_flag = marshal_zone.m_zoneFlag;
@@ -22,7 +22,7 @@ deepracing_msgs::msg::MarshalZone deepracing_ros::F1MsgUtils::toROS(const deepf1
 }
 
 
-deepracing_msgs::msg::CarSetupData deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::CarSetupData& setup_data)
+deepracing_msgs::msg::CarSetupData deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::CarSetupData& setup_data)
 {
   deepracing_msgs::msg::CarSetupData rtn;
   rtn.ballast = setup_data.m_ballast;
@@ -47,13 +47,13 @@ deepracing_msgs::msg::CarSetupData deepracing_ros::F1MsgUtils::toROS(const deepf
   rtn.rear_wing = setup_data.m_rearWing;
   return rtn;
 }
-deepracing_msgs::msg::PacketCarSetupData deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::PacketCarSetupData& packet_setup_data, bool copy_all_cars)
+deepracing_msgs::msg::PacketCarSetupData deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::PacketCarSetupData& packet_setup_data, bool copy_all_cars)
 {
   deepracing_msgs::msg::PacketCarSetupData rtn;
-  rtn.header = deepracing_ros::F1MsgUtils::toROS(packet_setup_data.m_header);
+  rtn.header = deepracing_ros::F1MsgUtils2018::toROS(packet_setup_data.m_header);
   if (rtn.header.player_car_index<20)
   {
-    rtn.car_setup_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils::toROS(packet_setup_data.m_carSetups[rtn.header.player_car_index]);
+    rtn.car_setup_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2018::toROS(packet_setup_data.m_carSetups[rtn.header.player_car_index]);
   }
   if(copy_all_cars)
   {
@@ -61,7 +61,7 @@ deepracing_msgs::msg::PacketCarSetupData deepracing_ros::F1MsgUtils::toROS(const
     {
       if (i!=rtn.header.player_car_index)
       {
-        rtn.car_setup_data[i] = deepracing_ros::F1MsgUtils::toROS(packet_setup_data.m_carSetups[i]);
+        rtn.car_setup_data[i] = deepracing_ros::F1MsgUtils2018::toROS(packet_setup_data.m_carSetups[i]);
       }
     }
   }
@@ -69,7 +69,7 @@ deepracing_msgs::msg::PacketCarSetupData deepracing_ros::F1MsgUtils::toROS(const
 }
 
 
-deepracing_msgs::msg::CarStatusData deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::CarStatusData& status_data)
+deepracing_msgs::msg::CarStatusData deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::CarStatusData& status_data)
 {
   deepracing_msgs::msg::CarStatusData rtn;
   rtn.anti_lock_brakes = status_data.m_antiLockBrakes;
@@ -101,14 +101,14 @@ deepracing_msgs::msg::CarStatusData deepracing_ros::F1MsgUtils::toROS(const deep
   std::copy_n(&(status_data.m_tyresWear[0]), 4, rtn.tyres_wear.begin());
   return rtn;
 }
-deepracing_msgs::msg::PacketCarStatusData deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::PacketCarStatusData& packet_status_data, bool copy_all_cars)
+deepracing_msgs::msg::PacketCarStatusData deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::PacketCarStatusData& packet_status_data, bool copy_all_cars)
 {
 
   deepracing_msgs::msg::PacketCarStatusData rtn;
-  rtn.header = deepracing_ros::F1MsgUtils::toROS(packet_status_data.m_header);
+  rtn.header = deepracing_ros::F1MsgUtils2018::toROS(packet_status_data.m_header);
   if (rtn.header.player_car_index<20)
   {
-    rtn.car_status_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils::toROS(packet_status_data.m_carStatusData[rtn.header.player_car_index]);
+    rtn.car_status_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2018::toROS(packet_status_data.m_carStatusData[rtn.header.player_car_index]);
   }
   if(copy_all_cars)
   {
@@ -116,7 +116,7 @@ deepracing_msgs::msg::PacketCarStatusData deepracing_ros::F1MsgUtils::toROS(cons
     {
       if (i!=rtn.header.player_car_index)
       {
-        rtn.car_status_data[i] = deepracing_ros::F1MsgUtils::toROS(packet_status_data.m_carStatusData[i]);
+        rtn.car_status_data[i] = deepracing_ros::F1MsgUtils2018::toROS(packet_status_data.m_carStatusData[i]);
       }
     }
   }
@@ -124,13 +124,13 @@ deepracing_msgs::msg::PacketCarStatusData deepracing_ros::F1MsgUtils::toROS(cons
 }
 
 
-deepracing_msgs::msg::PacketLapData deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::PacketLapData& lap_data, bool copy_all_cars)
+deepracing_msgs::msg::PacketLapData deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::PacketLapData& lap_data, bool copy_all_cars)
 {
   deepracing_msgs::msg::PacketLapData rtn;
-  rtn.header = deepracing_ros::F1MsgUtils::toROS(lap_data.m_header);
+  rtn.header = deepracing_ros::F1MsgUtils2018::toROS(lap_data.m_header);
   if (rtn.header.player_car_index<20)
   {
-    rtn.lap_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils::toROS(lap_data.m_lapData[rtn.header.player_car_index]);
+    rtn.lap_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2018::toROS(lap_data.m_lapData[rtn.header.player_car_index]);
   }
   if(copy_all_cars)
   {
@@ -138,13 +138,13 @@ deepracing_msgs::msg::PacketLapData deepracing_ros::F1MsgUtils::toROS(const deep
     {
       if (i!=rtn.header.player_car_index)
       {
-        rtn.lap_data[i] = deepracing_ros::F1MsgUtils::toROS(lap_data.m_lapData[i]);
+        rtn.lap_data[i] = deepracing_ros::F1MsgUtils2018::toROS(lap_data.m_lapData[i]);
       }
     }
   }
   return rtn;
 }
-deepracing_msgs::msg::LapData deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::LapData& lap_data)
+deepracing_msgs::msg::LapData deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::LapData& lap_data)
 {
   deepracing_msgs::msg::LapData rtn;
   rtn.best_lap_time = lap_data.m_bestLapTime;
@@ -167,7 +167,7 @@ deepracing_msgs::msg::LapData deepracing_ros::F1MsgUtils::toROS(const deepf1::tw
   return rtn;
 }
 
-deepracing_msgs::msg::PacketSessionData deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::PacketSessionData& session_data)
+deepracing_msgs::msg::PacketSessionData deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::PacketSessionData& session_data)
 {
   deepracing_msgs::msg::PacketSessionData rtn;
   rtn.header=toROS(session_data.m_header);
@@ -192,7 +192,7 @@ deepracing_msgs::msg::PacketSessionData deepracing_ros::F1MsgUtils::toROS(const 
   rtn.track_temperature = session_data.m_trackTemperature;
   return rtn;
 }
-deepracing_msgs::msg::CarTelemetryData deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::CarTelemetryData& telemetry_data)
+deepracing_msgs::msg::CarTelemetryData deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::CarTelemetryData& telemetry_data)
 {
   deepracing_msgs::msg::CarTelemetryData  rtn;
   
@@ -212,13 +212,13 @@ deepracing_msgs::msg::CarTelemetryData deepracing_ros::F1MsgUtils::toROS(const d
   std::copy_n(&(telemetry_data.m_tyresSurfaceTemperature[0]), 4, rtn.tyres_surface_temperature.begin());
   return rtn;
 }
-deepracing_msgs::msg::PacketCarTelemetryData deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::PacketCarTelemetryData& telemetry_data, bool copy_all_cars)
+deepracing_msgs::msg::PacketCarTelemetryData deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::PacketCarTelemetryData& telemetry_data, bool copy_all_cars)
 {
   deepracing_msgs::msg::PacketCarTelemetryData rtn;
-  rtn.header = deepracing_ros::F1MsgUtils::toROS(telemetry_data.m_header);
+  rtn.header = deepracing_ros::F1MsgUtils2018::toROS(telemetry_data.m_header);
   if (rtn.header.player_car_index<20)
   {
-    rtn.car_telemetry_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils::toROS(telemetry_data.m_carTelemetryData[rtn.header.player_car_index]);
+    rtn.car_telemetry_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2018::toROS(telemetry_data.m_carTelemetryData[rtn.header.player_car_index]);
   }
   if(copy_all_cars)
   {
@@ -226,13 +226,13 @@ deepracing_msgs::msg::PacketCarTelemetryData deepracing_ros::F1MsgUtils::toROS(c
     {
       if (i!=rtn.header.player_car_index)
       {
-        rtn.car_telemetry_data[i] = deepracing_ros::F1MsgUtils::toROS(telemetry_data.m_carTelemetryData[i]);
+        rtn.car_telemetry_data[i] = deepracing_ros::F1MsgUtils2018::toROS(telemetry_data.m_carTelemetryData[i]);
       }
     }
   }
   return rtn;
 }
-deepracing_msgs::msg::PacketHeader deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::PacketHeader& header_data)
+deepracing_msgs::msg::PacketHeader deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::PacketHeader& header_data)
 {
     deepracing_msgs::msg::PacketHeader rtn;
     rtn.frame_identifier = header_data.m_frameIdentifier;
@@ -245,10 +245,10 @@ deepracing_msgs::msg::PacketHeader deepracing_ros::F1MsgUtils::toROS(const deepf
 
     return rtn;
 }
-deepracing_msgs::msg::PacketMotionData deepracing_ros::F1MsgUtils::toROS(const deepf1::twenty_eighteen::PacketMotionData& motion_data, bool copy_all_cars)
+deepracing_msgs::msg::PacketMotionData deepracing_ros::F1MsgUtils2018::toROS(const deepf1::twenty_eighteen::PacketMotionData& motion_data, bool copy_all_cars)
 {
     deepracing_msgs::msg::PacketMotionData rtn;
-    rtn.header = deepracing_ros::F1MsgUtils::toROS(motion_data.m_header);
+    rtn.header = deepracing_ros::F1MsgUtils2018::toROS(motion_data.m_header);
     rtn.angular_acceleration.x = motion_data.m_angularAccelerationX;
     rtn.angular_acceleration.y = motion_data.m_angularAccelerationY;
     rtn.angular_acceleration.z = motion_data.m_angularAccelerationZ;
@@ -269,16 +269,16 @@ deepracing_msgs::msg::PacketMotionData deepracing_ros::F1MsgUtils::toROS(const d
     {
       auto beg = std::cbegin<deepf1::twenty_eighteen::CarMotionData [20]>(motion_data.m_carMotionData);
       auto end = std::cend<deepf1::twenty_eighteen::CarMotionData [20]>(motion_data.m_carMotionData);
-      std::function<deepracing_msgs::msg::CarMotionData (const deepf1::twenty_eighteen::CarMotionData&)> f = &deepracing_ros::F1MsgUtils::toROSMotionData;
+      std::function<deepracing_msgs::msg::CarMotionData (const deepf1::twenty_eighteen::CarMotionData&)> f = &deepracing_ros::F1MsgUtils2018::toROSMotionData;
       std::transform(beg, end, rtn.car_motion_data.begin(), f);
     }
     else if(rtn.header.player_car_index<20)
     {
-      rtn.car_motion_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils::toROSMotionData(motion_data.m_carMotionData[rtn.header.player_car_index]);
+      rtn.car_motion_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2018::toROSMotionData(motion_data.m_carMotionData[rtn.header.player_car_index]);
     }
     return rtn;
 }
-deepracing_msgs::msg::CarMotionData deepracing_ros::F1MsgUtils::toROSMotionData(const deepf1::twenty_eighteen::CarMotionData& motion_data)
+deepracing_msgs::msg::CarMotionData deepracing_ros::F1MsgUtils2018::toROSMotionData(const deepf1::twenty_eighteen::CarMotionData& motion_data)
 {
     deepracing_msgs::msg::CarMotionData rtn;
     Eigen::Vector3d forwardVec( (double)motion_data.m_worldForwardDirX, (double)motion_data.m_worldForwardDirY, (double)motion_data.m_worldForwardDirZ );

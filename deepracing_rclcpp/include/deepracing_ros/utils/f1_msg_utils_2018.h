@@ -1,8 +1,7 @@
-#ifndef DEEPRACING_ROS_F1_MSG_UTILS_H
-#define DEEPRACING_ROS_F1_MSG_UTILS_H
+#ifndef DEEPRACING_ROS_F1_MSG_UTILS_2018_H
+#define DEEPRACING_ROS_F1_MSG_UTILS_2018_H
 #include <deepracing_ros/utils/visibility_control.hpp>
 #include "f1_datalogger/car_data/f1_2018/car_data.h"
-#include "f1_datalogger/car_data/f1_2020/car_data.h"
 #include "deepracing_msgs/msg/packet_header.hpp"
 #include "deepracing_msgs/msg/packet_motion_data.hpp"
 #include "deepracing_msgs/msg/packet_car_setup_data.hpp"
@@ -17,10 +16,10 @@
 
 namespace deepracing_ros
 {
-    class F1MsgUtils
+    class F1MsgUtils2018
     {
     public:
-        DEEPRACING_RCLCPP_UTILS_PUBLIC F1MsgUtils() = default;
+        DEEPRACING_RCLCPP_UTILS_PUBLIC F1MsgUtils2018() = default;
         static DEEPRACING_RCLCPP_UTILS_PUBLIC deepracing_msgs::msg::PacketHeader toROS(const deepf1::twenty_eighteen::PacketHeader& header_data);
         
         static DEEPRACING_RCLCPP_UTILS_PUBLIC deepracing_msgs::msg::CarSetupData toROS(const deepf1::twenty_eighteen::CarSetupData& setup_data);

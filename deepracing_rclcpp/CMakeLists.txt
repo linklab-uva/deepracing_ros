@@ -56,7 +56,7 @@ find_package(control_toolbox)
 find_package(f1_datalogger CONFIG REQUIRED)
 find_package(Eigen3 REQUIRED)
 
-add_library(utils SHARED src/utils/f1_msg_utils.cpp src/utils/file_utils.cpp)
+add_library(utils SHARED src/utils/f1_msg_utils_2020.cpp src/utils/file_utils.cpp)
 if(MSVC)
   target_sources(utils PRIVATE src/utils/xinput_msg_utils.cpp)
   target_compile_definitions(utils PRIVATE "WIN32_LEAN_AND_MEAN" "NOGDI")
@@ -117,27 +117,29 @@ if (ackermann_msgs_FOUND)
   list(APPEND nodes_to_install_ race_supervisor_node)
 endif()
 
+# Will update this eventually
+# if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge_FOUND)
+#   add_executable(ros_rebroadcaster src/ros_rebroadcaster.cpp)
+#   ament_target_dependencies(ros_rebroadcaster cv_bridge image_transport sensor_msgs std_msgs std_srvs deepracing_msgs)
+#   target_link_libraries(ros_rebroadcaster
+#   utils
+#   f1_datalogger::f1_datalogger
+#   )
+#   list(APPEND nodes_to_install_ ros_rebroadcaster)
+#   if(WIN32)
+#     include(${f1_datalogger_DIR}/windows_stuff.cmake)
+#     get_WIN32_WINNT(win32_ver)
+#     message(STATUS "Win32 version: ${win32_ver}")
+#     target_compile_definitions(ros_rebroadcaster PRIVATE "_WIN32_WINNT=${win32_ver}")
+#     target_link_libraries(ros_rebroadcaster RuntimeObject)
+#   endif()
+#   ament_export_dependencies(TBB)
+#   ament_export_dependencies(cv_bridge)
+#   ament_export_dependencies(image_transport)
+#   ament_export_dependencies(std_srvs)
+# endif()
 
-if((TARGET f1_datalogger::f1_datalogger) AND image_transport_FOUND AND cv_bridge_FOUND)
-  add_executable(ros_rebroadcaster src/ros_rebroadcaster.cpp)
-  ament_target_dependencies(ros_rebroadcaster cv_bridge image_transport sensor_msgs std_msgs std_srvs deepracing_msgs)
-  target_link_libraries(ros_rebroadcaster
-  utils
-  f1_datalogger::f1_datalogger
-  )
-  list(APPEND nodes_to_install_ ros_rebroadcaster)
-  if(WIN32)
-    include(${f1_datalogger_DIR}/windows_stuff.cmake)
-    get_WIN32_WINNT(win32_ver)
-    message(STATUS "Win32 version: ${win32_ver}")
-    target_compile_definitions(ros_rebroadcaster PRIVATE "_WIN32_WINNT=${win32_ver}")
-    target_link_libraries(ros_rebroadcaster RuntimeObject)
-  endif()
-  ament_export_dependencies(TBB)
-  ament_export_dependencies(cv_bridge)
-  ament_export_dependencies(image_transport)
-  ament_export_dependencies(std_srvs)
-endif()
+
 if(TARGET f1_datalogger::f1_datalogger_controllers AND ackermann_msgs_FOUND AND control_toolbox_FOUND)
   add_executable(control_node src/control_node.cpp)
   ament_target_dependencies(control_node ackermann_msgs control_msgs control_toolbox deepracing_msgs message_filters nav_msgs rclcpp)
