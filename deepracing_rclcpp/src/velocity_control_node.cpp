@@ -30,7 +30,7 @@ class VelocityControlNode : public rclcpp::Node
           get_node_parameters_interface(),
           get_node_topics_interface())
     {
-      setpoint_listener = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>("setpoint_in", rclcpp::QoS{1}, std::bind(&VelocityControlNode::setpointCallback, this, std::placeholders::_1));
+      setpoint_listener = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>("ctrl_cmd", rclcpp::QoS{1}, std::bind(&VelocityControlNode::setpointCallback, this, std::placeholders::_1));
       telemetry_listener = create_subscription<deepracing_msgs::msg::CarTelemetryData>("telemetry_data", rclcpp::QoS{1}, std::bind(&VelocityControlNode::telemetryCallback, this, std::placeholders::_1));
       m_with_acceleration_ = declare_parameter<bool>("with_acceleration", false);
       if (m_with_acceleration_)
