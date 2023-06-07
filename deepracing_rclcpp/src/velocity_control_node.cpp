@@ -33,6 +33,7 @@ class VelocityControlNode : public rclcpp::Node
       setpoint_listener = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>("ctrl_cmd", rclcpp::QoS{1}, std::bind(&VelocityControlNode::setpointCallback, this, std::placeholders::_1));
       telemetry_listener = create_subscription<deepracing_msgs::msg::CarTelemetryData>("telemetry_data", rclcpp::QoS{1}, std::bind(&VelocityControlNode::telemetryCallback, this, std::placeholders::_1));
       m_with_acceleration_ = declare_parameter<bool>("with_acceleration", false);
+      m_setpoint_scale_factor_ = declare_parameter<double>("setpoint_scale_factor", 1.0);
       if (m_with_acceleration_)
       {
         odom_synch_listener.subscribe(this, "odom_in", setpoint_listener->get_actual_qos().get_rmw_qos_profile() );
@@ -49,7 +50,7 @@ class VelocityControlNode : public rclcpp::Node
 
     inline double getError()
     {
-      return m_setpoint_.drive.speed - m_current_speed_;
+      return m_setpoint_scale_factor_*m_setpoint_.drive.speed - m_current_speed_;
     }
     inline bool withAcceleration()
     {
@@ -121,7 +122,7 @@ class VelocityControlNode : public rclcpp::Node
       m_current_telemetry_=*current_telemetry;
     }
 
-    double m_current_speed_, m_current_accel_, m_error_rate_;
+    double m_current_speed_, m_current_accel_, m_error_rate_, m_setpoint_scale_factor_;
     ackermann_msgs::msg::AckermannDriveStamped m_setpoint_;
 
     deepracing_msgs::msg::CarTelemetryData m_current_telemetry_;
