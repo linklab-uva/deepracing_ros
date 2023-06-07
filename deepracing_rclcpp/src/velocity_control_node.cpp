@@ -9,6 +9,7 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <control_toolbox/pid_ros.hpp>
 #include <std_msgs/msg/float64.hpp>
+#include <ackermann_msgs/msg/ackermann_drive_stamped.hpp>
 #include <message_filters/time_synchronizer.h>
 #include <message_filters/subscriber.h>
 #include <Eigen/Geometry>
@@ -22,7 +23,6 @@ class VelocityControlNode : public rclcpp::Node
     VelocityControlNode( const rclcpp::NodeOptions & options )
      : rclcpp::Node("velocity_control_node", options),
       m_current_speed_(0.0),
-      m_setpoint_(0.0),
       m_error_rate_(0.0),
       m_current_accel_(0.0),
       m_pid_controller_(get_node_base_interface(),
@@ -30,7 +30,7 @@ class VelocityControlNode : public rclcpp::Node
           get_node_parameters_interface(),
           get_node_topics_interface())
     {
-      setpoint_listener = create_subscription<std_msgs::msg::Float64>("setpoint_in", rclcpp::QoS{1}, std::bind(&VelocityControlNode::setpointCallback, this, std::placeholders::_1));
+      setpoint_listener = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>("setpoint_in", rclcpp::QoS{1}, std::bind(&VelocityControlNode::setpointCallback, this, std::placeholders::_1));
       telemetry_listener = create_subscription<deepracing_msgs::msg::CarTelemetryData>("telemetry_data", rclcpp::QoS{1}, std::bind(&VelocityControlNode::telemetryCallback, this, std::placeholders::_1));
       m_with_acceleration_ = declare_parameter<bool>("with_acceleration", false);
       if (m_with_acceleration_)
@@ -49,7 +49,7 @@ class VelocityControlNode : public rclcpp::Node
 
     inline double getError()
     {
-      return m_setpoint_ - m_current_speed_;
+      return m_setpoint_.drive.speed - m_current_speed_;
     }
     inline bool withAcceleration()
     {
@@ -91,7 +91,7 @@ class VelocityControlNode : public rclcpp::Node
   private:
     bool m_with_acceleration_;
 
-    rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr setpoint_listener;
+    rclcpp::Subscription<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr setpoint_listener;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_listener;
     rclcpp::Subscription<deepracing_msgs::msg::CarTelemetryData>::SharedPtr telemetry_listener;
 
@@ -110,10 +110,10 @@ class VelocityControlNode : public rclcpp::Node
       RCLCPP_DEBUG(get_logger(),"Got some odom");
       m_current_speed_=new_odom->twist.twist.linear.x;
     }
-    inline void setpointCallback(const std_msgs::msg::Float64::SharedPtr new_setpoint)
+    inline void setpointCallback(const ackermann_msgs::msg::AckermannDriveStamped::SharedPtr new_setpoint)
     {
       RCLCPP_DEBUG(get_logger(),"Got a new setpoint");
-      m_setpoint_=new_setpoint->data;
+      m_setpoint_=*new_setpoint;
     }
     inline void telemetryCallback(const deepracing_msgs::msg::CarTelemetryData::SharedPtr current_telemetry)
     {
@@ -121,7 +121,8 @@ class VelocityControlNode : public rclcpp::Node
       m_current_telemetry_=*current_telemetry;
     }
 
-    double m_current_speed_, m_current_accel_, m_setpoint_, m_error_rate_;
+    double m_current_speed_, m_current_accel_, m_error_rate_;
+    ackermann_msgs::msg::AckermannDriveStamped m_setpoint_;
 
     deepracing_msgs::msg::CarTelemetryData m_current_telemetry_;
 
