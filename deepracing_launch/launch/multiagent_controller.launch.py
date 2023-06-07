@@ -16,7 +16,7 @@ def generate_launch_description():
             package='deepracing_rclcpp',
             executable="multiagent_control_node_exe",
             name="multiagent_control_node",
-            parameters=[os.path.join(param_path, "drivers.yaml"), os.path.join(param_path, "multiagent_controller.yaml")]
+            parameters=[os.path.join(param_path, "controllers.yaml")]
         ),
     ]
     return launch.LaunchDescription(argz + nodez)

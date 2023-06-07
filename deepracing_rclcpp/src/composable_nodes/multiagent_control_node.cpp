@@ -33,9 +33,9 @@ class MultiagentControlNode : public rclcpp::Node
      : rclcpp::Node("multiagent_control_node", options)
     {
       std::vector<std::string> driver_names = declare_parameter<std::vector<std::string>>("driver_names", std::vector<std::string>());
-      if(driver_names.size()<2 || driver_names.size()>4)
+      if(driver_names.size()<1 || driver_names.size()>4)
       {
-        throw std::runtime_error("Must declare between 2 and 4 driver names");
+        throw std::runtime_error("Must declare between 1 and 4 driver names");
       }
       std::vector<double> full_lock_left_vec = declare_parameter<std::vector<double>>("full_lock_left", std::vector<double>());
       if(full_lock_left_vec.size()!=driver_names.size())

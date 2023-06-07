@@ -16,7 +16,7 @@ def generate_launch_description():
             package='deepracing_rclcpp',
             executable="gamepad_multiplexer_node_exe",
             name="gamepad_multiplexer_node",
-            parameters=[os.path.join(param_path, "drivers.yaml"), os.path.join(param_path, "multiplexer.yaml")]
+            parameters=[os.path.join(param_path, "controllers.yaml")]
         ),
     ]
     return launch.LaunchDescription(argz + nodez)

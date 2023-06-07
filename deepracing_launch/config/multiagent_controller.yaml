@@ -1,5 +1,0 @@
-### driver names config file ###
-/**:
-  ros__parameters:
-    full_lock_right: [-0.215, -0.215]
-    full_lock_left:  [ 0.235,  0.235]
