@@ -14,7 +14,6 @@ import torchvision.transforms as tf
 import deepracing.imutils
 import scipy
 import scipy.interpolate
-import deepracing.pose_utils
 import deepracing
 import threading
 import numpy.linalg as la
