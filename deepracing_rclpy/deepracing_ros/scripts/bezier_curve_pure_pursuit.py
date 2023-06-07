@@ -34,6 +34,8 @@ import tf2_ros
 import rclpy.time
 import rclpy.duration
 import threading 
+import deepracing_ros.convert as C
+import std_msgs.msg
 
 
 class BezierCurvePurePursuit(Node):
@@ -41,7 +43,9 @@ class BezierCurvePurePursuit(Node):
         super(BezierCurvePurePursuit,self).__init__('bezier_pure_pursuit')
         self.setpoint_pub : Publisher = self.create_publisher(AckermannDriveStamped, "ctrl_cmd", 1)
         self.lateral_error_pub : Publisher = self.create_publisher(Float64, "lateral_error", 1)
-        self.curve_sub : Subscription = self.create_subscription(BezierCurve, "beziercurves_in", self.curveCB, 1)
+        self.local_curve_pub : Publisher = self.create_publisher(BezierCurve, "local_bezier_curves", self.curveCB, 1)
+        self.curve_sub : Subscription = self.create_subscription(BezierCurve, "beziercurves_in", 1)
+
         self.odom_sub : Subscription = self.create_subscription(Odometry, "odom", self.odomCB, 1)
         self.session_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "session_data", self.sessionCB, 1)
         self.current_curve_msg : BezierCurve = None
@@ -123,6 +127,8 @@ class BezierCurvePurePursuit(Node):
             bcurve_global[1,i]=current_curve.control_points[i].y
             bcurve_global[2,i]=current_curve.control_points[i].z
         bcurve_local = torch.matmul(transform[0:3], bcurve_global).T.unsqueeze(0)
+        curve_msg : BezierCurve = C.toBezierCurveMsg(bcurve_local[0], std_msgs.msg.Header())
+        self.local_curve_pub.publish(curve_msg)
         dt : float = (float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9)
         
         Msamp : torch.Tensor = mu.bezierM(self.tsamp, bcurve_local.shape[1]-1)
