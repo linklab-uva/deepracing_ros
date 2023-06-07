@@ -1,8 +1,8 @@
 ### pure pursuit controller config file ###
 /**:
     ros__parameters:
-        lookahead_gain: 0.35
-        velocity_lookahead_gain: 0.225
-        wheelbase: 3.726
+        lookahead_gain: 0.65
+        velocity_lookahead_gain: 0.1
+        wheelbase: 3.9
         gpu: -1
 
