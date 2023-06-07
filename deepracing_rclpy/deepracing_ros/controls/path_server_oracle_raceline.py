@@ -9,8 +9,6 @@ import time
 from concurrent import futures
 import logging
 import argparse
-import lmdb
-import deepracing.backend
 import torch
 import torchvision.transforms as tf
 import deepracing.imutils
@@ -54,7 +52,6 @@ import geometry_msgs.msg
 from deepracing_msgs.msg import BezierCurve
 import deepracing_ros.convert as C
 import deepracing.raceline_utils as raceline_utils
-import pickle as pkl
 from deepracing_msgs.srv import SetRaceline, GetRaceline
 import deepracing_models.math_utils as mu
 import math
