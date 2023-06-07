@@ -33,7 +33,24 @@ namespace composable_nodes
         private:
             inline DEEPRACING_RCLCPP_LOCAL void udp_cb(udp_msgs::msg::UdpPacket::UniquePtr udp_packet)
             {
-                deepf1::twenty_twenty::PacketHeader* header = reinterpret_cast<deepf1::twenty_twenty::PacketHeader*>((void*)&(udp_packet->data.at(0)));
+                if(udp_packet->data.size()<sizeof(deepf1::twenty_twenty::PacketEventData))
+                {
+                    RCLCPP_ERROR(get_logger(), 
+                        "Received a packet with only %llu bytes. Smallest packet that should ever be received (Event Data) has %llu bytes",
+                             udp_packet->data.size(), sizeof(deepf1::twenty_twenty::PacketEventData));
+                    return;
+                }
+                uint16_t* packet_format = reinterpret_cast<uint16_t*>(&(udp_packet->data[0]));
+                if(!((*packet_format)==2020))
+                {
+                    std::stringstream error_stream;
+                    error_stream << "Received UDP packet formatted for " << *packet_format;
+                    error_stream << ", but deepracing_ros is compiled for packet format 2020";
+                    std::string error_msg = error_stream.str();
+                    RCLCPP_ERROR(get_logger(), "%s", error_msg.c_str());
+                    throw std::runtime_error(error_msg);
+                }
+                deepf1::twenty_twenty::PacketHeader* header = reinterpret_cast<deepf1::twenty_twenty::PacketHeader*>(&(udp_packet->data[0]));
                 switch (header->packetId)
                 {
                     case deepf1::twenty_twenty::PacketID::MOTION:
