@@ -43,8 +43,8 @@ class BezierCurvePurePursuit(Node):
         super(BezierCurvePurePursuit,self).__init__('bezier_pure_pursuit')
         self.setpoint_pub : Publisher = self.create_publisher(AckermannDriveStamped, "ctrl_cmd", 1)
         self.lateral_error_pub : Publisher = self.create_publisher(Float64, "lateral_error", 1)
-        self.local_curve_pub : Publisher = self.create_publisher(BezierCurve, "local_bezier_curves", self.curveCB, 1)
-        self.curve_sub : Subscription = self.create_subscription(BezierCurve, "beziercurves_in", 1)
+        self.local_curve_pub : Publisher = self.create_publisher(BezierCurve, "local_bezier_curves", 1)
+        self.curve_sub : Subscription = self.create_subscription(BezierCurve, "beziercurves_in", self.curveCB, 1)
 
         self.odom_sub : Subscription = self.create_subscription(Odometry, "odom", self.odomCB, 1)
         self.session_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "session_data", self.sessionCB, 1)
