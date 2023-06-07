@@ -1,0 +1,5 @@
+### driver names config file ###
+/**:
+  ros__parameters:
+    frequency: 50.0
+    device_index: 0

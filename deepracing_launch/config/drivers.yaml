@@ -1,0 +1,4 @@
+### driver names config file ###
+/**:
+  ros__parameters:
+    driver_names: ["hamilton", "bottas"]
