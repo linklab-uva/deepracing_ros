@@ -33,7 +33,6 @@ from scipy.spatial.transform import Rotation as Rot
 from threading import Semaphore
 import deepracing
 import deepracing_ros, deepracing_ros.convert as C
-import deepracing.protobuf_utils
 from typing import List, Sequence
 import json
 import copy
