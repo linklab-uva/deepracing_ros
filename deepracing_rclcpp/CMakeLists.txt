@@ -48,6 +48,7 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_sensor_msgs REQUIRED)
 #optional stuff
 find_package(ackermann_msgs)
+find_package(control_msgs)
 find_package(cv_bridge)
 find_package(image_transport)
 find_package(control_toolbox)
@@ -99,9 +100,9 @@ set(nodes_to_install_
   tf_updater
 )
 
-if(control_toolbox_FOUND)
+if(control_toolbox_FOUND AND ackermann_msgs_FOUND)
   add_executable(velocity_control_node src/velocity_control_node.cpp)
-  ament_target_dependencies(velocity_control_node control_msgs control_toolbox deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
+  ament_target_dependencies(velocity_control_node ackermann_msgs control_msgs control_toolbox deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
   target_link_libraries(velocity_control_node
   Eigen3::Eigen
   )
@@ -208,7 +209,18 @@ rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::UdpDemuxer"
   EXECUTABLE udp_demuxer_exe
 )
-
+if(with_gamepad_multiplexer_)
+  rclcpp_components_register_node(deepracing_composable_nodes
+    PLUGIN "deepracing::composable_nodes::GamepadMultiplexerNode"
+    EXECUTABLE gamepad_multiplexer_node_exe
+  )
+endif()
+if(with_multiagent_control_node_)
+  rclcpp_components_register_node(deepracing_composable_nodes
+    PLUGIN "deepracing::composable_nodes::MultiagentControlNode"
+    EXECUTABLE multiagent_control_node_exe
+  )
+endif()
 install(TARGETS deepracing_composable_nodes
   EXPORT export_deepracing_composable_nodes
   ARCHIVE DESTINATION lib
