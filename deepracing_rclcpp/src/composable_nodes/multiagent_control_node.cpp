@@ -12,6 +12,7 @@
 #include <control_msgs/msg/pid_state.hpp>
 #include <rclcpp/create_timer.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <mutex>
 
 #ifdef _MSC_VER
   #include <windows.h>
@@ -32,30 +33,31 @@ class MultiagentControlNode : public rclcpp::Node
     MultiagentControlNode( const rclcpp::NodeOptions & options )
      : rclcpp::Node("multiagent_control_node", options)
     {
-      std::vector<std::string> driver_names = declare_parameter<std::vector<std::string>>("driver_names", std::vector<std::string>());
-      if(driver_names.size()<1 || driver_names.size()>4)
+      deadzone_ratio_= declare_parameter<double>("deadzone_ratio", 0.0);
+      driver_names_ = declare_parameter<std::vector<std::string>>("driver_names", std::vector<std::string>());
+      if(driver_names_.size()<1 || driver_names_.size()>4)
       {
         throw std::runtime_error("Must declare between 1 and 4 driver names");
       }
       std::vector<double> full_lock_left_vec = declare_parameter<std::vector<double>>("full_lock_left", std::vector<double>());
-      if(full_lock_left_vec.size()!=driver_names.size())
+      if(full_lock_left_vec.size()!=driver_names_.size())
       {
         std::stringstream error_stream;
-        error_stream <<"Declared" << driver_names.size() << "drivers, but " << full_lock_left_vec.size() << " full-lock-left values.";
+        error_stream <<"Declared" << driver_names_.size() << "drivers, but " << full_lock_left_vec.size() << " full-lock-left values.";
         throw std::runtime_error(error_stream.str());
       }
       std::vector<double> full_lock_right_vec = declare_parameter<std::vector<double>>("full_lock_right", std::vector<double>());
-      if(full_lock_right_vec.size()!=driver_names.size())
+      if(full_lock_right_vec.size()!=driver_names_.size())
       {
         std::stringstream error_stream;
-        error_stream <<"Declared" << driver_names.size() << "drivers, but " << full_lock_right_vec.size() << " full-lock-right values.";
+        error_stream <<"Declared" << driver_names_.size() << "drivers, but " << full_lock_right_vec.size() << " full-lock-right values.";
         throw std::runtime_error(error_stream.str());
       }
       try
       {
-        for(std::size_t i = 0; i < driver_names.size(); i++)
+        for(std::size_t i = 0; i < driver_names_.size(); i++)
         {
-          std::string driver = driver_names.at(i);
+          std::string driver = driver_names_.at(i);
           double full_lock_left = full_lock_left_vec.at(i);
           double full_lock_right = full_lock_right_vec.at(i);
           interfaces_[driver] = std::static_pointer_cast<InterfaceType>(factory_.createInterface());
@@ -63,20 +65,26 @@ class MultiagentControlNode : public rclcpp::Node
 
           std::function<void(const deepracing_msgs::msg::XinputState::ConstPtr&)> func_override
           = std::bind(&MultiagentControlNode::setStateDirect_, this, std::placeholders::_1,  driver);
-          direct_subscriptions_[driver] = create_subscription<deepracing_msgs::msg::XinputState>(direct_topic_name, rclcpp::SensorDataQoS(), func_override);
+          direct_subscriptions_[driver] = create_subscription<deepracing_msgs::msg::XinputState>(direct_topic_name, rclcpp::QoS{1}, func_override);
 
-          std::string steer_topic_name = "/" + driver + "/steering";
-          std::function<void(const ackermann_msgs::msg::AckermannDriveStamped::ConstPtr&)> func_steer
+          std::string steer_topic_name = "/" + driver + "/ctrl_cmd";
+          std::function<void(ackermann_msgs::msg::AckermannDriveStamped::UniquePtr&)> func_steer
           = std::bind(&MultiagentControlNode::setSteering_, this, std::placeholders::_1, driver, full_lock_left, full_lock_right);
-          steer_subscriptions_[driver] = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>(steer_topic_name, rclcpp::SensorDataQoS(), func_steer);
+          steer_subscriptions_[driver] = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>(steer_topic_name, rclcpp::QoS{1}, func_steer);
 
           std::string accel_topic_name = "/" + driver + "/velocity_pid_state";
           std::function<void(const control_msgs::msg::PidState::ConstPtr&)> func_accel
-          = std::bind(&MultiagentControlNode::setAcceleration_, this, std::placeholders::_1,  driver);
+          = std::bind(&MultiagentControlNode::setAcceleration_, this, std::placeholders::_1,  driver, full_lock_left, full_lock_right);
           accel_subscriptions_[driver] = create_subscription<control_msgs::msg::PidState>(accel_topic_name, rclcpp::SensorDataQoS(), func_accel);
 
           last_direct_input_[driver] = deepracing_msgs::msg::XinputState();
+
+          std::string state_out_name = "/" + driver + "/controller_state";
+          state_publishers_[driver] = create_publisher<deepracing_msgs::msg::XinputState>(state_out_name, rclcpp::QoS{1});
         }
+        // std::function<void(const std::string&)> func_timer = ;
+        timer_ = rclcpp::create_timer(get_node_base_interface(), get_node_timers_interface(), 
+          get_clock(), rclcpp::Duration::from_seconds(0.05), std::bind(&MultiagentControlNode::timerCB_, this));
       }
       catch(const std::exception& e)
       {
@@ -84,44 +92,51 @@ class MultiagentControlNode : public rclcpp::Node
       }
     }
   private:
+    ackermann_msgs::msg::AckermannDriveStamped::UniquePtr current_steering_cmd_;
     deepf1::MultiagentF1InterfaceFactory factory_;
     std::unordered_map<std::string, std::shared_ptr<InterfaceType>> interfaces_;
     std::unordered_map<std::string, rclcpp::Subscription<deepracing_msgs::msg::XinputState>::SharedPtr> direct_subscriptions_;
     std::unordered_map<std::string, rclcpp::Subscription<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr> steer_subscriptions_;
     std::unordered_map<std::string, rclcpp::Subscription<control_msgs::msg::PidState>::SharedPtr> accel_subscriptions_;
+    std::unordered_map<std::string, rclcpp::Publisher<deepracing_msgs::msg::XinputState>::SharedPtr> state_publishers_;
     std::unordered_map<std::string, deepracing_msgs::msg::XinputState> last_direct_input_;
     rclcpp::TimerBase::SharedPtr timer_;
-
+    std::mutex set_steering_mutex_;
+    std::vector<std::string> driver_names_;
+    double deadzone_ratio_;
+    void timerCB_()
+    {
+      const rclcpp::Time time = get_clock()->now();
+      for(const std::string& driver : driver_names_)
+      {
+        state_publishers_[driver]->publish(
+          deepracing_ros::XinputMsgUtils::toMsg(
+            interfaces_[driver]->getCurrentState()).set__header(std_msgs::msg::Header().set__stamp(time))
+          );
+      }
+    }
     void setStateDirect_(const deepracing_msgs::msg::XinputState::ConstPtr& state, const std::string& driver)
     {
       RCLCPP_DEBUG(get_logger(), "Setting state directly for driver %s", driver.c_str());
       interfaces_[driver]->setStateDirectly(deepracing_ros::XinputMsgUtils::toXinput(*state));
       last_direct_input_[driver] = *state;
     }
-    void setSteering_(const ackermann_msgs::msg::AckermannDriveStamped::ConstPtr& ackermann_cmd, 
+    void setSteering_(ackermann_msgs::msg::AckermannDriveStamped::UniquePtr& ackermann_cmd, 
       const std::string& driver, const double& full_lock_left, const double& full_lock_right)
     {
-      const rclcpp::Time& now = get_clock()->now();
-      const rclcpp::Duration& dt = now - last_direct_input_[driver].header.stamp;
-      if (dt<rclcpp::Duration::from_seconds(0.25))
-      {
-        return;
-      }
-      deepf1::F1ControlCommand cmd;
-      cmd.brake = cmd.throttle = std::nan("");
-      const double& desired_steering = ackermann_cmd->drive.steering_angle;
-      if(desired_steering>=0.0)
-      {
-        cmd.steering = std::clamp<double>(desired_steering/full_lock_left, 0.0, 1.0);
-      }
-      else
-      {
-        cmd.steering = std::clamp<double>(desired_steering/full_lock_right, -1.0, 0.0);
-      }
-      interfaces_[driver]->setCommands(cmd);
+      std::scoped_lock lock(set_steering_mutex_);
+      current_steering_cmd_ = std::move(ackermann_cmd);
     }
-    void setAcceleration_(const control_msgs::msg::PidState::ConstPtr& pid_state, const std::string& driver)
+    void setAcceleration_(const control_msgs::msg::PidState::ConstPtr& pid_state, 
+    const std::string& driver, const double& full_lock_left, const double& full_lock_right)
     {
+      {
+        std::scoped_lock lock(set_steering_mutex_);
+        if(!current_steering_cmd_)
+        {
+          return;
+        }
+      }
       const rclcpp::Time& now = get_clock()->now();
       const rclcpp::Duration& dt = now - last_direct_input_[driver].header.stamp;
       if (dt<rclcpp::Duration::from_seconds(0.25))
@@ -129,9 +144,8 @@ class MultiagentControlNode : public rclcpp::Node
         return;
       }
       deepf1::F1ControlCommand cmd;
-      cmd.steering = std::nan("");
-      const double& accel = pid_state->output;
-      if(accel>0.0)
+      const double& accel = std::clamp<double>(pid_state->output, -1.0, 1.0);
+      if(accel>=0.0)
       {
         cmd.throttle = accel;
         cmd.brake = 0.0;
@@ -139,8 +153,27 @@ class MultiagentControlNode : public rclcpp::Node
       else
       {
         cmd.throttle = 0.0;
-        cmd.brake = accel;
+        cmd.brake = -accel;
       }
+      double desired_steering;
+      {
+        std::scoped_lock lock(set_steering_mutex_);
+        desired_steering = std::clamp<double>(current_steering_cmd_->drive.steering_angle, full_lock_right, full_lock_left);
+      } 
+      if(desired_steering>0.0)
+      {
+        cmd.steering = std::clamp<double>((1-deadzone_ratio_)*desired_steering/full_lock_left + deadzone_ratio_, -1.0, 1.0);
+      }
+      else if(desired_steering<0.0)
+      {
+        cmd.steering =  std::clamp<double>(-(1-deadzone_ratio_)*desired_steering/full_lock_right - deadzone_ratio_, -1.0, 1.0);
+      }
+      else
+      {
+        cmd.steering = 0.0;
+      }
+      // RCLCPP_INFO(get_logger(), "Applying steering ratio: %f", cmd.steering);
+      // RCLCPP_INFO(get_logger(), "Setting vigem value to : %f", cmd.steering);
       interfaces_[driver]->setCommands(cmd);
     }
 };

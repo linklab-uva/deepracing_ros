@@ -28,7 +28,7 @@ class GamepadMultiplexerNode : public rclcpp::Node
       for(const std::string& driver : driver_names_)
       {
         std::string direct_topic_name = "/" + driver + "/controller_override";
-        publishers_[driver] = create_publisher<deepracing_msgs::msg::XinputState>(direct_topic_name, rclcpp::SensorDataQoS());
+        publishers_[driver] = create_publisher<deepracing_msgs::msg::XinputState>(direct_topic_name, rclcpp::QoS{1});
       }
     }
   private:
