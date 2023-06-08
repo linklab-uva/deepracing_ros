@@ -3,7 +3,6 @@
 #include <functional>
 #include <memory>
 #include <algorithm>
-#include <f1_datalogger/controllers/multiagent_f1_interface_factory.h>
 #include <deepracing_msgs/msg/xinput_state.hpp>
 #include <deepracing_ros/utils/xinput_msg_utils.h>
 #include <std_msgs/msg/float64.hpp>
@@ -17,8 +16,12 @@
 #ifdef _MSC_VER
   #include <windows.h>
   #include <Xinput.h>
-  #include <f1_datalogger/controllers/vigem_interface.h>
-  typedef deepf1::VigemInterface InterfaceType;
+  #include <f1_datalogger/controllers/multiagent_f1_interface_factory.h>
+  // #include <f1_datalogger/controllers/vigem_interface.h>
+  // typedef deepf1::VigemInterface InterfaceType;
+  #include <f1_datalogger/controllers/f1_interface_factory.h>
+  #include <f1_datalogger/controllers/vjoy_interface.h>
+  // typedef deepf1::VJoyInterface deepf1::F1Interface;
 #else
   #error "This node is only supported on Windows for now"
 #endif
@@ -60,7 +63,8 @@ class MultiagentControlNode : public rclcpp::Node
           std::string driver = driver_names_.at(i);
           double full_lock_left = full_lock_left_vec.at(i);
           double full_lock_right = full_lock_right_vec.at(i);
-          interfaces_[driver] = std::static_pointer_cast<InterfaceType>(factory_.createInterface());
+          vigem_interfaces_[driver] = factory_.createInterface();
+          // vjoy_interfaces_[driver] = deepf1::F1InterfaceFactory::getDefaultInterface(i+1);
           std::string direct_topic_name = "/" + driver + "/controller_override";
 
           std::function<void(const deepracing_msgs::msg::XinputState::ConstPtr&)> func_override
@@ -94,7 +98,8 @@ class MultiagentControlNode : public rclcpp::Node
   private:
     ackermann_msgs::msg::AckermannDriveStamped::UniquePtr current_steering_cmd_;
     deepf1::MultiagentF1InterfaceFactory factory_;
-    std::unordered_map<std::string, std::shared_ptr<InterfaceType>> interfaces_;
+    std::unordered_map<std::string, std::shared_ptr<deepf1::F1Interface>> vigem_interfaces_;
+    std::unordered_map<std::string, std::shared_ptr<deepf1::F1Interface>> vjoy_interfaces_;
     std::unordered_map<std::string, rclcpp::Subscription<deepracing_msgs::msg::XinputState>::SharedPtr> direct_subscriptions_;
     std::unordered_map<std::string, rclcpp::Subscription<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr> steer_subscriptions_;
     std::unordered_map<std::string, rclcpp::Subscription<control_msgs::msg::PidState>::SharedPtr> accel_subscriptions_;
@@ -111,14 +116,15 @@ class MultiagentControlNode : public rclcpp::Node
       {
         state_publishers_[driver]->publish(
           deepracing_ros::XinputMsgUtils::toMsg(
-            interfaces_[driver]->getCurrentState()).set__header(std_msgs::msg::Header().set__stamp(time))
+            vigem_interfaces_[driver]->getCurrentState()).set__header(std_msgs::msg::Header().set__stamp(time))
           );
       }
     }
     void setStateDirect_(const deepracing_msgs::msg::XinputState::ConstPtr& state, const std::string& driver)
     {
-      RCLCPP_DEBUG(get_logger(), "Setting state directly for driver %s", driver.c_str());
-      interfaces_[driver]->setStateDirectly(deepracing_ros::XinputMsgUtils::toXinput(*state));
+      RCLCPP_INFO(get_logger(), "Setting state directly for driver %s", driver.c_str());
+      vigem_interfaces_[driver]->setStateDirectly(deepracing_ros::XinputMsgUtils::toXinput(*state));
+      //vjoy_interfaces_[driver]->setStateDirectly(deepracing_ros::XinputMsgUtils::toXinput(*state));
       last_direct_input_[driver] = *state;
     }
     void setSteering_(ackermann_msgs::msg::AckermannDriveStamped::UniquePtr& ackermann_cmd, 
@@ -174,7 +180,8 @@ class MultiagentControlNode : public rclcpp::Node
       }
       // RCLCPP_INFO(get_logger(), "Applying steering ratio: %f", cmd.steering);
       // RCLCPP_INFO(get_logger(), "Setting vigem value to : %f", cmd.steering);
-      interfaces_[driver]->setCommands(cmd);
+      // vjoy_interfaces_[driver]->setCommands(cmd);
+      vigem_interfaces_[driver]->setCommands(cmd);
     }
 };
 
