@@ -98,6 +98,7 @@ namespace deepracing
       deepf1::MultiagentF1InterfaceFactory factory_;
       std::unordered_map<std::string, std::shared_ptr<deepf1::F1Interface>> interfaces_;
       std::unordered_map<std::string, rclcpp::Subscription<deepracing_msgs::msg::XinputState>::SharedPtr> xinput_subscriptions_;
+      std::unordered_map<std::string, std::mutex> xinput_mutexes_;
       std::unordered_map<std::string, rclcpp::Publisher<deepracing_msgs::msg::XinputState>::SharedPtr> xinput_publishers_;
       std::unordered_map<std::string, deepracing_msgs::msg::XinputState> last_input_;
 
@@ -114,12 +115,19 @@ namespace deepracing
           xinput_publishers_[driver]->publish(last_input_[driver]);
         }
       }
+      std::mutex& mutexGetter_(const std::string& driver)
+      {
+          return xinput_mutexes_[driver];
+      }
       void setState_(const deepracing_msgs::msg::XinputState::UniquePtr &state, const std::string &driver)
       {
         RCLCPP_DEBUG(get_logger(), "Setting state for driver %s", driver.c_str());
         const rclcpp::Time& time = get_clock()->now();
-        last_input_[driver] = state->set__header(std_msgs::msg::Header().set__stamp(time));
-        interfaces_[driver]->setStateDirectly(deepracing_ros::XinputMsgUtils::toXinput(last_input_[driver]));
+        { 
+          std::lock_guard lock(mutexGetter_(driver));
+          last_input_[driver] = state->set__header(std_msgs::msg::Header().set__stamp(time));
+          interfaces_[driver]->setStateDirectly(deepracing_ros::XinputMsgUtils::toXinput(last_input_[driver]));
+        }
       }
       // void setSteering_(ackermann_msgs::msg::AckermannDriveStamped::UniquePtr &ackermann_cmd,
       //                   const std::string &driver, const double &full_lock_left, const double &full_lock_right)
