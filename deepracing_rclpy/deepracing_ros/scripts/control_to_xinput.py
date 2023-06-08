@@ -12,6 +12,7 @@
 
 from typing import List
 import rclpy
+import rclpy.parameter
 import rclpy.timer
 import rclpy.qos
 import rclpy.exceptions
@@ -19,6 +20,7 @@ from rclpy.node import Node
 from rclpy.publisher import Publisher
 from rclpy.subscription import Subscription
 from std_msgs.msg import String, Float64
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 from ackermann_msgs.msg import AckermannDriveStamped
 from control_msgs.msg import PidState
 from deepracing_msgs.msg import XinputState
@@ -42,7 +44,10 @@ class ControlToXinputNode(Node):
         
         self.xinput_publisher : Publisher = self.create_publisher(XinputState, "controller_input", 1)
         
-        steering_angles_param : rclpy.Parameter = self.declare_parameter("steering_angles", value=[])
+        steering_angles_desc : ParameterDescriptor = ParameterDescriptor()
+        steering_angles_desc.name = "steering_angles"
+        steering_angles_desc.type = ParameterType.PARAMETER_DOUBLE_ARRAY
+        steering_angles_param : rclpy.Parameter = self.declare_parameter(steering_angles_desc.name, descriptor=steering_angles_desc)
         
         steering_angles : List[float] = steering_angles_param.get_parameter_value().double_array_value
         if len(steering_angles)==0:
@@ -50,7 +55,10 @@ class ControlToXinputNode(Node):
         steering_angles_fit : np.ndarray = np.asarray(steering_angles)
         
         
-        control_values_param : rclpy.Parameter = self.declare_parameter("control_values", value=[])
+        control_values_desc : ParameterDescriptor = ParameterDescriptor()
+        control_values_desc.name = "control_values"
+        control_values_desc.type = ParameterType.PARAMETER_DOUBLE_ARRAY
+        control_values_param : rclpy.Parameter = self.declare_parameter(control_values_desc.name, descriptor=control_values_desc)
         
         control_values : List[float] = control_values_param.get_parameter_value().double_array_value
         if len(control_values)==0:
@@ -63,6 +71,9 @@ class ControlToXinputNode(Node):
         Inonzero : np.ndarray = np.abs(steering_angles_fit)>0.0
         steering_angles_fit = steering_angles_fit[Inonzero]
         control_values_fit = control_values_fit[Inonzero]
+
+        steering_angles_fit, Iunique  = np.unique(steering_angles_fit, return_index=True)
+        control_values_fit = control_values_fit[Iunique]
 
         Isort : np.ndarray = np.argsort(steering_angles_fit)
         self.steering_angles_fit = steering_angles_fit[Isort]
