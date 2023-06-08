@@ -84,6 +84,7 @@ class ControlToXinputNode(Node):
     def pidstateCB(self, data : PidState):
         if self.current_ackermann_data is None:
             self.get_logger().error("Can't publish control, haven't received any steering data yet")
+            return
         state : XinputState = XinputState()
 
         if data.output>=0.0:
