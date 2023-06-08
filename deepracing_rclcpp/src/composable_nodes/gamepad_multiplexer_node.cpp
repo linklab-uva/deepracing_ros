@@ -27,7 +27,7 @@ class GamepadMultiplexerNode : public rclcpp::Node
       }
       for(const std::string& driver : driver_names_)
       {
-        std::string direct_topic_name = "/" + driver + "/controller_override";
+        std::string direct_topic_name = "/" + driver + "/controller_input";
         publishers_[driver] = create_publisher<deepracing_msgs::msg::XinputState>(direct_topic_name, rclcpp::QoS{1});
       }
     }
@@ -39,8 +39,6 @@ class GamepadMultiplexerNode : public rclcpp::Node
       {
         state = XINPUT_STATE();
         XInputGetState(device_index_, &state);
-        RCLCPP_INFO(get_logger(), "device %u state.Gamepad.sThumbRY: %d", device_index_, state.Gamepad.sThumbRY);
-        RCLCPP_INFO(get_logger(), "device %u buttons: %u", device_index_, state.Gamepad.wButtons);
         if(state.Gamepad.sThumbRY>30000)
         {
           deepracing_msgs::msg::XinputState msg = deepracing_ros::XinputMsgUtils::toMsg(state)
