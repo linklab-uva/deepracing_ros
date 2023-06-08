@@ -99,14 +99,14 @@ class ControlToXinputNode(Node):
         state : XinputState = XinputState()
 
         if data.output>=0.0:
-            state.gamepad.right_trigger = int(round(np.clip(data.output*255.0, 0.0, 255.0)))
+            state.gamepad.right_trigger = int(np.round(np.clip(data.output*255.0, 0.0, 255.0)))
         else:
-            state.gamepad.left_trigger = int(round(np.clip(data.output*255.0, 0.0, 255.0)))
+            state.gamepad.left_trigger = int(np.round(np.clip(data.output*255.0, 0.0, 255.0)))
         
         steering : float = self.current_ackermann_data.drive.steering_angle
 
         if steering<self.largest_negative or steering>self.smallest_positive:
-            state.gamepad.thumb_lx = int(np.clip(round(self.spline(steering)), -32768.0, 32767.0))
+            state.gamepad.thumb_lx = int(np.clip(np.round(self.spline(steering)), -32768.0, 32767.0))
         else:
             state.gamepad.thumb_lx = 0
         
