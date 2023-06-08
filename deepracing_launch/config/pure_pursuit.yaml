@@ -2,7 +2,7 @@
 /**:
     ros__parameters:
         lookahead_gain: 0.35
-        velocity_lookahead_gain: 0.1
+        velocity_lookahead_gain: 0.225
         wheelbase: 3.9
         gpu: -1
 
