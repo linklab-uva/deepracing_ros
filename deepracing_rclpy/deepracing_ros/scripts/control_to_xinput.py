@@ -101,7 +101,7 @@ class ControlToXinputNode(Node):
         if data.output>=0.0:
             state.gamepad.right_trigger = int(np.round(np.clip(data.output*255.0, 0.0, 255.0)))
         else:
-            state.gamepad.left_trigger = int(np.round(np.clip(data.output*255.0, 0.0, 255.0)))
+            state.gamepad.left_trigger = int(np.round(np.clip(-data.output*255.0, 0.0, 255.0)))
         
         steering : float = self.current_ackermann_data.drive.steering_angle
 
