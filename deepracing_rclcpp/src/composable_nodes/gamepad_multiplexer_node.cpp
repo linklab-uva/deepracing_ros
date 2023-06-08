@@ -37,7 +37,10 @@ class GamepadMultiplexerNode : public rclcpp::Node
       XINPUT_STATE state;
       try
       {
+        state = XINPUT_STATE();
         XInputGetState(device_index_, &state);
+        RCLCPP_INFO(get_logger(), "device %u state.Gamepad.sThumbRY: %d", device_index_, state.Gamepad.sThumbRY);
+        RCLCPP_INFO(get_logger(), "device %u buttons: %u", device_index_, state.Gamepad.wButtons);
         if(state.Gamepad.sThumbRY>30000)
         {
           deepracing_msgs::msg::XinputState msg = deepracing_ros::XinputMsgUtils::toMsg(state)
