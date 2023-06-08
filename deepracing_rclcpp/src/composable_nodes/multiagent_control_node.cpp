@@ -36,7 +36,6 @@ namespace deepracing
       MultiagentControlNode(const rclcpp::NodeOptions &options)
           : rclcpp::Node("multiagent_control_node", options)
       {
-        deadzone_ratio_ = declare_parameter<double>("deadzone_ratio", 0.0);
         driver_names_ = declare_parameter<std::vector<std::string>>("driver_names", std::vector<std::string>());
         if (driver_names_.size() < 1 || driver_names_.size() > 4)
         {
@@ -97,7 +96,6 @@ namespace deepracing
       rclcpp::TimerBase::SharedPtr timer_;
       std::mutex set_steering_mutex_;
       std::vector<std::string> driver_names_;
-      double deadzone_ratio_;
       void timerCB_()
       {
         for (const std::string &driver : driver_names_)
