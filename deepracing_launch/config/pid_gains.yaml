@@ -1,11 +1,11 @@
 ### pid config file ###
 /**:
   ros__parameters:
-    p: 0.5
-    i: 0.0001
-    d: 0.000001
-    i_clamp_max: 0.5
-    i_clamp_min: -0.5
+    p: 0.15
+    i: 0.00001
+    d: 0.0
+    i_clamp_max: 0.75
+    i_clamp_min: -0.75
     antiwindup: true
     setpoint_scale_factor: 1.0
     with_acceleration: false
