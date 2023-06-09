@@ -8,6 +8,7 @@ set(deepracing_composable_node_srcs
   session_data_node.cpp
   telemetry_data_node.cpp
   udp_demuxer_node.cpp
+  map_to_baselink_transform.cpp
   map_to_odom_transform.cpp
 )
 add_library(deepracing_composable_nodes SHARED ${deepracing_composable_node_srcs})

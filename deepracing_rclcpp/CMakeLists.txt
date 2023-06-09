@@ -213,6 +213,10 @@ rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::MapToOdomTransform"
   EXECUTABLE map_to_odom_transform_exe
 )
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::MapToBaselinkTransform"
+  EXECUTABLE map_to_baselink_transform_exe
+)
 if(with_gamepad_multiplexer_)
   rclcpp_components_register_node(deepracing_composable_nodes
     PLUGIN "deepracing::composable_nodes::GamepadMultiplexerNode"
