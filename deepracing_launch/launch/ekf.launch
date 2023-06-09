@@ -9,8 +9,20 @@
         <remap from="odometry/filtered" to="odom/filtered"/>
         <remap from="/diagnostics" to="diagnostics"/>
    </node>
+   <node pkg="robot_localization" exec="ekf_node" name="ekf_localization_node_local" output="screen" namespace="$(var carname)">
+        <param from="$(find-pkg-share deepracing_launch)/config/ekf_local.yaml"/>
+        <param name="base_link_frame" value="centroid_$(var carname)"/>
+        <param name="odom_frame" value="odom_$(var carname)"/>
+        <param name="world_frame" value="odom_$(var carname)"/>
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <remap from="odometry/filtered" to="localodom/filtered"/>
+        <remap from="/diagnostics" to="diagnostics"/>
+   </node>
    <node pkg="deepracing_rclpy" exec="ekf_monitor" namespace="$(var carname)">
    </node>
-   <node pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom_$(var carname)">
+   <node pkg="deepracing_rclcpp" exec="map_to_odom_transform_exe" namespace="$(var carname)">
+      <param name="base_link_frame" value="centroid_$(var carname)"/>
+      <param name="odom_frame" value="odom_$(var carname)"/>
+      <param name="map_frame" value="map"/>
    </node>
 </launch>

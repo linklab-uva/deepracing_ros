@@ -8,6 +8,7 @@ set(deepracing_composable_node_srcs
   session_data_node.cpp
   telemetry_data_node.cpp
   udp_demuxer_node.cpp
+  map_to_odom_transform.cpp
 )
 add_library(deepracing_composable_nodes SHARED ${deepracing_composable_node_srcs})
 if(WIN32)
@@ -33,8 +34,13 @@ ament_target_dependencies(deepracing_composable_nodes
     rclcpp_components
     ament_index_cpp
     deepracing_msgs
+    geometry_msgs
+    nav_msgs
     std_msgs
-    udp_msgs
+    tf2_ros
+    tf2_eigen
+    tf2_geometry_msgs
+    udp_msgs  
 )
 
 target_link_libraries(deepracing_composable_nodes PUBLIC utils)
