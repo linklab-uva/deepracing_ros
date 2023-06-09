@@ -123,10 +123,10 @@ class NodeWrapperTfUpdater_
      this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
      this->accel_publisher = this->node->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
      
-     if( m_tf_from_odom_ )
-     {
-       odom_listener = this->node->create_subscription<nav_msgs::msg::Odometry>("odom/filtered", 1, std::bind(&NodeWrapperTfUpdater_::odomCallback, this, std::placeholders::_1));
-     }
+    //  if( m_tf_from_odom_ )
+    //  {
+    //    odom_listener = this->node->create_subscription<nav_msgs::msg::Odometry>("odom/filtered", 1, std::bind(&NodeWrapperTfUpdater_::odomCallback, this, std::placeholders::_1));
+    //  }
      
     }  
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_listener;
@@ -221,17 +221,17 @@ class NodeWrapperTfUpdater_
       }
       publishStatic();
     }  
-    void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_msg)
-    {
-      geometry_msgs::msg::TransformStamped transformMsg;
-      transformMsg.set__header(odom_msg->header);
-      transformMsg.set__child_frame_id(odom_msg->child_frame_id);
-      transformMsg.transform.translation.set__x(odom_msg->pose.pose.position.x);
-      transformMsg.transform.translation.set__y(odom_msg->pose.pose.position.y);
-      transformMsg.transform.translation.set__z(odom_msg->pose.pose.position.z);
-      transformMsg.transform.set__rotation(odom_msg->pose.pose.orientation);
-      this->tfbroadcaster->sendTransform(transformMsg);
-    }
+    // void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_msg)
+    // {
+    //   geometry_msgs::msg::TransformStamped transformMsg;
+    //   transformMsg.set__header(odom_msg->header);
+    //   transformMsg.set__child_frame_id(odom_msg->child_frame_id);
+    //   transformMsg.transform.translation.set__x(odom_msg->pose.pose.position.x);
+    //   transformMsg.transform.translation.set__y(odom_msg->pose.pose.position.y);
+    //   transformMsg.transform.translation.set__z(odom_msg->pose.pose.position.z);
+    //   transformMsg.transform.set__rotation(odom_msg->pose.pose.orientation);
+    //   this->tfbroadcaster->sendTransform(transformMsg);
+    // }
     void packetCallback(const deepracing_msgs::msg::TimestampedPacketMotionData::SharedPtr motion_data_packet)
     {
      // std::cout << "Got some data" << std::endl;
