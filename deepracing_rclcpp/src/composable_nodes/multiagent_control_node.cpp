@@ -36,7 +36,6 @@ namespace deepracing
       MultiagentControlNode(const rclcpp::NodeOptions &options)
           : rclcpp::Node("multiagent_control_node", options)
       {
-        deadzone_ratio_ = declare_parameter<double>("deadzone_ratio", 0.0);
         driver_names_ = declare_parameter<std::vector<std::string>>("driver_names", std::vector<std::string>());
         if (driver_names_.size() < 1 || driver_names_.size() > 4)
         {
@@ -74,14 +73,6 @@ namespace deepracing
             xinput_publishers_[driver] = create_publisher<deepracing_msgs::msg::XinputState>(state_out_topic, rclcpp::QoS{1});
             last_input_[driver] = deepracing_msgs::msg::XinputState().set__header(std_msgs::msg::Header().set__stamp(now));
 
-            // std::string steer_topic_name = "/" + driver + "/ctrl_cmd";
-            // std::function<void(ackermann_msgs::msg::AckermannDriveStamped::UniquePtr &)> func_steer = std::bind(&MultiagentControlNode::setSteering_, this, std::placeholders::_1, driver, full_lock_left, full_lock_right);
-            // steer_subscriptions_[driver] = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>(steer_topic_name, rclcpp::QoS{1}, func_steer);
-
-            // std::string accel_topic_name = "/" + driver + "/velocity_pid_state";
-            // std::function<void(const control_msgs::msg::PidState::ConstPtr &)> func_accel = std::bind(&MultiagentControlNode::setAcceleration_, this, std::placeholders::_1, driver, full_lock_left, full_lock_right);
-            // accel_subscriptions_[driver] = create_subscription<control_msgs::msg::PidState>(accel_topic_name, rclcpp::SensorDataQoS(), func_accel);
-
           }
           // std::function<void(const std::string&)> func_timer = ;
           timer_ = rclcpp::create_timer(get_node_base_interface(), get_node_timers_interface(),
@@ -98,15 +89,13 @@ namespace deepracing
       deepf1::MultiagentF1InterfaceFactory factory_;
       std::unordered_map<std::string, std::shared_ptr<deepf1::F1Interface>> interfaces_;
       std::unordered_map<std::string, rclcpp::Subscription<deepracing_msgs::msg::XinputState>::SharedPtr> xinput_subscriptions_;
+      std::unordered_map<std::string, std::mutex> xinput_mutexes_;
       std::unordered_map<std::string, rclcpp::Publisher<deepracing_msgs::msg::XinputState>::SharedPtr> xinput_publishers_;
       std::unordered_map<std::string, deepracing_msgs::msg::XinputState> last_input_;
 
-      // std::unordered_map<std::string, rclcpp::Subscription<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr> steer_subscriptions_;
-      // std::unordered_map<std::string, rclcpp::Subscription<control_msgs::msg::PidState>::SharedPtr> accel_subscriptions_;
       rclcpp::TimerBase::SharedPtr timer_;
       std::mutex set_steering_mutex_;
       std::vector<std::string> driver_names_;
-      double deadzone_ratio_;
       void timerCB_()
       {
         for (const std::string &driver : driver_names_)
@@ -114,69 +103,20 @@ namespace deepracing
           xinput_publishers_[driver]->publish(last_input_[driver]);
         }
       }
+      std::mutex& mutexGetter_(const std::string& driver)
+      {
+          return xinput_mutexes_[driver];
+      }
       void setState_(const deepracing_msgs::msg::XinputState::UniquePtr &state, const std::string &driver)
       {
         RCLCPP_DEBUG(get_logger(), "Setting state for driver %s", driver.c_str());
         const rclcpp::Time& time = get_clock()->now();
-        last_input_[driver] = state->set__header(std_msgs::msg::Header().set__stamp(time));
-        interfaces_[driver]->setStateDirectly(deepracing_ros::XinputMsgUtils::toXinput(last_input_[driver]));
+        { 
+          std::lock_guard lock(mutexGetter_(driver));
+          last_input_[driver] = state->set__header(std_msgs::msg::Header().set__stamp(time));
+          interfaces_[driver]->setStateDirectly(deepracing_ros::XinputMsgUtils::toXinput(last_input_[driver]));
+        }
       }
-      // void setSteering_(ackermann_msgs::msg::AckermannDriveStamped::UniquePtr &ackermann_cmd,
-      //                   const std::string &driver, const double &full_lock_left, const double &full_lock_right)
-      // {
-      //   std::scoped_lock lock(set_steering_mutex_);
-      //   current_steering_cmd_ = std::move(ackermann_cmd);
-      // }
-      // void setAcceleration_(const control_msgs::msg::PidState::ConstPtr &pid_state,
-      //                       const std::string &driver, const double &full_lock_left, const double &full_lock_right)
-      // {
-      //   {
-      //     std::scoped_lock lock(set_steering_mutex_);
-      //     if (!current_steering_cmd_)
-      //     {
-      //       return;
-      //     }
-      //   }
-      //   const rclcpp::Time &now = get_clock()->now();
-      //   const rclcpp::Duration &dt = now - last_direct_input_[driver].header.stamp;
-      //   if (dt < rclcpp::Duration::from_seconds(0.25))
-      //   {
-      //     return;
-      //   }
-      //   deepf1::F1ControlCommand cmd;
-      //   const double &accel = std::clamp<double>(pid_state->output, -1.0, 1.0);
-      //   if (accel >= 0.0)
-      //   {
-      //     cmd.throttle = accel;
-      //     cmd.brake = 0.0;
-      //   }
-      //   else
-      //   {
-      //     cmd.throttle = 0.0;
-      //     cmd.brake = -accel;
-      //   }
-      //   double desired_steering;
-      //   {
-      //     std::scoped_lock lock(set_steering_mutex_);
-      //     desired_steering = std::clamp<double>(current_steering_cmd_->drive.steering_angle, full_lock_right, full_lock_left);
-      //   }
-      //   if (desired_steering > 0.0)
-      //   {
-      //     cmd.steering = std::clamp<double>((1 - deadzone_ratio_) * desired_steering / full_lock_left + deadzone_ratio_, -1.0, 1.0);
-      //   }
-      //   else if (desired_steering < 0.0)
-      //   {
-      //     cmd.steering = std::clamp<double>(-(1 - deadzone_ratio_) * desired_steering / full_lock_right - deadzone_ratio_, -1.0, 1.0);
-      //   }
-      //   else
-      //   {
-      //     cmd.steering = 0.0;
-      //   }
-      //   // RCLCPP_INFO(get_logger(), "Applying steering ratio: %f", cmd.steering);
-      //   // RCLCPP_INFO(get_logger(), "Setting vigem value to : %f", cmd.steering);
-      //   // vjoy_interfaces_[driver]->setCommands(cmd);
-      //   vigem_interfaces_[driver]->setCommands(cmd);
-      // }
     };
 
   }
