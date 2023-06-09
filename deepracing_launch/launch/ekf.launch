@@ -1,7 +1,7 @@
 <launch>
    <arg name="carname" default=""/>
    <arg name="use_sim_time" default="false"/>
-   <arg name="global_ekf" default="false"/>
+   <arg name="global_ekf" default="true"/>
    <node pkg="robot_localization" exec="ekf_node" name="ekf_localization_node" output="screen" namespace="$(var carname)">
         <param from="$(find-pkg-share deepracing_launch)/config/ekf.yaml"/>
         <param name="base_link_frame" value="centroid_$(var carname)"/>
