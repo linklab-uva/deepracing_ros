@@ -68,7 +68,7 @@ class NodeWrapperTfUpdater_
      {
        imu_msg_.angular_velocity_covariance[i] = angular_vel_cov_json[i].asDouble();
        imu_msg_.orientation_covariance[i] = euler_angles_cov_json[i].asDouble();
-       imu_msg_.linear_acceleration_covariance[i] = linear_accel_cov_json[i].asDouble();
+       imu_msg_.linear_acceleration_covariance[i] = accel_msg_.accel.covariance[i] = linear_accel_cov_json[i].asDouble();
        position_cov[i] = position_cov_json[i].asDouble();
        linear_vel_cov[i] = linear_vel_cov_json[i].asDouble();
      }
@@ -120,21 +120,25 @@ class NodeWrapperTfUpdater_
      this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("motion_data", 1, std::bind(&NodeWrapperTfUpdater_::packetCallback, this, std::placeholders::_1));
      this->twist_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity", 1);
      this->twist_local_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity_local", 1);
-     this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
-     this->accel_publisher = this->node->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
+     this->imu_publisher = this->node->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
      
-    //  if( m_tf_from_odom_ )
-    //  {
-    //    odom_listener = this->node->create_subscription<nav_msgs::msg::Odometry>("odom/filtered", 1, std::bind(&NodeWrapperTfUpdater_::odomCallback, this, std::placeholders::_1));
-    //  }
+     if( !m_tf_from_odom_ )
+     {
+        this->accel_publisher = this->node->create_publisher<geometry_msgs::msg::AccelWithCovarianceStamped>("accel/filtered", 1);
+        this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom/filtered", 1);
+     }
+     else
+     {
+        this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
+     }
      
     }  
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_listener;
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketMotionData>::SharedPtr listener;
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketSessionData>::SharedPtr session_listener;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_publisher;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_local_publisher;
-    rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr accel_publisher;
+    rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher;
+    rclcpp::Publisher<geometry_msgs::msg::AccelWithCovarianceStamped>::SharedPtr accel_publisher;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
 
     std::shared_ptr<rclcpp::Node> node;
@@ -152,6 +156,7 @@ class NodeWrapperTfUpdater_
     bool m_tf_from_odom_;
     nav_msgs::msg::Odometry odom_msg_;
     sensor_msgs::msg::Imu imu_msg_;
+    geometry_msgs::msg::AccelWithCovarianceStamped accel_msg_;
     
     double m_extra_position_noise;
     double m_extra_rot_noise;
@@ -341,9 +346,12 @@ class NodeWrapperTfUpdater_
       if (!m_tf_from_odom_)
       {
         this->tfbroadcaster->sendTransform(transformMsg);
+        accel_msg_.header.set__stamp(transformMsg.header.stamp).set__frame_id(transformMsg.child_frame_id);
+        accel_msg_.accel.accel.set__linear(imu_msg_.linear_acceleration);
+        this->accel_publisher->publish(accel_msg_);
       }
       this->odom_publisher->publish(odom_msg_);
-      this->accel_publisher->publish(imu_msg_);
+      this->imu_publisher->publish(imu_msg_);
     }
 };
 int main(int argc, char *argv[]) {
