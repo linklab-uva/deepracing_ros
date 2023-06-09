@@ -35,8 +35,6 @@ def generate_launch_description():
         vigem_dict : dict = json.load(f)
     xinput_vals = list(vigem_dict["xinput_values"])
     steering_wheel_angles = list(vigem_dict["steering_wheel_angles"])
-    print(xinput_vals)
-    print(steering_wheel_angles)
 
     entries.append(launch_ros.actions.Node(package='deepracing_rclpy',
                                            name='control_to_xinput', 
