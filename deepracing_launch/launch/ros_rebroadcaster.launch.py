@@ -16,6 +16,8 @@ def generate_launch_description():
     argz.append(port)
     carname = launch.actions.DeclareLaunchArgument("carname")
     argz.append(carname)
+    secondary_carname = launch.actions.DeclareLaunchArgument("secondary_carname", default_value="")
+    argz.append(secondary_carname)
     allcars = launch.actions.DeclareLaunchArgument("publish_all_cars", default_value="false")
     argz.append(allcars)
     composable_nodez = [
@@ -25,7 +27,7 @@ def generate_launch_description():
             name='raw_udp_receiver_node',
             namespace=launch.substitutions.LaunchConfiguration(carname.name),
             remappings=[('udp_read', 'all_raw_udp')],
-            parameters=[{'ip': launch.substitutions.LaunchConfiguration(ip.name), 'port': launch.substitutions.LaunchConfiguration(port.name)}],
+            parameters=[{ip.name : launch.substitutions.LaunchConfiguration(ip.name), port.name : launch.substitutions.LaunchConfiguration(port.name)}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
@@ -39,41 +41,42 @@ def generate_launch_description():
             plugin='deepracing::composable_nodes::ReceiveCarSetupData',
             name='car_setup_node',
             namespace=launch.substitutions.LaunchConfiguration(carname.name),
-            parameters=[{'all_cars': launch.substitutions.LaunchConfiguration(allcars.name)}],
+            parameters=[{secondary_carname.name : launch.substitutions.LaunchConfiguration(secondary_carname.name), 'all_cars': launch.substitutions.LaunchConfiguration(allcars.name)}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
             plugin='deepracing::composable_nodes::ReceiveCarStatusData',
             name='car_status_node',
             namespace=launch.substitutions.LaunchConfiguration(carname.name),
-            parameters=[{'all_cars': launch.substitutions.LaunchConfiguration(allcars.name)}],
+            parameters=[{secondary_carname.name : launch.substitutions.LaunchConfiguration(secondary_carname.name), 'all_cars': launch.substitutions.LaunchConfiguration(allcars.name)}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
             plugin='deepracing::composable_nodes::ReceiveLapData',
             name='lap_data_node',
             namespace=launch.substitutions.LaunchConfiguration(carname.name),
-            parameters=[{'all_cars': launch.substitutions.LaunchConfiguration(allcars.name)}],
+            parameters=[{secondary_carname.name : launch.substitutions.LaunchConfiguration(secondary_carname.name), 'all_cars': launch.substitutions.LaunchConfiguration(allcars.name)}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
             plugin='deepracing::composable_nodes::ReceiveMotionData',
             name='motion_data_node',
             namespace=launch.substitutions.LaunchConfiguration(carname.name),
-            parameters=[{'all_cars': launch.substitutions.LaunchConfiguration(allcars.name)}],
+            parameters=[{secondary_carname.name : launch.substitutions.LaunchConfiguration(secondary_carname.name), 'all_cars': launch.substitutions.LaunchConfiguration(allcars.name)}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
             plugin='deepracing::composable_nodes::ReceiveSessionData',
             name='session_data_node',
             namespace=launch.substitutions.LaunchConfiguration(carname.name),
+            parameters=[{secondary_carname.name : launch.substitutions.LaunchConfiguration(secondary_carname.name)}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
             plugin='deepracing::composable_nodes::ReceiveTelemetryData',
             name='telemetry_data_node',
             namespace=launch.substitutions.LaunchConfiguration(carname.name),
-            parameters=[{'all_cars': launch.substitutions.LaunchConfiguration(allcars.name)}],
+            parameters=[{secondary_carname.name : launch.substitutions.LaunchConfiguration(secondary_carname.name), 'all_cars': launch.substitutions.LaunchConfiguration(allcars.name)}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}])
     ]
     container = launch_ros.actions.ComposableNodeContainer(
@@ -86,6 +89,6 @@ def generate_launch_description():
         output='both',
     )
     nodez = []
-    nodez.append(launch_ros.actions.Node(package='deepracing_rclpy', name='initialize_udp_receiver', executable='initialize_udp_receiver', output='screen', namespace=launch.substitutions.LaunchConfiguration(carname.name)))
+    nodez.append(launch_ros.actions.Node(package='deepracing_rclpy', name='initialize_udp_receiver', executable='initialize_udp_receiver',namespace=launch.substitutions.LaunchConfiguration(carname.name), output='screen'))
     
     return launch.LaunchDescription(argz + nodez + [container])
