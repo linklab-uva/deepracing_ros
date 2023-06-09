@@ -346,7 +346,7 @@ class NodeWrapperTfUpdater_
       if (!m_tf_from_odom_)
       {
         this->tfbroadcaster->sendTransform(transformMsg);
-        accel_msg_.header.set__stamp(transformMsg.header.stamp).set__frame_id(transformMsg.child_frame_id);
+        accel_msg_.header.set__stamp(odom_msg_.header.stamp).set__frame_id(transformMsg.child_frame_id);
         accel_msg_.accel.accel.set__linear(imu_msg_.linear_acceleration);
         this->accel_publisher->publish(accel_msg_);
       }
