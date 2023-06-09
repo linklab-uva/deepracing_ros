@@ -20,7 +20,7 @@ def generate_launch_description():
     argz.append(boundary_pub)
     use_sim_time = DeclareLaunchArgument("use_sim_time", default_value="false")
     argz.append(use_sim_time)
-    tf_from_odom = DeclareLaunchArgument("tf_from_odom", default_value="false")
+    tf_from_odom = DeclareLaunchArgument("tf_from_odom", default_value="true")
     argz.append(tf_from_odom)
     carname = DeclareLaunchArgument("carname")
     argz.append(carname)

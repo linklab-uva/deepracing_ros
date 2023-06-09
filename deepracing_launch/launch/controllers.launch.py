@@ -20,7 +20,7 @@ def generate_launch_description():
     entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='velocity_controller', executable='velocity_control_node', output='screen',\
         parameters=[os.path.join(deepracing_launch_config_dir, "pid_gains.yaml"), {use_sim_time.name : LaunchConfiguration(use_sim_time.name)}],\
         namespace=LaunchConfiguration(carname.name),\
-        remappings=[("pid_state", "velocity_pid_state")])\
+        remappings=[("pid_state", "velocity_pid_state"), ("odom_in", "odom/filtered")])\
         )
     
     with open(os.path.join(deepracing_launch_data_dir, "vigem_calibration.json"), "r") as f:
