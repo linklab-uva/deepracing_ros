@@ -29,17 +29,13 @@ namespace composable_nodes
     private:
       inline DEEPRACING_RCLCPP_LOCAL void udp_cb(const nav_msgs::msg::Odometry::ConstPtr& map_to_bl_odom)
       {
-
         const geometry_msgs::msg::Point & position_msg = map_to_bl_odom->pose.pose.position;
-        Eigen::Vector3d position_eigen(position_msg.x, position_msg.y, position_msg.z);
-
         const geometry_msgs::msg::Quaternion & quaternion_msg = map_to_bl_odom->pose.pose.orientation;
-        Eigen::Quaterniond quaternion_eigen(quaternion_msg.w, quaternion_msg.x, quaternion_msg.y, quaternion_msg.z);
-
-        Eigen::Isometry3d map_to_bl_eigen;
-        map_to_bl_eigen.fromPositionOrientationScale(position_eigen, quaternion_eigen, Eigen::Vector3d::Ones());
-
-        geometry_msgs::msg::TransformStamped transform_out = tf2::eigenToTransform(map_to_bl_eigen);
+        geometry_msgs::msg::TransformStamped transform_out;
+        transform_out.transform.translation.x = position_msg.x;
+        transform_out.transform.translation.y = position_msg.y;
+        transform_out.transform.translation.z = position_msg.z;
+        transform_out.transform.rotation = quaternion_msg;
         transform_out.set__header(map_to_bl_odom->header);
         transform_out.set__child_frame_id(map_to_bl_odom->child_frame_id);
         tf_broadcaster_->sendTransform(transform_out);
