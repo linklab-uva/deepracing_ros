@@ -29,8 +29,9 @@
 
    <group if="$(var global_ekf)">
       <node pkg="deepracing_rclcpp" exec="map_to_baselink_transform_exe" name="$(var carname)_maptobl" namespace="$(var carname)">
-
       </node>
+      <node pkg="tf2_ros" exec="static_transform_publisher" name="$(var carname)_rsp"
+       args="--frame-id map --child-frame-id odom_$(var carname)"/>
    </group>
 
    <node pkg="deepracing_rclpy" exec="ekf_monitor" namespace="$(var carname)">
