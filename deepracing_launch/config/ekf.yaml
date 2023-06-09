@@ -42,7 +42,7 @@
         history_length: 1.0
 
 # Whether we'll allow old measurements to cause a re-publication of the updated state
-        predict_to_current_time: true
+        predict_to_current_time: false
 
 # Whether to publish the acceleration state. Defaults to false if unspecified.
         publish_acceleration: true
