@@ -36,7 +36,7 @@ class NodeWrapperTfUpdater_
     {
      current_track_id = -1;
      node = rclcpp::Node::make_shared("f1_tf_updater");//,"",options);
-     m_tf_from_odom_ = node->declare_parameter<bool>("tf_from_odom", false);
+     m_with_ekf_ = node->declare_parameter<bool>("with_ekf", false);
      carname = node->declare_parameter<std::string>("carname", "");
      statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node));
      tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node));
@@ -122,7 +122,7 @@ class NodeWrapperTfUpdater_
      this->twist_local_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity_local", 1);
      this->imu_publisher = this->node->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
      
-     if( !m_tf_from_odom_ )
+     if( !m_with_ekf_ )
      {
         this->accel_publisher = this->node->create_publisher<geometry_msgs::msg::AccelWithCovarianceStamped>("accel/filtered", 1);
         this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom/filtered", 1);
@@ -153,7 +153,7 @@ class NodeWrapperTfUpdater_
     }
   private:
     random_numbers::RandomNumberGenerator m_rng_;
-    bool m_tf_from_odom_;
+    bool m_with_ekf_;
     nav_msgs::msg::Odometry odom_msg_;
     sensor_msgs::msg::Imu imu_msg_;
     geometry_msgs::msg::AccelWithCovarianceStamped accel_msg_;
@@ -241,6 +241,11 @@ class NodeWrapperTfUpdater_
     {
      // std::cout << "Got some data" << std::endl;
       // RCLCPP_INFO(node->get_logger(), "Got some data");
+      if(current_track_id<0)
+      {
+        RCLCPP_ERROR(node->get_logger(), "%s", "Haven't received track information from the session data stream yet");
+        return;
+      }
       uint8_t idx;
       if( motion_data_packet->udp_packet.header.player_car_index<22 )
       {
@@ -256,39 +261,27 @@ class NodeWrapperTfUpdater_
       const geometry_msgs::msg::Vector3Stamped &upROS = motion_data.world_up_dir;
       const geometry_msgs::msg::Vector3Stamped &forwardROS = motion_data.world_forward_dir;
       const geometry_msgs::msg::Vector3Stamped &rightROS = motion_data.world_right_dir;
+      const geometry_msgs::msg::PointStamped& positionROS = motion_data.world_position;
 
-      Eigen::Vector3d leftEigen(-rightROS.vector.x, -rightROS.vector.y, -rightROS.vector.z);
-      leftEigen.normalize();
-      Eigen::Vector3d forwardEigen(forwardROS.vector.x, forwardROS.vector.y, forwardROS.vector.z);
-      forwardEigen.normalize();
-      Eigen::Vector3d upEigen = forwardEigen.cross(leftEigen);
-      upEigen.normalize();
+      Eigen::Vector3d positioneigen_track(positionROS.point.x, positionROS.point.y, positionROS.point.z);
+      Eigen::Vector3d leftEigen=Eigen::Vector3d(-rightROS.vector.x, -rightROS.vector.y, -rightROS.vector.z).normalized();
+      Eigen::Vector3d forwardEigen=Eigen::Vector3d(forwardROS.vector.x, forwardROS.vector.y, forwardROS.vector.z).normalized();
+      Eigen::Vector3d upEigen = forwardEigen.cross(leftEigen).normalized();
       Eigen::Matrix3d rotmat;
       rotmat.col(0) = forwardEigen;
       rotmat.col(1) = leftEigen;
       rotmat.col(2) = upEigen;
       Eigen::Quaterniond rotationEigen(rotmat);
       rotationEigen.normalize();
-      geometry_msgs::msg::TransformStamped transformMsg;
-      transformMsg.set__header(motion_data_packet->header);
-      transformMsg.set__child_frame_id(deepracing_ros::F1MsgUtils2020::car_coordinate_name+"_"+carname);
-      transformMsg.transform.rotation.x = rotationEigen.x();
-      transformMsg.transform.rotation.y = rotationEigen.y();
-      transformMsg.transform.rotation.z = rotationEigen.z();
-      transformMsg.transform.rotation.w = rotationEigen.w();
-
-      const geometry_msgs::msg::PointStamped& positionROS = motion_data.world_position;
-      transformMsg.transform.translation.set__x(positionROS.point.x);
-      transformMsg.transform.translation.set__y(positionROS.point.y);
-      transformMsg.transform.translation.set__z(positionROS.point.z);
-
-      
-      Eigen::Isometry3d trackToCarEigen = tf2::transformToEigen(transformMsg);
+    
+      Eigen::Isometry3d trackToCarEigen;
+      trackToCarEigen.fromPositionOrientationScale(positioneigen_track, rotationEigen, Eigen::Vector3d::Ones());
       Eigen::Isometry3d mapToCarEigen = mapToTrackEigen * trackToCarEigen;
       Eigen::Isometry3d mapToBLEigen = mapToCarEigen * carToBaseLinkEigen;
 
-      Eigen::Vector3d mapToBL_translation(mapToBLEigen.translation());
-      Eigen::Quaterniond mapToBL_quaternion(mapToBLEigen.rotation());
+      geometry_msgs::msg::TransformStamped transformMsg = tf2::eigenToTransform(trackToCarEigen);
+      transformMsg.set__header(motion_data_packet->header);
+      transformMsg.set__child_frame_id(deepracing_ros::F1MsgUtils2020::car_coordinate_name+"_"+carname);
 
       Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.x, velocityROS.vector.y, velocityROS.vector.z);
       Eigen::Vector3d centroidVelEigenLocal = trackToCarEigen.rotation().inverse()*centroidVelEigenGlobal;    
@@ -298,13 +291,9 @@ class NodeWrapperTfUpdater_
       // centroidVelEigenLocal+=m_extra_vel_noise*Eigen::Vector3d(m_rng_.gaussian01(), m_rng_.gaussian01(), m_rng_.gaussian01());
 
 
-      Eigen::Vector3d centroidAngVelTrack(motion_data_packet->udp_packet.angular_velocity.x, motion_data_packet->udp_packet.angular_velocity.y, motion_data_packet->udp_packet.angular_velocity.z);
-      Eigen::Vector3d centroidAngVel = trackToCarEigen.rotation().inverse()*centroidAngVelTrack;
-      
-      Eigen::Vector3d centroidAngAccelTrack(motion_data_packet->udp_packet.angular_acceleration.x, motion_data_packet->udp_packet.angular_acceleration.y, motion_data_packet->udp_packet.angular_acceleration.z);
-      Eigen::Vector3d centroidAngAccel = trackToCarEigen.rotation().inverse()*centroidAngAccelTrack;
+      // Eigen::Vector3d centroidAngAccelTrack(motion_data_packet->udp_packet.angular_acceleration.x, motion_data_packet->udp_packet.angular_acceleration.y, motion_data_packet->udp_packet.angular_acceleration.z);
+      // Eigen::Vector3d centroidAngAccel = trackToCarEigen.rotation().inverse()*centroidAngAccelTrack;
 
-      Eigen::Vector3d centroidLinearAccel=9.81*Eigen::Vector3d(motion_data.g_force_longitudinal, motion_data.g_force_lateral, motion_data.g_force_vertical);
 
 
 
@@ -313,37 +302,32 @@ class NodeWrapperTfUpdater_
       odom_msg_.header.set__stamp(transformMsg.header.stamp);
       odom_msg_.set__child_frame_id(transformMsg.child_frame_id);
       odom_msg_.pose.pose = tf2::toMsg(mapToCarEigen);
+      odom_msg_.twist.twist.linear.x=centroidVelEigenLocal.x();
+      odom_msg_.twist.twist.linear.y=centroidVelEigenLocal.y();
+      odom_msg_.twist.twist.linear.z=centroidVelEigenLocal.z();
 
-      // odom.pose.covariance[0]=odom.pose.covariance[7]=odom.pose.covariance[14] = 0.0025;// + extra_position_variance;
-      // odom.pose.covariance[21]=odom.pose.covariance[28]=odom.pose.covariance[35] = 1.0E-4;// + extra_rot_variance;
-      odom_msg_.twist.twist.linear.x=centroidVelEigenLocal.x();// + m_extra_vel_noise*m_rng_.gaussian01();
-      odom_msg_.twist.twist.linear.y=centroidVelEigenLocal.y();// + m_extra_vel_noise*m_rng_.gaussian01();
-      odom_msg_.twist.twist.linear.z=centroidVelEigenLocal.z();// + m_extra_vel_noise*m_rng_.gaussian01();
-      odom_msg_.twist.twist.angular.x=centroidAngVel.x();// + m_extra_angvel_noise*m_rng_.gaussian01();
-      odom_msg_.twist.twist.angular.y=centroidAngVel.y();// + m_extra_angvel_noise*m_rng_.gaussian01();
-      odom_msg_.twist.twist.angular.z=centroidAngVel.z();// + m_extra_angvel_noise*m_rng_.gaussian01();
-      // odom.twist.covariance[0]=odom.twist.covariance[7]=odom.twist.covariance[14]=0.000225;//+extra_vel_variance;
-      // odom.twist.covariance[21]=odom.twist.covariance[28]=odom.twist.covariance[35]=2.0E-5;//+extra_angvel_variance;
-
-      
       imu_msg_.header.set__stamp(transformMsg.header.stamp);
       imu_msg_.header.set__frame_id(transformMsg.child_frame_id);
       imu_msg_.set__orientation(odom_msg_.pose.pose.orientation);
-      // imu_msg.orientation_covariance[0]=imu_msg.orientation_covariance[4]=imu_msg.orientation_covariance[8]=odom.pose.covariance[21];
-      imu_msg_.angular_velocity.set__x(centroidAngVel.x());
-      imu_msg_.angular_velocity.set__y(centroidAngVel.y());
-      imu_msg_.angular_velocity.set__z(centroidAngVel.z());
-      // imu_msg.angular_velocity_covariance[0]=imu_msg.angular_velocity_covariance[4]=imu_msg.angular_velocity_covariance[8]=odom.twist.covariance[21];
+      Eigen::Vector3d centroidLinearAccel=9.81*Eigen::Vector3d(motion_data.g_force_longitudinal, motion_data.g_force_lateral, motion_data.g_force_vertical);
       imu_msg_.linear_acceleration.set__x(centroidLinearAccel.x());
       imu_msg_.linear_acceleration.set__y(centroidLinearAccel.y());
       imu_msg_.linear_acceleration.set__z(centroidLinearAccel.z());
-      // imu_msg.linear_acceleration_covariance[0]=imu_msg.linear_acceleration_covariance[4]=0.00225;
-      // imu_msg.linear_acceleration_covariance[8]=0.005;
 
+      if(motion_data_packet->udp_packet.player_only_data)
+      {
+        Eigen::Vector3d centroidAngVelTrack(motion_data_packet->udp_packet.angular_velocity.x, motion_data_packet->udp_packet.angular_velocity.y, motion_data_packet->udp_packet.angular_velocity.z);
+        Eigen::Vector3d centroidAngVel = trackToCarEigen.rotation().inverse()*centroidAngVelTrack;
+        odom_msg_.twist.twist.angular.x=centroidAngVel.x();
+        odom_msg_.twist.twist.angular.y=centroidAngVel.y();
+        odom_msg_.twist.twist.angular.z=centroidAngVel.z();
+        imu_msg_.set__angular_velocity(odom_msg_.twist.twist.angular);
+      }
+      
       carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
       mapToTrack.header.set__stamp(motion_data.world_position.header.stamp);
 
-      if (!m_tf_from_odom_)
+      if (!m_with_ekf_)
       {
         this->tfbroadcaster->sendTransform(transformMsg);
         accel_msg_.header.set__stamp(odom_msg_.header.stamp).set__frame_id(transformMsg.child_frame_id);
