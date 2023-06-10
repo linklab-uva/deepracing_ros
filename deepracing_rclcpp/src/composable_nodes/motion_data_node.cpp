@@ -38,6 +38,7 @@ namespace composable_nodes
                 deepf1::twenty_twenty::PacketMotionData* udp_data = reinterpret_cast<deepf1::twenty_twenty::PacketMotionData*>((void*)&(udp_packet->data.at(0)));
                 deepracing_msgs::msg::TimestampedPacketMotionData rosdata;
                 rosdata.udp_packet = deepracing_ros::F1MsgUtils2020::toROS(*udp_data, m_all_cars_param_); 
+                rosdata.udp_packet.player_only_data=true;
                 rosdata.header.set__stamp(udp_packet->header.stamp).set__frame_id(deepracing_ros::F1MsgUtils2020::world_coordinate_name);
                 if (rosdata.udp_packet.header.player_car_index<rosdata.udp_packet.car_motion_data.size())
                 {
@@ -59,14 +60,15 @@ namespace composable_nodes
                         motion_data.world_velocity.header.stamp = rosdata.header.stamp;
                     }
                 }
+                m_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketMotionData>(rosdata));
                 if(m_secondary_publisher_)
                 {
-                    deepracing_msgs::msg::TimestampedPacketMotionData rosdataflipped(rosdata);
-                    rosdataflipped.udp_packet.header.player_car_index = rosdata.udp_packet.header.secondary_player_car_index;
-                    rosdataflipped.udp_packet.header.secondary_player_car_index = rosdata.udp_packet.header.player_car_index;
-                    m_secondary_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketMotionData>(rosdataflipped));
+                    uint8_t player_index = uint8_t(rosdata.udp_packet.header.player_car_index);
+                    rosdata.udp_packet.header.player_car_index = rosdata.udp_packet.header.secondary_player_car_index;
+                    rosdata.udp_packet.header.secondary_player_car_index = player_index;
+                    rosdata.udp_packet.player_only_data=false;
+                    m_secondary_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketMotionData>(rosdata));
                 }
-                m_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketMotionData>(rosdata));
             }
             
             rclcpp::Subscription<udp_msgs::msg::UdpPacket>::SharedPtr m_udp_subscription_;
