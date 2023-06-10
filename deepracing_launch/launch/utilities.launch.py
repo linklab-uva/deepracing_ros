@@ -15,12 +15,13 @@ def generate_launch_description():
     config_dir = os.path.join(deepracing_launch_dir,"config")
     config_file = DeclareLaunchArgument("config_file", default_value=os.path.join(config_dir, "tf_updater.yaml"))
     use_sim_time = DeclareLaunchArgument("use_sim_time", default_value="false")
-    tf_from_odom = DeclareLaunchArgument("tf_from_odom", default_value="false")
+    with_ekf = DeclareLaunchArgument("with_ekf", default_value="true")
     boundary_pub = DeclareLaunchArgument("boundary_pub", default_value="true")
-    global_ekf = DeclareLaunchArgument("global_ekf", default_value="false")
+    ekf_global = DeclareLaunchArgument("ekf_global", default_value="true")
+    ekf_with_angvel = DeclareLaunchArgument("ekf_with_angvel", default_value="false")
     carname = DeclareLaunchArgument("carname", default_value="")
     
-    entries = [boundary_pub, carname, config_file, use_sim_time, tf_from_odom, global_ekf]
+    entries = [boundary_pub, carname, config_file, use_sim_time, with_ekf, ekf_global, ekf_with_angvel]
 
     entries.append(launch_ros.actions.Node(package='deepracing_rclpy', name='f1_boundary_publisher', executable='boundary_publisher', output='screen',\
          parameters=[{"track_search_dirs": os.getenv("F1_TRACK_DIRS","").split(os.pathsep), use_sim_time.name : LaunchConfiguration(use_sim_time.name)}],\
@@ -28,6 +29,7 @@ def generate_launch_description():
     entries.append(launch_ros.actions.Node(package='deepracing_rclpy', name='vehicle_state_publisher', executable='vehicle_state_publisher', output='screen', parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name)}], namespace=LaunchConfiguration(carname.name)))
 
     
-    entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='f1_tf_updater', executable='tf_updater', output='screen', parameters=[LaunchConfiguration(config_file.name), {carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), tf_from_odom.name : LaunchConfiguration(tf_from_odom.name)}], namespace=LaunchConfiguration(carname.name)))
-    entries.append(IncludeLaunchDescription(FrontendLaunchDescriptionSource(os.path.join(launch_dir,"ekf.launch")), launch_arguments=[(global_ekf.name, LaunchConfiguration(global_ekf.name)), (carname.name, LaunchConfiguration(carname.name)), (use_sim_time.name, LaunchConfiguration(use_sim_time.name))], condition=IfCondition(LaunchConfiguration(tf_from_odom.name))))
+    entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='f1_tf_updater', executable='tf_updater', output='screen', parameters=[LaunchConfiguration(config_file.name), {carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), with_ekf.name : LaunchConfiguration(with_ekf.name)}], namespace=LaunchConfiguration(carname.name)))
+    entries.append(IncludeLaunchDescription(FrontendLaunchDescriptionSource(os.path.join(launch_dir,"ekf.launch")),\
+      launch_arguments=[("with_angvel", LaunchConfiguration(ekf_with_angvel.name)), ("global", LaunchConfiguration(ekf_global.name)), (carname.name, LaunchConfiguration(carname.name)), (use_sim_time.name, LaunchConfiguration(use_sim_time.name))], condition=IfCondition(LaunchConfiguration(with_ekf.name))))
     return LaunchDescription(entries)

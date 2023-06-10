@@ -2,7 +2,6 @@
    <arg name="carname" default=""/>
    <arg name="default_trackfile" default=""/>
    <arg name="use_sim_time" default="false"/>
-   <arg name="tf_from_odom" default="false"/>
    <arg name="rate" default="10.0"/>
 
    <node pkg="deepracing_rclpy" exec="initial_raceline_setter" name="initial_raceline_setter" output="screen" namespace="$(var carname)">
