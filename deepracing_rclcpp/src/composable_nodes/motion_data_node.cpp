@@ -19,9 +19,9 @@ namespace composable_nodes
             DEEPRACING_RCLCPP_PUBLIC ReceiveMotionData(const rclcpp::NodeOptions & options) : 
                 rclcpp::Node("receive_motion_data", options)
             {
-                // rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().history();
-                m_publisher_ = create_publisher<deepracing_msgs::msg::TimestampedPacketMotionData>("motion_data", 10);
-                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("motion_data/raw_udp", 10, 
+                rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(10).durability_volatile();
+                m_publisher_ = create_publisher<deepracing_msgs::msg::TimestampedPacketMotionData>("motion_data", qos);
+                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("motion_data/raw_udp", qos, 
                     std::bind(&ReceiveMotionData::udp_cb, this, std::placeholders::_1));
                 m_time_start_ = get_clock()->now();
                 m_all_cars_param_ = declare_parameter<bool>("all_cars", false);

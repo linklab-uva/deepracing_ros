@@ -38,11 +38,14 @@ class MeasurementPublisher
       rclcpp::NodeOptions()
       )
     {
+     rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(1).durability_volatile();
      current_track_id = -1;
+    //  rclcpp::NodeOptions node_options(options);
+    //  node_options.rosout_qos(rclcpp::SystemDefaultsQoS().keep_last(100).durability_volatile());
      node = rclcpp::Node::make_shared("f1_tf_updater",options);
      m_with_ekf_ = node->declare_parameter<bool>("with_ekf", false);
      carname = node->declare_parameter<std::string>("carname", "");
-     statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node));
+     statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node, qos.keep_last(10)));
      mapToTrack.header.frame_id = "map";
      mapToTrack.child_frame_id = deepracing_ros::F1MsgUtils2020::world_coordinate_name;
      std::filesystem::path covariance_file_path = std::filesystem::path(ament_index_cpp::get_package_share_directory("deepracing_launch")) / std::filesystem::path("data") / std::filesystem::path("covariances.json");
@@ -64,15 +67,15 @@ class MeasurementPublisher
           
      if( !m_with_ekf_ )
      {
-        tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node));
-        this->accel_publisher = this->node->create_publisher<geometry_msgs::msg::AccelWithCovarianceStamped>("accel/filtered", 1);
-        this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom/filtered", 1);
+        tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node, qos.keep_last(10)));
+        this->accel_publisher = this->node->create_publisher<geometry_msgs::msg::AccelWithCovarianceStamped>("accel/filtered", qos);
+        this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom/filtered", qos);
      }
      else
      {
-        this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
+        this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", qos);
      }  
-     this->imu_publisher = this->node->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
+     this->imu_publisher = this->node->create_publisher<sensor_msgs::msg::Imu>("imu", qos);
 
 
      Json::Value position_cov_json = root["position_cov"];
@@ -143,9 +146,9 @@ class MeasurementPublisher
       throw rclcpp::exceptions::InvalidParameterValueException(error_stream.str());
      }
 
-     this->session_listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>("/session_data", 1, std::bind(&MeasurementPublisher::sessionCallback, this, std::placeholders::_1));
+     this->session_listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>("/session_data", qos, std::bind(&MeasurementPublisher::sessionCallback, this, std::placeholders::_1));
      
-     this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("/motion_data", 1, std::bind(&MeasurementPublisher::packetCallback, this, std::placeholders::_1));
+     this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("/motion_data", qos, std::bind(&MeasurementPublisher::packetCallback, this, std::placeholders::_1));
 
 
      

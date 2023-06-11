@@ -19,14 +19,15 @@ namespace composable_nodes
             DEEPRACING_RCLCPP_PUBLIC UdpDemuxer(const rclcpp::NodeOptions & options) : 
                 rclcpp::Node("udp_demuxer_node", options)
             {
-                m_motion_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("motion_data/raw_udp", 10);
-                m_telemetry_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("telemetry_data/raw_udp", 10);
-                m_car_setup_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("car_setup_data/raw_udp", 10);
-                m_car_status_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("car_status_data/raw_udp", 10);
-                m_lap_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("lap_data/raw_udp", 10);
-                m_session_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("session_data/raw_udp", 10);
-                m_participants_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("participants_data/raw_udp", 10);
-                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("udp_in", 100, 
+                rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(10).durability_volatile();
+                m_motion_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("motion_data/raw_udp", qos);
+                m_telemetry_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("telemetry_data/raw_udp", qos);
+                m_car_setup_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("car_setup_data/raw_udp", qos);
+                m_car_status_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("car_status_data/raw_udp", qos);
+                m_lap_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("lap_data/raw_udp", qos);
+                m_session_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("session_data/raw_udp", qos);
+                m_participants_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("participants_data/raw_udp", qos);
+                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("udp_in", qos.keep_last(100), 
                     std::bind(&UdpDemuxer::udp_cb, this, std::placeholders::_1));
                 m_time_start_ = get_clock()->now();
             } 
