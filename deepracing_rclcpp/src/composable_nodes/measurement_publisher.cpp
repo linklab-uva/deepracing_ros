@@ -91,12 +91,12 @@ class MeasurementPublisher
      }
      Eigen::Matrix<double, 6, 6, Eigen::RowMajor> pose_cov_matrix;
      pose_cov_matrix.setZero();
-     pose_cov_matrix.block<3,3>(0,0) = Eigen::Matrix3d(position_cov.data());
-     pose_cov_matrix.block<3,3>(3,3) = Eigen::Matrix3d(imu_msg_.orientation_covariance.data());
+     pose_cov_matrix.block<3,3>(0,0) = Eigen::Matrix<double, 3, 3, Eigen::RowMajor>(position_cov.data());
+     pose_cov_matrix.block<3,3>(3,3) = Eigen::Matrix<double, 3, 3, Eigen::RowMajor>(imu_msg_.orientation_covariance.data());
      Eigen::Matrix<double, 6, 6, Eigen::RowMajor> vel_cov_matrix;
      vel_cov_matrix.setZero();
-     vel_cov_matrix.block<3,3>(0,0) = Eigen::Matrix3d(linear_vel_cov.data());
-     vel_cov_matrix.block<3,3>(3,3) = Eigen::Matrix3d(imu_msg_.angular_velocity_covariance.data()); 
+     vel_cov_matrix.block<3,3>(0,0) = Eigen::Matrix<double, 3, 3, Eigen::RowMajor>(linear_vel_cov.data());
+     vel_cov_matrix.block<3,3>(3,3) = Eigen::Matrix<double, 3, 3, Eigen::RowMajor>(imu_msg_.angular_velocity_covariance.data()); 
      std::copy_n(pose_cov_matrix.data(), odom_msg_.pose.covariance.size(), odom_msg_.pose.covariance.begin());
      std::copy_n(vel_cov_matrix.data(), odom_msg_.twist.covariance.size(), odom_msg_.twist.covariance.begin());
     
