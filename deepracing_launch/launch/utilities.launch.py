@@ -29,7 +29,7 @@ def generate_launch_description():
     entries.append(launch_ros.actions.Node(package='deepracing_rclpy', name='vehicle_state_publisher', executable='vehicle_state_publisher', output='screen', parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name)}], namespace=LaunchConfiguration(carname.name)))
 
     
-    entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='f1_tf_updater', executable='tf_updater', output='screen', parameters=[LaunchConfiguration(config_file.name), {carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), with_ekf.name : LaunchConfiguration(with_ekf.name)}], namespace=LaunchConfiguration(carname.name)))
+    entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='measurement_publisher', executable='measurement_publisher_exe', output='screen', parameters=[LaunchConfiguration(config_file.name), {carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), with_ekf.name : LaunchConfiguration(with_ekf.name)}], namespace=LaunchConfiguration(carname.name)))
     entries.append(IncludeLaunchDescription(FrontendLaunchDescriptionSource(os.path.join(launch_dir,"ekf.launch")),\
       launch_arguments=[("with_angvel", LaunchConfiguration(ekf_with_angvel.name)), ("global", LaunchConfiguration(ekf_global.name)), (carname.name, LaunchConfiguration(carname.name)), (use_sim_time.name, LaunchConfiguration(use_sim_time.name))], condition=IfCondition(LaunchConfiguration(with_ekf.name))))
     return LaunchDescription(entries)

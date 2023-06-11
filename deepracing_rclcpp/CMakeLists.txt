@@ -84,21 +84,7 @@ endif()
 
 add_subdirectory(src/composable_nodes)
 
-add_executable(tf_updater src/tf_updater.cpp)
-ament_target_dependencies(tf_updater deepracing_msgs geometry_msgs nav_msgs random_numbers rclcpp tf2 tf2_geometry_msgs tf2_eigen tf2_ros tf2_sensor_msgs)
-target_link_libraries(tf_updater
- utils
- Eigen3::Eigen
-)
-if(TARGET JsonCpp::JsonCpp)
-  target_link_libraries(tf_updater JsonCpp::JsonCpp)
-else()
-  target_link_libraries(tf_updater jsoncpp_lib)
-endif()
-
-set(nodes_to_install_
-  tf_updater
-)
+set(nodes_to_install_)
 
 if(control_toolbox_FOUND AND ackermann_msgs_FOUND)
   add_executable(velocity_control_node src/velocity_control_node.cpp)
@@ -165,9 +151,13 @@ if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
 endif()
-install(TARGETS ${nodes_to_install_}
-    DESTINATION lib/${PROJECT_NAME}
-)
+
+if(nodes_to_install_)
+  install(TARGETS ${nodes_to_install_}
+      DESTINATION lib/${PROJECT_NAME}
+  )
+endif()
+
 install(TARGETS utils
     EXPORT export_${PROJECT_NAME}
     ARCHIVE DESTINATION lib
@@ -216,6 +206,10 @@ rclcpp_components_register_node(deepracing_composable_nodes
 rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::MapToBaselinkTransform"
   EXECUTABLE map_to_baselink_transform_exe
+)
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::MeasurementPublisher"
+  EXECUTABLE measurement_publisher_exe
 )
 if(with_gamepad_multiplexer_)
   rclcpp_components_register_node(deepracing_composable_nodes

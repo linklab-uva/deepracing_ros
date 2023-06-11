@@ -10,6 +10,7 @@ set(deepracing_composable_node_srcs
   udp_demuxer_node.cpp
   map_to_baselink_transform.cpp
   map_to_odom_transform.cpp
+  measurement_publisher.cpp
 )
 add_library(deepracing_composable_nodes SHARED ${deepracing_composable_node_srcs})
 if(WIN32)
@@ -37,6 +38,7 @@ ament_target_dependencies(deepracing_composable_nodes
     deepracing_msgs
     geometry_msgs
     nav_msgs
+    random_numbers
     std_msgs
     tf2_ros
     tf2_eigen
@@ -45,6 +47,12 @@ ament_target_dependencies(deepracing_composable_nodes
 )
 
 target_link_libraries(deepracing_composable_nodes PUBLIC utils)
+
+if(TARGET JsonCpp::JsonCpp)
+  target_link_libraries(deepracing_composable_nodes PRIVATE JsonCpp::JsonCpp)
+else()
+  target_link_libraries(deepracing_composable_nodes PRIVATE jsoncpp_lib)
+endif()
 
 target_include_directories(deepracing_composable_nodes
   PUBLIC

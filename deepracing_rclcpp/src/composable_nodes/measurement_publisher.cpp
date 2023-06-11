@@ -25,12 +25,16 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <filesystem>
 
+namespace deepracing
+{
+namespace composable_nodes
+{
 
-class NodeWrapperTfUpdater_ 
+class MeasurementPublisher 
 {
 
   public:
-    NodeWrapperTfUpdater_( const rclcpp::NodeOptions & options = 
+    MeasurementPublisher( const rclcpp::NodeOptions & options = 
       rclcpp::NodeOptions()
       )
     {
@@ -39,7 +43,6 @@ class NodeWrapperTfUpdater_
      m_with_ekf_ = node->declare_parameter<bool>("with_ekf", false);
      carname = node->declare_parameter<std::string>("carname", "");
      statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node));
-     tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node));
      mapToTrack.header.frame_id = "map";
      mapToTrack.child_frame_id = deepracing_ros::F1MsgUtils2020::world_coordinate_name;
      std::filesystem::path covariance_file_path = std::filesystem::path(ament_index_cpp::get_package_share_directory("deepracing_launch")) / std::filesystem::path("data") / std::filesystem::path("covariances.json");
@@ -58,6 +61,20 @@ class NodeWrapperTfUpdater_
        RCLCPP_ERROR(node->get_logger(), "Unable to parse json file at %s. Error message: %s", covariance_file_path.string().c_str(), errs.c_str());
        return;
      }
+          
+     if( !m_with_ekf_ )
+     {
+        tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node));
+        this->accel_publisher = this->node->create_publisher<geometry_msgs::msg::AccelWithCovarianceStamped>("accel/filtered", 1);
+        this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom/filtered", 1);
+     }
+     else
+     {
+        this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
+     }  
+     this->imu_publisher = this->node->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
+
+
      Json::Value position_cov_json = root["position_cov"];
      Json::Value linear_vel_cov_json = root["linear_vel_cov"];
      Json::Value angular_vel_cov_json = root["angular_vel_cov"];
@@ -66,20 +83,20 @@ class NodeWrapperTfUpdater_
      std::array<double, 9> position_cov, linear_vel_cov;
      for (unsigned int i = 0; i < imu_msg_.angular_velocity_covariance.size(); i++)
      {
-       imu_msg_.angular_velocity_covariance[i] = angular_vel_cov_json[i].asDouble();
-       imu_msg_.orientation_covariance[i] = euler_angles_cov_json[i].asDouble();
-       imu_msg_.linear_acceleration_covariance[i] = accel_msg_.accel.covariance[i] = linear_accel_cov_json[i].asDouble();
-       position_cov[i] = position_cov_json[i].asDouble();
-       linear_vel_cov[i] = linear_vel_cov_json[i].asDouble();
+        imu_msg_.angular_velocity_covariance[i] = angular_vel_cov_json[i].asDouble();
+        imu_msg_.orientation_covariance[i] = euler_angles_cov_json[i].asDouble();
+        imu_msg_.linear_acceleration_covariance[i] = accel_msg_.accel.covariance[i] = linear_accel_cov_json[i].asDouble();
+        position_cov[i] = position_cov_json[i].asDouble();
+        linear_vel_cov[i] = linear_vel_cov_json[i].asDouble();
      }
-     Eigen::MatrixXd pose_cov_matrix(6,6);
+     Eigen::Matrix<double, 6, 6, Eigen::RowMajor> pose_cov_matrix;
      pose_cov_matrix.setZero();
      pose_cov_matrix.block<3,3>(0,0) = Eigen::Matrix3d(position_cov.data());
      pose_cov_matrix.block<3,3>(3,3) = Eigen::Matrix3d(imu_msg_.orientation_covariance.data());
-     Eigen::MatrixXd vel_cov_matrix(6,6);
+     Eigen::Matrix<double, 6, 6, Eigen::RowMajor> vel_cov_matrix;
      vel_cov_matrix.setZero();
      vel_cov_matrix.block<3,3>(0,0) = Eigen::Matrix3d(linear_vel_cov.data());
-     vel_cov_matrix.block<3,3>(3,3) = Eigen::Matrix3d(imu_msg_.angular_velocity_covariance.data());
+     vel_cov_matrix.block<3,3>(3,3) = Eigen::Matrix3d(imu_msg_.angular_velocity_covariance.data()); 
      std::copy_n(pose_cov_matrix.data(), odom_msg_.pose.covariance.size(), odom_msg_.pose.covariance.begin());
      std::copy_n(vel_cov_matrix.data(), odom_msg_.twist.covariance.size(), odom_msg_.twist.covariance.begin());
     
@@ -116,27 +133,17 @@ class NodeWrapperTfUpdater_
      mapToTrackEigen = tf2::transformToEigen(mapToTrack);
      baseLinkToCarEigen = carToBaseLinkEigen.inverse();
 
-     this->session_listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>("session_data", 1, std::bind(&NodeWrapperTfUpdater_::sessionCallback, this, std::placeholders::_1));
-     this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("motion_data", 1, std::bind(&NodeWrapperTfUpdater_::packetCallback, this, std::placeholders::_1));
-     this->twist_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity", 1);
-     this->twist_local_publisher = this->node->create_publisher<geometry_msgs::msg::TwistStamped>("velocity_local", 1);
-     this->imu_publisher = this->node->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
      
-     if( !m_with_ekf_ )
-     {
-        this->accel_publisher = this->node->create_publisher<geometry_msgs::msg::AccelWithCovarianceStamped>("accel/filtered", 1);
-        this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom/filtered", 1);
-     }
-     else
-     {
-        this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
-     }
+
+     this->session_listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>("session_data", 1, std::bind(&MeasurementPublisher::sessionCallback, this, std::placeholders::_1));
+     
+     this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("motion_data", 1, std::bind(&MeasurementPublisher::packetCallback, this, std::placeholders::_1));
+
+
      
     }  
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketMotionData>::SharedPtr listener;
     rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketSessionData>::SharedPtr session_listener;
-    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_publisher;
-    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_local_publisher;
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher;
     rclcpp::Publisher<geometry_msgs::msg::AccelWithCovarianceStamped>::SharedPtr accel_publisher;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
@@ -151,6 +158,11 @@ class NodeWrapperTfUpdater_
       this->statictfbroadcaster->sendTransform(carToBaseLink);
       this->statictfbroadcaster->sendTransform(mapToTrack);
     }
+    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr
+    get_node_base_interface() const
+    {
+      return node->get_node_base_interface();
+    }
   private:
     random_numbers::RandomNumberGenerator m_rng_;
     bool m_with_ekf_;
@@ -164,7 +176,7 @@ class NodeWrapperTfUpdater_
     double m_extra_angvel_noise; 
     int8_t current_track_id;
     std::string carname;
-    void sessionCallback(const deepracing_msgs::msg::TimestampedPacketSessionData::SharedPtr session_msg)
+    void sessionCallback(const deepracing_msgs::msg::TimestampedPacketSessionData::UniquePtr session_msg)
     {
       if((session_msg->udp_packet.track_id>=0) && (session_msg->udp_packet.track_id!=current_track_id))
       {
@@ -226,18 +238,7 @@ class NodeWrapperTfUpdater_
       }
       publishStatic();
     }  
-    // void odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_msg)
-    // {
-    //   geometry_msgs::msg::TransformStamped transformMsg;
-    //   transformMsg.set__header(odom_msg->header);
-    //   transformMsg.set__child_frame_id(odom_msg->child_frame_id);
-    //   transformMsg.transform.translation.set__x(odom_msg->pose.pose.position.x);
-    //   transformMsg.transform.translation.set__y(odom_msg->pose.pose.position.y);
-    //   transformMsg.transform.translation.set__z(odom_msg->pose.pose.position.z);
-    //   transformMsg.transform.set__rotation(odom_msg->pose.pose.orientation);
-    //   this->tfbroadcaster->sendTransform(transformMsg);
-    // }
-    void packetCallback(const deepracing_msgs::msg::TimestampedPacketMotionData::SharedPtr motion_data_packet)
+    void packetCallback(const deepracing_msgs::msg::TimestampedPacketMotionData::UniquePtr motion_data_packet)
     {
      // std::cout << "Got some data" << std::endl;
       // RCLCPP_INFO(node->get_logger(), "Got some data");
@@ -286,18 +287,6 @@ class NodeWrapperTfUpdater_
       Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.x, velocityROS.vector.y, velocityROS.vector.z);
       Eigen::Vector3d centroidVelEigenLocal = trackToCarEigen.rotation().inverse()*centroidVelEigenGlobal;    
 
-      // Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.x, velocityROS.vector.y, velocityROS.vector.z);
-      // Eigen::Vector3d centroidVelEigenLocal(motion_data_packet->udp_packet.local_velocity.z, motion_data_packet->udp_packet.local_velocity.x, motion_data_packet->udp_packet.local_velocity.y); 
-      // centroidVelEigenLocal+=m_extra_vel_noise*Eigen::Vector3d(m_rng_.gaussian01(), m_rng_.gaussian01(), m_rng_.gaussian01());
-
-
-      // Eigen::Vector3d centroidAngAccelTrack(motion_data_packet->udp_packet.angular_acceleration.x, motion_data_packet->udp_packet.angular_acceleration.y, motion_data_packet->udp_packet.angular_acceleration.z);
-      // Eigen::Vector3d centroidAngAccel = trackToCarEigen.rotation().inverse()*centroidAngAccelTrack;
-
-
-
-
-    
       odom_msg_.header.set__frame_id("map");
       odom_msg_.header.set__stamp(transformMsg.header.stamp);
       odom_msg_.set__child_frame_id(transformMsg.child_frame_id);
@@ -332,31 +321,14 @@ class NodeWrapperTfUpdater_
         this->tfbroadcaster->sendTransform(transformMsg);
         accel_msg_.header.set__stamp(odom_msg_.header.stamp).set__frame_id(transformMsg.child_frame_id);
         accel_msg_.accel.accel.set__linear(imu_msg_.linear_acceleration);
-        this->accel_publisher->publish(accel_msg_);
+        this->accel_publisher->publish(std::make_unique<geometry_msgs::msg::AccelWithCovarianceStamped>(accel_msg_));
       }
-      this->odom_publisher->publish(odom_msg_);
-      this->imu_publisher->publish(imu_msg_);
+      this->odom_publisher->publish(std::make_unique<nav_msgs::msg::Odometry>(odom_msg_));
+      this->imu_publisher->publish(std::make_unique<sensor_msgs::msg::Imu>(imu_msg_));
     }
 };
-int main(int argc, char *argv[]) {
-  rclcpp::init(argc, argv);
-  NodeWrapperTfUpdater_ nw;
-  std::shared_ptr<rclcpp::Node> node = nw.node;
-  RCLCPP_INFO(node->get_logger(), "Updating TF data");
-  int num_threads_ = node->declare_parameter<int>("num_threads", 0);
-  size_t num_threads;
-  if (num_threads_<=0){
-    num_threads = 0;
-    RCLCPP_INFO(node->get_logger(), "Spinning with the number of detected CPU cores");
-  }
-  else{
-    num_threads = (size_t)num_threads_;
-    RCLCPP_INFO(node->get_logger(), "Spinning with %zu threads", num_threads);
-  }
- // node->create_wall_timer(std::chrono::seconds(1), std::bind(&NodeWrapperTfUpdater_::publishStatic, &nw), node->create_callback_group(rclcpp::CallbackGroupType::Reentrant));
 
-  rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), num_threads);
-  executor.add_node(node);
-  executor.spin();
-  rclcpp::shutdown();
 }
+}
+#include <rclcpp_components/register_node_macro.hpp>  // NOLINT
+RCLCPP_COMPONENTS_REGISTER_NODE(deepracing::composable_nodes::MeasurementPublisher)
