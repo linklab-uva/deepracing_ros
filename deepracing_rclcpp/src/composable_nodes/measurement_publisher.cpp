@@ -39,7 +39,7 @@ class MeasurementPublisher
       )
     {
      current_track_id = -1;
-     node = rclcpp::Node::make_shared("f1_tf_updater");//,"",options);
+     node = rclcpp::Node::make_shared("f1_tf_updater",options);
      m_with_ekf_ = node->declare_parameter<bool>("with_ekf", false);
      carname = node->declare_parameter<std::string>("carname", "");
      statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node));
@@ -107,7 +107,7 @@ class MeasurementPublisher
      quat.setRPY( boost::math::constants::half_pi<double>(), 0.0, 0.0 );
      tf2::Transform t(quat, tf2::Vector3(0.0,0.0,0.0));
      mapToTrack.transform = tf2::toMsg(t);
-     node->declare_parameter< std::vector<double> >("centroid_to_base_translation");
+     node->declare_parameter< std::vector<double> >("centroid_to_base_translation", std::vector<double>{-0.925, 0.0, 0.0});
      
      m_extra_position_noise = node->declare_parameter< double >("extra_position_noise", 0.0);
      m_extra_rot_noise = node->declare_parameter< double >("extra_rot_noise", 0.0);
