@@ -105,6 +105,11 @@ def main(args=None):
         load_node_req.parameters.append(with_ekf_param)
 
 
+        intra_process_comm_param : rcl_interfaces.msg.Parameter = rcl_interfaces.msg.Parameter()
+        intra_process_comm_param.name = "use_intra_process_comms"
+        intra_process_comm_param.value.type = rcl_interfaces.msg.ParameterType.PARAMETER_BOOL
+        intra_process_comm_param.value.bool_value = True
+        load_node_req.extra_arguments.append(intra_process_comm_param)
         # load_node_req.log_level = 20
 
         future = load_node_serviceclient.call_async(load_node_req)
