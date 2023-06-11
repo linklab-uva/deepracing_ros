@@ -134,10 +134,18 @@ class MeasurementPublisher
      baseLinkToCarEigen = carToBaseLinkEigen.inverse();
 
      
+     m_index_ = (int32_t)node->declare_parameter<int>("index", -1);
+     if(!(m_index_>=-2 && m_index_<=22))
+     {
+      std::stringstream error_stream;
+      error_stream << "\"index\" parameter set to invalid value: " << m_index_ << std::endl;
+      error_stream << "\"index\" must be in the range [-2,22]" << std::endl;
+      throw rclcpp::exceptions::InvalidParameterValueException(error_stream.str());
+     }
 
-     this->session_listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>("session_data", 1, std::bind(&MeasurementPublisher::sessionCallback, this, std::placeholders::_1));
+     this->session_listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>("/session_data", 1, std::bind(&MeasurementPublisher::sessionCallback, this, std::placeholders::_1));
      
-     this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("motion_data", 1, std::bind(&MeasurementPublisher::packetCallback, this, std::placeholders::_1));
+     this->listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketMotionData>("/motion_data", 1, std::bind(&MeasurementPublisher::packetCallback, this, std::placeholders::_1));
 
 
      
@@ -174,6 +182,7 @@ class MeasurementPublisher
     double m_extra_rot_noise;
     double m_extra_vel_noise;   
     double m_extra_angvel_noise; 
+    int32_t m_index_;
     int8_t current_track_id;
     std::string carname;
     void sessionCallback(const deepracing_msgs::msg::TimestampedPacketSessionData::UniquePtr session_msg)
@@ -248,13 +257,27 @@ class MeasurementPublisher
         return;
       }
       uint8_t idx;
-      if( motion_data_packet->udp_packet.header.player_car_index<22 )
+      if(m_index_==-2)
+      {
+        idx = motion_data_packet->udp_packet.header.secondary_player_car_index;
+        if (idx>22)
+        {
+          RCLCPP_ERROR(node->get_logger(), "Node is configured to read secondary player car data, but got a packet with secondary_player_car_index: %u", idx);
+          return;
+        }
+      }
+      else if(m_index_==-1)
       {
         idx = motion_data_packet->udp_packet.header.player_car_index;
+        if (idx>22)
+        {
+          RCLCPP_ERROR(node->get_logger(), "Node is configured to read primary player car data, but got a packet with player_car_index: %u", idx);
+          return;
+        }
       }
       else
       {
-        idx = 0;
+        idx = m_index_;
       }
 
       const deepracing_msgs::msg::CarMotionData &motion_data = motion_data_packet->udp_packet.car_motion_data[idx];
@@ -303,7 +326,7 @@ class MeasurementPublisher
       imu_msg_.linear_acceleration.set__y(centroidLinearAccel.y());
       imu_msg_.linear_acceleration.set__z(centroidLinearAccel.z());
 
-      if(motion_data_packet->udp_packet.player_only_data)
+      if(idx==motion_data_packet->udp_packet.header.player_car_index)
       {
         Eigen::Vector3d centroidAngVelTrack(motion_data_packet->udp_packet.angular_velocity.x, motion_data_packet->udp_packet.angular_velocity.y, motion_data_packet->udp_packet.angular_velocity.z);
         Eigen::Vector3d centroidAngVel = trackToCarEigen.rotation().inverse()*centroidAngVelTrack;
