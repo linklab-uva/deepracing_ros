@@ -2,7 +2,7 @@
   drivers:
   [
     {
-      name: "asdf",
+      name: "player1",
       index: -1,
       with_ekf: True,
       centroid_to_base_translation: [-0.925, 0.0, 0.0]
