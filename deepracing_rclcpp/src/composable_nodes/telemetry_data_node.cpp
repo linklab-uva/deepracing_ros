@@ -25,12 +25,6 @@ namespace composable_nodes
                     std::bind(&ReceiveTelemetryData::udp_cb, this, std::placeholders::_1));
                 m_time_start_ = get_clock()->now();
                 m_all_cars_param_ = declare_parameter<bool>("all_cars", false);
-                // std::string secondary_carname = declare_parameter<std::string>("secondary_carname", "");
-                // if(!(secondary_carname.size()==0))
-                // {
-                //     m_secondary_publisher_ = 
-                //         create_publisher<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>("/" + secondary_carname + "/telemetry_data", 10);
-                // }
             } 
         private:
             inline DEEPRACING_RCLCPP_LOCAL void udp_cb(const udp_msgs::msg::UdpPacket::ConstPtr& udp_packet)
