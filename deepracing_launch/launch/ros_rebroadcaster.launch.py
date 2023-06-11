@@ -4,10 +4,15 @@ import launch.actions
 import launch.substitutions
 import launch_ros.actions
 import launch_ros.descriptions
+from ament_index_python import get_package_share_directory
+import os
 
 def generate_launch_description():
     # rebroadcasternode = launch_ros.actions.Node(package='deepracing_rclcpp', node_executable='ros_rebroadcaster', output='screen', node_name="f1_data_broadcaster")
     # return launch.LaunchDescription([rebroadcasternode,]) 
+    deepracing_launch_dir = get_package_share_directory("deepracing_launch")
+    config_dir = os.path.join(deepracing_launch_dir,"config")
+
     use_intra_process_comms = True
     argz = []
     ip = launch.actions.DeclareLaunchArgument("ip", default_value="127.0.0.1")
@@ -16,6 +21,9 @@ def generate_launch_description():
     argz.append(port)
     allcars = launch.actions.DeclareLaunchArgument("publish_all_cars", default_value="false")
     argz.append(allcars)
+    drivers_file = launch.actions.DeclareLaunchArgument("drivers_file", default_value=os.path.join(config_dir, "drivers.yaml"))
+    argz.append(drivers_file)
+
     composable_nodez = [
         launch_ros.descriptions.ComposableNode(
             package='udp_driver',
@@ -76,6 +84,11 @@ def generate_launch_description():
         output='both',
     )
     nodez = []
-    nodez.append(launch_ros.actions.Node(package='deepracing_rclpy', name='initialize_udp_receiver', executable='initialize_udp_receiver', output='screen'))
+    nodez.append(launch_ros.actions.Node(package='deepracing_rclpy', 
+                                         name='initialize_udp_receiver', 
+                                         executable='initialize_udp_receiver', 
+                                         namespace="udp_interface",
+                                         parameters=[{drivers_file.name : launch.substitutions.LaunchConfiguration(drivers_file.name)}],
+                                         output='screen'))
     
     return launch.LaunchDescription(argz + nodez + [container])
