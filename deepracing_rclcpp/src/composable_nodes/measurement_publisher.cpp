@@ -38,14 +38,14 @@ class MeasurementPublisher
       rclcpp::NodeOptions()
       )
     {
-     rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(1).durability_volatile();
+     rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(1);//.durability_volatile();
      current_track_id = -1;
     //  rclcpp::NodeOptions node_options(options);
     //  node_options.rosout_qos(rclcpp::SystemDefaultsQoS().keep_last(100).durability_volatile());
      node = rclcpp::Node::make_shared("f1_tf_updater",options);
      m_with_ekf_ = node->declare_parameter<bool>("with_ekf", false);
      carname = node->declare_parameter<std::string>("carname", "");
-     statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node, qos.keep_last(10)));
+     statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node));
      mapToTrack.header.frame_id = "map";
      mapToTrack.child_frame_id = deepracing_ros::F1MsgUtils2020::world_coordinate_name;
      std::filesystem::path covariance_file_path = std::filesystem::path(ament_index_cpp::get_package_share_directory("deepracing_launch")) / std::filesystem::path("data") / std::filesystem::path("covariances.json");
@@ -67,7 +67,7 @@ class MeasurementPublisher
           
      if( !m_with_ekf_ )
      {
-        tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node, qos.keep_last(10)));
+        tfbroadcaster.reset(new tf2_ros::TransformBroadcaster(node));
         this->accel_publisher = this->node->create_publisher<geometry_msgs::msg::AccelWithCovarianceStamped>("accel/filtered", qos);
         this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom/filtered", qos);
      }
@@ -136,15 +136,13 @@ class MeasurementPublisher
      mapToTrackEigen = tf2::transformToEigen(mapToTrack);
      baseLinkToCarEigen = carToBaseLinkEigen.inverse();
 
-     
-     m_index_ = (int32_t)node->declare_parameter<int>("index", -1);
-     if(!(m_index_>=-2 && m_index_<=22))
-     {
-      std::stringstream error_stream;
-      error_stream << "\"index\" parameter set to invalid value: " << m_index_ << std::endl;
-      error_stream << "\"index\" must be in the range [-2,22]" << std::endl;
-      throw rclcpp::exceptions::InvalidParameterValueException(error_stream.str());
-     }
+     rcl_interfaces::msg::ParameterDescriptor index_desc;
+     index_desc.name = "index";
+     index_desc.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+     index_desc.description = std::string("Which index to extract from the motion data array.") +
+                              std::string(" -1 means player car, -2 means secondary player car, anything else means extract that index");
+     index_desc.integer_range.push_back(rcl_interfaces::msg::IntegerRange().set__from_value(-2).set__to_value(22));
+     m_index_ = (int32_t)node->declare_parameter<int>(index_desc.name, -1, index_desc);
 
      this->session_listener = this->node->create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>("/session_data", qos, std::bind(&MeasurementPublisher::sessionCallback, this, std::placeholders::_1));
      
@@ -248,6 +246,8 @@ class MeasurementPublisher
 
         current_track_id = session_msg->udp_packet.track_id;
       }
+      carToBaseLink.header.set__stamp(session_msg->header.stamp);
+      mapToTrack.header.set__stamp(session_msg->header.stamp);
       publishStatic();
     }  
     void packetCallback(const deepracing_msgs::msg::TimestampedPacketMotionData::UniquePtr motion_data_packet)
@@ -339,8 +339,6 @@ class MeasurementPublisher
         imu_msg_.set__angular_velocity(odom_msg_.twist.twist.angular);
       }
       
-      carToBaseLink.header.set__stamp(motion_data.world_position.header.stamp);
-      mapToTrack.header.set__stamp(motion_data.world_position.header.stamp);
 
       if (!m_with_ekf_)
       {

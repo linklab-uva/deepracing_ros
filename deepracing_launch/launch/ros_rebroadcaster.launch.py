@@ -21,8 +21,6 @@ def generate_launch_description():
     argz.append(port)
     allcars = launch.actions.DeclareLaunchArgument("publish_all_cars", default_value="false")
     argz.append(allcars)
-    drivers_file = launch.actions.DeclareLaunchArgument("drivers_file", default_value=os.path.join(config_dir, "drivers.yaml"))
-    argz.append(drivers_file)
 
     composable_nodez = [
         launch_ros.descriptions.ComposableNode(
@@ -88,7 +86,6 @@ def generate_launch_description():
                                          name='initialize_udp_receiver', 
                                          executable='initialize_udp_receiver', 
                                          namespace="udp_interface",
-                                         parameters=[{drivers_file.name : launch.substitutions.LaunchConfiguration(drivers_file.name)}],
                                          output='screen'))
     
     return launch.LaunchDescription(argz + nodez + [container])

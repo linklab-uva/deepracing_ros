@@ -23,7 +23,9 @@ import rclpy.publisher
 import rclpy.subscription  
 import rclpy.logging  
 import rclpy.duration
+import rclpy.parameter
 import rclpy.time
+import rclpy.exceptions
 import nav_msgs.msg
 import geometry_msgs.msg
 import robot_localization.msg
@@ -34,11 +36,18 @@ import deepracing_ros.convert
 import deepracing
 import rclpy.executors 
 import tf2_ros
+import rcl_interfaces.msg
 
 class EKFMonitor(rclpy.node.Node):
     def __init__(self, name="ekf_monitor"):
         super(EKFMonitor, self).__init__(name)
-        self.motion_data_sub : rclpy.subscription.Subscription = self.create_subscription(deepracing_msgs.msg.TimestampedPacketMotionData, "motion_data", self.motionDataCB, 10)
+        index_desc : rcl_interfaces.msg.ParameterDescriptor = rcl_interfaces.msg.ParameterDescriptor()
+        index_desc.name="index"
+        index_desc.type = rcl_interfaces.msg.ParameterType.PARAMETER_INTEGER
+        index_desc.integer_range.append(rcl_interfaces.msg.IntegerRange(from_value=-2, to_value=22))
+        index_param : rclpy.Parameter = self.declare_parameter(index_desc.name, value=-1, descriptor=index_desc)
+        self.index : int = index_param.get_parameter_value().integer_value
+        self.motion_data_sub : rclpy.subscription.Subscription = self.create_subscription(deepracing_msgs.msg.TimestampedPacketMotionData, "/motion_data", self.motionDataCB, 10)
         self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(nav_msgs.msg.Odometry, "odom", self.odomCB, 10)
         self.odom_filtered_sub : rclpy.subscription.Subscription = self.create_subscription(nav_msgs.msg.Odometry, "odom/filtered", self.odomFilteredCB, 10)
         self.set_state_pub : rclpy.publisher.Publisher = self.create_publisher(robot_localization.msg.State, "set_state", 1)
@@ -78,17 +87,23 @@ class EKFMonitor(rclpy.node.Node):
         mapToTrack : np.ndarray = np.eye(4, dtype=self.pose_cov.dtype)
         mapToTrack[0:3,0:3] = Rotation.from_quat([rotation_msg.x, rotation_msg.y, rotation_msg.z, rotation_msg.w]).as_matrix().astype(mapToTrack.dtype)
         mapToTrack[0:3,3] = np.asarray([translation_msg.x, translation_msg.y, translation_msg.z], dtype=mapToTrack.dtype)
-        current_position : np.ndarray = deepracing_ros.convert.extractPosition(motion_data.udp_packet)
-        current_rotation : Rotation = deepracing_ros.convert.extractOrientation(motion_data.udp_packet)
+        current_position : np.ndarray = deepracing_ros.convert.extractPosition(motion_data.udp_packet, car_index=self.index)
+        current_rotation : Rotation = deepracing_ros.convert.extractOrientation(motion_data.udp_packet, car_index=self.index)
         trackToCar : np.ndarray = np.eye(4, dtype=mapToTrack.dtype)
         trackToCar[0:3,0:3] = current_rotation.as_matrix().astype(trackToCar.dtype)
         trackToCar[0:3,3] = current_position.astype(trackToCar.dtype)
         poseMap : np.ndarray = np.matmul(mapToTrack, trackToCar)
-        current_linear_vel : np.ndarray = np.matmul(mapToTrack[0:3,0:3], deepracing_ros.convert.extractVelocity(motion_data.udp_packet))
-        current_angular_vel : np.ndarray = np.matmul(mapToTrack[0:3,0:3], deepracing_ros.convert.extractAngularVelocity(motion_data.udp_packet))
-        current_accel : np.ndarray = np.matmul(poseMap[0:3,0:3], deepracing_ros.convert.extractAcceleration(motion_data.udp_packet))
+        current_linear_vel : np.ndarray = np.matmul(mapToTrack[0:3,0:3], deepracing_ros.convert.extractVelocity(motion_data.udp_packet, car_index=self.index))
+        current_accel : np.ndarray = np.matmul(poseMap[0:3,0:3], deepracing_ros.convert.extractAcceleration(motion_data.udp_packet, car_index=self.index))
+        player_only_data : bool = self.index in {motion_data.udp_packet.header.player_car_index, -1}
+        if player_only_data:
+            current_angular_vel : np.ndarray = np.matmul(mapToTrack[0:3,0:3], deepracing_ros.convert.extractAngularVelocity(motion_data.udp_packet))
+        else:
+            current_angular_vel : np.ndarray = np.zeros_like(current_linear_vel)
         state_to_pub : robot_localization.msg.State = robot_localization.msg.State()
         state_to_pub.update_vector = [True] * 15
+        if not player_only_data:
+            state_to_pub.update_vector[9] = state_to_pub.update_vector[10] = state_to_pub.update_vector[11] = False
         state_to_pub.pose = geometry_msgs.msg.PoseWithCovarianceStamped(header=motion_data.header)
         state_to_pub.twist = geometry_msgs.msg.TwistWithCovarianceStamped(header=motion_data.header)
         state_to_pub.accel = geometry_msgs.msg.AccelWithCovarianceStamped(header=motion_data.header)
@@ -109,10 +124,10 @@ class EKFMonitor(rclpy.node.Node):
             self.get_logger().info("First data packet received, initializing EKF state")
             self.publishState(self.prev_motion_data)
             return        
-        previous_position : np.ndarray = deepracing_ros.convert.extractPosition(self.prev_motion_data.udp_packet)
-        previous_linear_velocity : np.ndarray = deepracing_ros.convert.extractVelocity(self.prev_motion_data.udp_packet)
+        previous_position : np.ndarray = deepracing_ros.convert.extractPosition(self.prev_motion_data.udp_packet, car_index=self.index)
+        previous_linear_velocity : np.ndarray = deepracing_ros.convert.extractVelocity(self.prev_motion_data.udp_packet, car_index=self.index)
         tprevious : float = self.prev_motion_data.udp_packet.header.session_time
-        current_position : np.ndarray = deepracing_ros.convert.extractPosition(motion_data.udp_packet)
+        current_position : np.ndarray = deepracing_ros.convert.extractPosition(motion_data.udp_packet, car_index=self.index)
         tcurrent : float = motion_data.udp_packet.header.session_time
         dt : float = tcurrent - tprevious
         predicted_position : np.ndarray = previous_position + dt*previous_linear_velocity

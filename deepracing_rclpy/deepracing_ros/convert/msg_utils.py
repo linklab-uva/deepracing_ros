@@ -134,11 +134,19 @@ def arrayToPointCloud2(pointsarray : Union[torch.Tensor, np.ndarray], field_name
    pc2out.data = points.flatten().tobytes()
    return pc2out
 
-def extractAcceleration(packet : drmsgs.PacketMotionData , car_index = None) -> np.ndarray:
-   if car_index is None:
+def extractAcceleration(packet : drmsgs.PacketMotionData , car_index = -1) -> np.ndarray:
+   if car_index ==-1:
       idx = packet.header.player_car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract player car index: %d" % (idx,))
+   elif car_index ==-2:
+      idx = packet.header.secondary_player_car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract secondary player car index: %d" % (idx,))
    else:
       idx = car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract provided index: %d" % (idx,))
    motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
    acceleration = 9.8*np.array( (motion_data.g_force_longitudinal, motion_data.g_force_lateral, motion_data.g_force_vertical), dtype=np.float64)
    return acceleration 
@@ -147,29 +155,53 @@ def extractAngularVelocity(packet : drmsgs.PacketMotionData) -> np.ndarray:
    angular_velocity = np.array( (packet.angular_velocity.x, packet.angular_velocity.y, packet.angular_velocity.z), dtype=np.float64)
    return angular_velocity 
 
-def extractVelocity(packet : drmsgs.PacketMotionData , car_index = None) -> np.ndarray:
-   if car_index is None:
+def extractVelocity(packet : drmsgs.PacketMotionData , car_index = -1) -> np.ndarray:
+   if car_index ==-1:
       idx = packet.header.player_car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract player car index: %d" % (idx,))
+   elif car_index ==-2:
+      idx = packet.header.secondary_player_car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract secondary player car index: %d" % (idx,))
    else:
       idx = car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract provided index: %d" % (idx,))
    motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
    velocity = np.array( (motion_data.world_velocity.vector.x, motion_data.world_velocity.vector.y, motion_data.world_velocity.vector.z), dtype=np.float64)
    return velocity 
 
-def extractPosition(packet : drmsgs.PacketMotionData , car_index = None) -> np.ndarray:
-   if car_index is None:
+def extractPosition(packet : drmsgs.PacketMotionData , car_index = -1) -> np.ndarray:
+   if car_index ==-1:
       idx = packet.header.player_car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract player car index: %d" % (idx,))
+   elif car_index ==-2:
+      idx = packet.header.secondary_player_car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract secondary player car index: %d" % (idx,))
    else:
       idx = car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract provided index: %d" % (idx,))
    motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
    position = np.array( (motion_data.world_position.point.x, motion_data.world_position.point.y, motion_data.world_position.point.z), dtype=np.float64)
    return position 
 
-def extractOrientation(packet : drmsgs.PacketMotionData, car_index = None) -> scipy.spatial.transform.Rotation:
-   if car_index is None:
+def extractOrientation(packet : drmsgs.PacketMotionData, car_index = -1) -> scipy.spatial.transform.Rotation:
+   if car_index ==-1:
       idx = packet.header.player_car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract player car index: %d" % (idx,))
+   elif car_index ==-2:
+      idx = packet.header.secondary_player_car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract secondary player car index: %d" % (idx,))
    else:
       idx = car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract provided index: %d" % (idx,))
    motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
 
    rightdir : geo_msgs.Vector3 = motion_data.world_right_dir.vector
@@ -186,11 +218,19 @@ def extractOrientation(packet : drmsgs.PacketMotionData, car_index = None) -> sc
    rotationmat = np.column_stack([forwardvector,-rightvector,upvector])
    return scipy.spatial.transform.Rotation.from_matrix(rotationmat)
 
-def extractPose(packet : drmsgs.PacketMotionData, car_index = None) -> Tuple[np.ndarray, scipy.spatial.transform.Rotation]:
-   if car_index is None:
+def extractPose(packet : drmsgs.PacketMotionData, car_index = -1) -> Tuple[np.ndarray, scipy.spatial.transform.Rotation]:
+   if car_index ==-1:
       idx = packet.header.player_car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract player car index: %d" % (idx,))
+   elif car_index ==-2:
+      idx = packet.header.secondary_player_car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract secondary player car index: %d" % (idx,))
    else:
       idx = car_index
+      if idx<0 or idx>22:
+         raise ValueError("cannot extract provided index: %d" % (idx,))
    return extractPosition(packet, car_index=idx).astype(np.float64), extractOrientation(packet, car_index=idx)
 
 def toBezierCurveMsg(control_points : torch.Tensor, header: Header, covars : Union[torch.Tensor, None] = None, delta_t : Duration = Duration()):

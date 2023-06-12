@@ -3,6 +3,7 @@
    <arg name="use_sim_time" default="false"/>
    <arg name="global" default="true"/>
    <arg name="with_angvel" default="false"/>
+   <arg name="index" default="-1"/>
    <group scoped="false" if="$(var with_angvel)">
       <let name="ekf_odom_mask"
       value="[true,true,true,true,true,true,true,true,true,true,true,true,false,false,false]"/>
@@ -23,6 +24,7 @@
    </node>
    <node pkg="deepracing_rclpy" exec="ekf_monitor" namespace="$(var carname)">
         <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="index" value="$(var index)"/>
    </node>
 
    <group scoped="false" unless="$(var global)">

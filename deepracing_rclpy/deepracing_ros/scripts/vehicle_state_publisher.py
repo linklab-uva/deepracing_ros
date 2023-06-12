@@ -42,12 +42,12 @@ class DriverStatePublisher(Node):
         super(DriverStatePublisher,self).__init__('driver_state_publisher')
         self.lap_data_semaphore : Semaphore = Semaphore()
         self.current_lap_data : PacketLapData = None
-        self.lap_data_sub : Subscription = self.create_subscription(TimestampedPacketLapData, "lap_data", self.lapDataCB, 1)
-        self.motion_data_sub : Subscription = self.create_subscription(TimestampedPacketMotionData, "motion_data", self.motionPacketCB, 1)
-        self.session_data_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "session_data", self.sessionDataCB, 1)
+        self.lap_data_sub : Subscription = self.create_subscription(TimestampedPacketLapData, "/lap_data", self.lapDataCB, 1)
+        self.motion_data_sub : Subscription = self.create_subscription(TimestampedPacketMotionData, "/motion_data", self.motionPacketCB, 1)
+        self.session_data_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "/session_data", self.sessionDataCB, 1)
 
-        self.pose_array_pub : Publisher = self.create_publisher(PoseArray, "driver_poses", 1)
-        self.driver_state_pub : Publisher = self.create_publisher(DriverStates, "driver_states", 1)
+        self.pose_array_pub : Publisher = self.create_publisher(PoseArray, "/driver_poses", 1)
+        self.driver_state_pub : Publisher = self.create_publisher(DriverStates, "/driver_states", 1)
 
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = rclpy.duration.Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
@@ -107,7 +107,7 @@ class DriverStatePublisher(Node):
         lap_data_packet : PacketLapData = copy.deepcopy(self.current_lap_data)
         self.lap_data_semaphore.release()
         lap_data_array : Sequence[LapData] = lap_data_packet.lap_data
-        valid_indices : np.ndarray = np.asarray( [i for i in range(len(lap_data_array)) if ( (lap_data_array[i].result_status not in {0,1}) and (not i==ego_idx) ) ] , dtype=np.int32)
+        valid_indices : np.ndarray = np.asarray( [i for i in range(len(lap_data_array)) if ( (lap_data_array[i].result_status not in {0,1}) ) ] , dtype=np.int32)
         driver_states : DriverStates = DriverStates(ego_vehicle_index = ego_idx)
         driver_states.header.stamp = timestamped_motion_data.header.stamp
         driver_states.header.frame_id="map"
