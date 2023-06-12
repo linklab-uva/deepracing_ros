@@ -285,7 +285,6 @@ class MeasurementPublisher
 
       const deepracing_msgs::msg::CarMotionData &motion_data = motion_data_packet->udp_packet.car_motion_data[idx];
       const geometry_msgs::msg::Vector3Stamped &velocityROS = motion_data.world_velocity;
-      const geometry_msgs::msg::Vector3Stamped &upROS = motion_data.world_up_dir;
       const geometry_msgs::msg::Vector3Stamped &forwardROS = motion_data.world_forward_dir;
       const geometry_msgs::msg::Vector3Stamped &rightROS = motion_data.world_right_dir;
       const geometry_msgs::msg::PointStamped& positionROS = motion_data.world_position;
@@ -304,7 +303,6 @@ class MeasurementPublisher
       Eigen::Isometry3d trackToCarEigen;
       trackToCarEigen.fromPositionOrientationScale(positioneigen_track, rotationEigen, Eigen::Vector3d::Ones());
       Eigen::Isometry3d mapToCarEigen = mapToTrackEigen * trackToCarEigen;
-      Eigen::Isometry3d mapToBLEigen = mapToCarEigen * carToBaseLinkEigen;
 
       geometry_msgs::msg::TransformStamped transformMsg = tf2::eigenToTransform(trackToCarEigen);
       transformMsg.set__header(motion_data_packet->header);
