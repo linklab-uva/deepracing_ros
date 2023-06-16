@@ -73,31 +73,32 @@ def decodePCDHeader(headerlines : list[str], align=False) -> Tuple[list[PointFie
     numsizes = len(sizes)
 
     if numsizes!=numfields:
-        raise ValueError("Got FIELD tag: %s with %d elements, but SIZE tag %s with %d elements" % (fields_string, numfields, sizes_string, numsizes))
+        raise ValueError("Got FIELDS tag: %s with %d elements, but SIZE tag %s with %d elements" % (fields_string, numfields, sizes_string, numsizes))
 
     types_string : str = headerlines[_TYPE_TAG_LINE].replace("TYPE","").strip()
     types : list[str] = types_string.split(" ")
     numtypes = len(types)
 
     if numtypes!=numfields:
-        raise ValueError("Got FIELD tag: %s with %d elements, but TYPE tag %s with %d elements" % (fields_string, numfields, types_string, numtypes))
+        raise ValueError("Got FIELDS tag: %s with %d elements, but TYPE tag %s with %d elements" % (fields_string, numfields, types_string, numtypes))
 
     counts_string : str = headerlines[_COUNT_TAG_LINE].replace("COUNT","").strip()
     counts : list[int] = [int(s) for s in counts_string.split(" ")]
     numcounts = len(counts)
 
     if numcounts!=numfields:
-        raise ValueError("Got FIELD tag: %s with %d elements, but COUNT tag %s with %d elements" % (fields_string, numfields, counts_string, numcounts))
+        raise ValueError("Got FIELDS tag: %s with %d elements, but COUNT tag %s with %d elements" % (fields_string, numfields, counts_string, numcounts))
 
     height_string : str = headerlines[_HEIGHT_TAG_LINE].replace("HEIGHT","").strip()
     height : int = int(height_string)
-    if height!=1:
-        raise ValueError("Currently only flat point clouds (height == 1) are supported. Got HEIGHT tag %s" % (height_string,))
+
+    width_string : str = headerlines[_WIDTH_TAG_LINE].replace("WIDTH","").strip()
+    width : int = int(width_string)
 
     numpoints_string : str = headerlines[_POINTS_TAG_LINE].replace("POINTS","").strip()
     numpoints : int = int(numpoints_string)
 
-    rtn : list[PointField] = []
+    pointfieldsmsgs : list[PointField] = []
     numpytuples : list[Tuple] = []
     for i in range(numfields):  
         pf : PointField = PointField()
@@ -112,34 +113,35 @@ def decodePCDHeader(headerlines : list[str], align=False) -> Tuple[list[PointFie
         if size not in sizemap.keys():
             raise ValueError("Got invalid size %d for field %s of type %s, only supported size for type %s are %s" % (size,  pf.name, typestr, typestr, str(sizemap.keys())))
         pf.datatype = sizemap[size]
-        rtn.append(pf)
+        pointfieldsmsgs.append(pf)
         numpytuples.append((pf.name, "%s%d" % (typestr.lower(), size), (pf.count,)))
     numpytype = np.dtype(numpytuples, align=align)
     numpyproxy : dict = dict(numpytype.fields)
-    for field in rtn:
+    for field in pointfieldsmsgs:
         field.offset = (numpyproxy[field.name])[1]
-    return rtn, np.dtype(numpytuples), numpoints
-      
-def decodeBinaryPCD(headerlines : list[str], data : bytes) -> PointCloud2:
-   raise NotImplementedError("Binary PCD files not supported yet")
+    return pointfieldsmsgs, np.dtype(numpytuples), height, width, numpoints
+
 def pcdAsPointCloud2(filepath : str, align=False) -> PointCloud2:
-   with open(filepath, "rb") as f:
-      headerlines : list[str] = [f.readline().decode("ascii").strip() for asdf in range(_NUM_PCD_HEADER_LINES)]
-      data_tag = headerlines[_DATA_TAG_LINE].replace("DATA","").strip() 
-      if data_tag=="binary":
-        return decodeBinaryPCD(headerlines, f.read())
-      elif data_tag=="ascii":
-        rtn : PointCloud2 = PointCloud2()
-        fields, numpytype, numpoints = decodePCDHeader(headerlines, align=align)
+    rtn : PointCloud2 = PointCloud2()
+    rtn.is_dense=True
+    rtn.is_bigendian=False
+    with open(filepath, "rb") as f:
+        headerlines : list[str] = [f.readline().decode("ascii").strip() for asdf in range(_NUM_PCD_HEADER_LINES)]
+        data_tag = headerlines[_DATA_TAG_LINE].replace("DATA","").strip() 
+        if data_tag not in {"binary", "ascii"}:
+            raise ValueError("Invalid DATA tag %s. Supported types are \"ascii\" or \"binary\"" % (data_tag,))
+        fields, numpytype, height, width, numpoints = decodePCDHeader(headerlines, align=(align and (data_tag=="ascii")))
+        if not (numpoints==(height*width)):
+            raise ValueError("Got non-dense PCD file with height %d and width %d, but containing %d points. Number of points should equal height*width" % (height, width, numpoints))
         rtn.fields = fields
-        rtn.is_dense=True
-        rtn.is_bigendian=False
         rtn.point_step=numpytype.itemsize
-        rtn.height = 1
-        rtn.width = numpoints
-        rtn.row_step = numpoints*rtn.point_step
-        structured_numpy_array = np.loadtxt(f, dtype=numpytype, encoding="ascii", delimiter=" ")
-        rtn.data = structured_numpy_array.tobytes()
+        rtn.height = height
+        rtn.width = width
+        rtn.row_step = width*rtn.point_step
+        if data_tag=="binary":
+            rtn.data = f.read()
+        else:
+            structured_numpy_array = np.loadtxt(f, dtype=numpytype, encoding="ascii", delimiter=" ")
+            rtn.data = structured_numpy_array.tobytes()
         return rtn
-      else:
-        raise ValueError("Invalid DATA tag %s. Supported types are \"ascii\" or \"binary\"" % (data_tag,))
+            
