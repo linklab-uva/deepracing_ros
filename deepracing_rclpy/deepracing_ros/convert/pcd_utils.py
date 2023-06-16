@@ -1,142 +1,42 @@
 
-from typing import Tuple
+from typing import Tuple, Union
 from sensor_msgs.msg import PointCloud2, PointField
+from std_msgs.msg import Header
 import numpy as np
 import sensor_msgs_py.point_cloud2
-#From the PCD spec, the valid type characters are: 
-#I - represents signed types int8 (char), int16 (short), and int32 (int)
-#U - represents unsigned types uint8 (unsigned char), uint16 (unsigned short), uint32 (unsigned int)
-#F - represents float types
+import deepracing.path_utils
 
+_DATATYPES_INVERSE : dict = dict()
+for k in sensor_msgs_py.point_cloud2._DATATYPES.keys():
+    _DATATYPES_INVERSE[sensor_msgs_py.point_cloud2._DATATYPES[k]] = k
 
-_TYPEMAP : dict[Tuple[str,int], int] = {}
-
-_TYPEMAP[("I", 1)] = PointField.INT8
-_TYPEMAP[("I", 2)] = PointField.INT16
-_TYPEMAP[("I", 4)] = PointField.INT32
-
-_TYPEMAP[("U", 1)] = PointField.UINT8
-_TYPEMAP[("U", 2)] = PointField.UINT16
-_TYPEMAP[("U", 4)] = PointField.UINT32
-
-_TYPEMAP[("F", 4)] = PointField.FLOAT32
-_TYPEMAP[("F", 8)] = PointField.FLOAT64
-
-_NUMPY_TYPEMAP : dict[Tuple[str,int], np.dtype] = {k : sensor_msgs_py.point_cloud2._DATATYPES[_TYPEMAP[k]] for k in _TYPEMAP.keys()}
-
-# Valid PCD files have the following header keys in this specific order:
-# VERSION
-# FIELDS
-# SIZE
-# TYPE
-# COUNT
-# WIDTH
-# HEIGHT
-# VIEWPOINT
-# POINTS
-# DATA
-_VERSION_TAG_LINE = 0
-_FIELDS_TAG_LINE = 1
-_SIZE_TAG_LINE = 2
-_TYPE_TAG_LINE = 3
-_COUNT_TAG_LINE = 4
-_WIDTH_TAG_LINE = 5
-_HEIGHT_TAG_LINE = 6
-_VIEWPOINT_TAG_LINE = 7
-_POINTS_TAG_LINE =8
-_DATA_TAG_LINE = 9
-_NUM_PCD_HEADER_LINES=10
-
-#An examples of such a header for an ascii PCD
-
-# VERSION 0.7
-# FIELDS x y z distance
-# SIZE 4 4 4 4
-# TYPE F F F F
-# COUNT 1 1 1 1
-# WIDTH 2640
-# HEIGHT 1
-# VIEWPOINT -0.271 0.654 0.653 0.271 -109.206 2.884 463.537
-# POINTS 2640
-# DATA ascii
-
-def decodePCDHeader(headerlines : list[str], align=False) -> Tuple[list[PointField], np.dtype, int]:
-    fields_string = headerlines[_FIELDS_TAG_LINE].replace("FIELDS","").strip()
-    fieldnames : list[str] = fields_string.split(" ")
-    numfields = len(fieldnames)
-
-    sizes_string : str = headerlines[_SIZE_TAG_LINE].replace("SIZE","").strip()
-    sizes : list[int] = [int(s) for s in sizes_string.split(" ")]
-    numsizes = len(sizes)
-
-    if numsizes!=numfields:
-        raise ValueError("Got FIELDS tag: %s with %d elements, but SIZE tag %s with %d elements" % (fields_string, numfields, sizes_string, numsizes))
-
-    types_string : str = headerlines[_TYPE_TAG_LINE].replace("TYPE","").strip()
-    types : list[str] = types_string.split(" ")
-    numtypes = len(types)
-
-    if numtypes!=numfields:
-        raise ValueError("Got FIELDS tag: %s with %d elements, but TYPE tag %s with %d elements" % (fields_string, numfields, types_string, numtypes))
-
-    counts_string : str = headerlines[_COUNT_TAG_LINE].replace("COUNT","").strip()
-    counts : list[int] = [int(s) for s in counts_string.split(" ")]
-    numcounts = len(counts)
-
-    if numcounts!=numfields:
-        raise ValueError("Got FIELDS tag: %s with %d elements, but COUNT tag %s with %d elements" % (fields_string, numfields, counts_string, numcounts))
-
-    height_string : str = headerlines[_HEIGHT_TAG_LINE].replace("HEIGHT","").strip()
-    height : int = int(height_string)
-
-    width_string : str = headerlines[_WIDTH_TAG_LINE].replace("WIDTH","").strip()
-    width : int = int(width_string)
-
-    numpoints_string : str = headerlines[_POINTS_TAG_LINE].replace("POINTS","").strip()
-    numpoints : int = int(numpoints_string)
-
-    pointfieldsmsgs : list[PointField] = []
-    numpytuples : list[Tuple] = []
-    for i in range(numfields):  
+def structuredArrayAsPointcloud2(numpytype : np.dtype, structured_array : np.ndarray, shape : Union[tuple[int,int], None] = None, header = Header()) -> PointCloud2:
+    rtn : PointCloud2 = PointCloud2(is_dense=True, is_bigendian=False, header=header)
+    if shape is not None:
+        rtn.height = shape[0]
+        rtn.width = shape[1]
+    else:
+        rtn.height = 1
+        rtn.width = structured_array.shape[0]
+    rtn.point_step = numpytype.itemsize
+    rtn.row_step = rtn.point_step*rtn.width
+    for name in numpytype.names:
+        fieldtype, offset = numpytype.fields[name]
         pf : PointField = PointField()
-        pf.name = fieldnames[i]
-        pf.count = counts[i]
+        pf.name = name
+        pf.offset = offset
+        subtype, shape = fieldtype.subdtype
+        pf.count = shape[0]
+        pf.datatype = _DATATYPES_INVERSE[subtype]
+        rtn.fields.append(pf)
+    rtn.data = structured_array.tobytes()
+    return rtn
 
-        typestr = types[i]
-        size = sizes[i]
-        key = (typestr, size)
-        if key not in _TYPEMAP.keys():
-            raise ValueError("Got invalid combination of type %s and size %d for field %s, only supported types are %s" % (typestr, size, pf.name, str(_TYPEMAP.keys())))
-        pf.datatype = _TYPEMAP[key]
-        pointfieldsmsgs.append(pf)
-        numpytuples.append((pf.name, _NUMPY_TYPEMAP[key], (pf.count,)))
-    numpytype = np.dtype(numpytuples, align=align)
-    numpyproxy : dict = dict(numpytype.fields)
-    for field in pointfieldsmsgs:
-        field.offset = (numpyproxy[field.name])[1]
-    return pointfieldsmsgs, np.dtype(numpytuples), height, width, numpoints
-
-def pcdAsPointCloud2(filepath : str, align=False) -> PointCloud2:
-    rtn : PointCloud2 = PointCloud2()
-    rtn.is_dense=True
-    rtn.is_bigendian=False
-    with open(filepath, "rb") as f:
-        headerlines : list[str] = [f.readline().decode("ascii").strip() for asdf in range(_NUM_PCD_HEADER_LINES)]
-        data_tag = headerlines[_DATA_TAG_LINE].replace("DATA","").strip() 
-        if data_tag not in {"binary", "ascii"}:
-            raise ValueError("Invalid DATA tag %s. Supported types are \"ascii\" or \"binary\"" % (data_tag,))
-        fields, numpytype, height, width, numpoints = decodePCDHeader(headerlines, align=(align and (data_tag=="ascii")))
-        if not (numpoints==(height*width)):
-            raise ValueError("Got non-dense PCD file with height %d and width %d, but containing %d points. Number of points should equal height*width" % (height, width, numpoints))
-        rtn.fields = fields
-        rtn.point_step=numpytype.itemsize
-        rtn.height = height
-        rtn.width = width
-        rtn.row_step = width*rtn.point_step
-        if data_tag=="binary":
-            rtn.data = f.read()
-        else:
-            structured_numpy_array = np.loadtxt(f, dtype=numpytype, encoding="ascii", delimiter=" ")
-            rtn.data = structured_numpy_array.tobytes()
-        return rtn
-            
+def pcdAsPointCloud2(filepath : str, align = False, with_numpy_arrays = True, header = Header()) -> PointCloud2:
+    numpytype, structured_array, height, width = deepracing.path_utils.loadPCD(filepath, align=align)
+    pc2 = structuredArrayAsPointcloud2(numpytype, structured_array, (height, width), header=header)
+    if with_numpy_arrays:
+        return pc2, numpytype, structured_array
+    else:
+        return pc2
+    
