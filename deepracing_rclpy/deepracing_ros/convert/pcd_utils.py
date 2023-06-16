@@ -2,30 +2,27 @@
 from typing import Tuple
 from sensor_msgs.msg import PointCloud2, PointField
 import numpy as np
-
+import sensor_msgs_py.point_cloud2
 #From the PCD spec, the valid type characters are: 
 #I - represents signed types int8 (char), int16 (short), and int32 (int)
 #U - represents unsigned types uint8 (unsigned char), uint16 (unsigned short), uint32 (unsigned int)
 #F - represents float types
 
-_SIGNED_INTEGER_SIZEMAP : dict[int,int] = {}
-_SIGNED_INTEGER_SIZEMAP[1] = PointField.INT8
-_SIGNED_INTEGER_SIZEMAP[2] = PointField.INT16
-_SIGNED_INTEGER_SIZEMAP[4] = PointField.INT32
 
-_UNSIGNED_INTEGER_SIZEMAP : dict[int,int] = {}
-_UNSIGNED_INTEGER_SIZEMAP[1] = PointField.UINT8
-_UNSIGNED_INTEGER_SIZEMAP[2] = PointField.UINT16
-_UNSIGNED_INTEGER_SIZEMAP[4] = PointField.UINT32
+_TYPEMAP : dict[Tuple[str,int], int] = {}
 
-_FLOATING_POINT_SIZEMAP : dict[int,int] = {}
-_FLOATING_POINT_SIZEMAP[4] = PointField.FLOAT32
-_FLOATING_POINT_SIZEMAP[8] = PointField.FLOAT64
+_TYPEMAP[("I", 1)] = PointField.INT8
+_TYPEMAP[("I", 2)] = PointField.INT16
+_TYPEMAP[("I", 4)] = PointField.INT32
 
-_TYPEMAP : dict[str,dict[int,int]] = {}
-_TYPEMAP["I"] = _SIGNED_INTEGER_SIZEMAP
-_TYPEMAP["U"] = _UNSIGNED_INTEGER_SIZEMAP
-_TYPEMAP["F"] = _FLOATING_POINT_SIZEMAP
+_TYPEMAP[("U", 1)] = PointField.UINT8
+_TYPEMAP[("U", 2)] = PointField.UINT16
+_TYPEMAP[("U", 4)] = PointField.UINT32
+
+_TYPEMAP[("F", 4)] = PointField.FLOAT32
+_TYPEMAP[("F", 8)] = PointField.FLOAT64
+
+_NUMPY_TYPEMAP : dict[Tuple[str,int], np.dtype] = {k : sensor_msgs_py.point_cloud2._DATATYPES[_TYPEMAP[k]] for k in _TYPEMAP.keys()}
 
 # Valid PCD files have the following header keys in this specific order:
 # VERSION
@@ -107,14 +104,12 @@ def decodePCDHeader(headerlines : list[str], align=False) -> Tuple[list[PointFie
 
         typestr = types[i]
         size = sizes[i]
-        if typestr not in _TYPEMAP.keys():
-            raise ValueError("Got invalid type %s for field %s, only supported types are %s" % (typestr, pf.name, str(_TYPEMAP.keys())))
-        sizemap = _TYPEMAP[typestr]
-        if size not in sizemap.keys():
-            raise ValueError("Got invalid size %d for field %s of type %s, only supported size for type %s are %s" % (size,  pf.name, typestr, typestr, str(sizemap.keys())))
-        pf.datatype = sizemap[size]
+        key = (typestr, size)
+        if key not in _TYPEMAP.keys():
+            raise ValueError("Got invalid combination of type %s and size %d for field %s, only supported types are %s" % (typestr, size, pf.name, str(_TYPEMAP.keys())))
+        pf.datatype = _TYPEMAP[key]
         pointfieldsmsgs.append(pf)
-        numpytuples.append((pf.name, "%s%d" % (typestr.lower(), size), (pf.count,)))
+        numpytuples.append((pf.name, _NUMPY_TYPEMAP[key], (pf.count,)))
     numpytype = np.dtype(numpytuples, align=align)
     numpyproxy : dict = dict(numpytype.fields)
     for field in pointfieldsmsgs:
