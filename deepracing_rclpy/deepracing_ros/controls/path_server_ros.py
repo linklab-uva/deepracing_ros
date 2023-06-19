@@ -68,7 +68,7 @@ class PathServerROS(Node):
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
         self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(Odometry, 'odom', self.odomCallback, 1)
         self.session_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketSessionData, '/session_data', self.sessionCallback, 1)
-        self.current_session_data : Union[None, TimestampedPacketSessionData] = None
+        self.current_session_data : TimestampedPacketSessionData = None
 
     def odomCallback(self, odom_msg : Odometry):
         self.get_logger().debug("Got a new pose: " + str(odom_msg))

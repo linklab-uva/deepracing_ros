@@ -38,7 +38,7 @@ class RacelineSetter(Node):
     def __init__(self, name="initial_raceline_setter"):
         super(RacelineSetter, self).__init__(name)
         self.session_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketSessionData, '/session_data', self.sessionCallback, 1)
-        self.current_session_data : Union[None, TimestampedPacketSessionData] = None
+        self.current_session_data : TimestampedPacketSessionData = None
 
     def sessionCallback(self, session_msg : TimestampedPacketSessionData):
         self.get_logger().debug("Got a new session packet: " + str(session_msg))
@@ -53,7 +53,7 @@ def main(args=None):
     if default_trackfile=="":
         node.get_logger().info("default_trackfile parameter not set, exiting")
         exit(0)
-    f1_track_env : Union[str,None] = os.getenv("F1_TRACK_DIRS")
+    f1_track_env = os.getenv("F1_TRACK_DIRS")
     if f1_track_env is not None:
         search_dirs = str.split(f1_track_env, os.pathsep)
     else:
@@ -71,7 +71,7 @@ def main(args=None):
     mapdir : str = os.path.join(ament_index_python.get_package_share_directory("deepracing_launch"), "maps", trackname)
     search_dirs.append(mapdir)
     search_dirs.append(os.path.join(mapdir, "offset_lines"))
-    trackfile : Union[str,None] = deepracing.searchForFile(default_trackfile, search_dirs)
+    trackfile  = deepracing.searchForFile(default_trackfile, search_dirs)
     if trackfile is None:
         node.get_logger().error("Could not find %s in any of %s" % (trackfile, str(search_dirs)))
 
