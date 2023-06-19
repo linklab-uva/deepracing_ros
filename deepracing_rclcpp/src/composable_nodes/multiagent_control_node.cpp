@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <algorithm>
+#include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <deepracing_msgs/msg/xinput_state.hpp>
 #include <deepracing_ros/utils/xinput_msg_utils.h>
 #include <std_msgs/msg/float64.hpp>
@@ -36,23 +37,43 @@ namespace deepracing
       MultiagentControlNode(const rclcpp::NodeOptions &options)
           : rclcpp::Node("multiagent_control_node", options)
       {
-        driver_names_ = declare_parameter<std::vector<std::string>>("driver_names", std::vector<std::string>());
+        rcl_interfaces::msg::ParameterDescriptor num_player_desc;
+        num_player_desc.name = "num_players";
+        num_player_desc.integer_range.push_back(rcl_interfaces::msg::IntegerRange().set__from_value(1).set__to_value(4));
+        num_player_desc.set__read_only(true);
+        unsigned int num_players = (unsigned int)declare_parameter<int>(num_player_desc.name, num_player_desc);
+        std::vector<std::string> default_player_names;
+        std::vector<double> default_full_lock_left, default_full_lock_right;
+        for(unsigned int i = 1; i <= num_players; i++)
+        {
+          default_player_names.push_back(std::string("player") + std::to_string(i));
+          default_full_lock_left.push_back(0.225);
+          default_full_lock_right.push_back(-0.225);
+        }
+        driver_names_ = declare_parameter<std::vector<std::string>>("driver_names", default_player_names);
         if (driver_names_.size() < 1 || driver_names_.size() > 4)
         {
           throw std::runtime_error("Must declare between 1 and 4 driver names");
         }
-        std::vector<double> full_lock_left_vec = declare_parameter<std::vector<double>>("full_lock_left", std::vector<double>());
+        else if(driver_names_.size()!=num_players)
+        {
+          std::stringstream errorstream;
+          errorstream << "\"driver_names\" param contains " << driver_names_.size() << " values, but specified " << num_players << " players in \"num_players\" param";
+          throw std::runtime_error(errorstream.str().c_str());
+        }
+
+        std::vector<double> full_lock_left_vec = declare_parameter<std::vector<double>>("full_lock_left", default_full_lock_left);
         if (full_lock_left_vec.size() != driver_names_.size())
         {
           std::stringstream error_stream;
-          error_stream << "Declared" << driver_names_.size() << "drivers, but " << full_lock_left_vec.size() << " full-lock-left values.";
+          error_stream << "Declared " << driver_names_.size() << " drivers, but " << full_lock_left_vec.size() << " full-lock-left values.";
           throw std::runtime_error(error_stream.str());
         }
-        std::vector<double> full_lock_right_vec = declare_parameter<std::vector<double>>("full_lock_right", std::vector<double>());
+        std::vector<double> full_lock_right_vec = declare_parameter<std::vector<double>>("full_lock_right", default_full_lock_right);
         if (full_lock_right_vec.size() != driver_names_.size())
         {
           std::stringstream error_stream;
-          error_stream << "Declared" << driver_names_.size() << "drivers, but " << full_lock_right_vec.size() << " full-lock-right values.";
+          error_stream << "Declared " << driver_names_.size() << " drivers, but " << full_lock_right_vec.size() << " full-lock-right values.";
           throw std::runtime_error(error_stream.str());
         }
         try
@@ -72,7 +93,6 @@ namespace deepracing
             xinput_subscriptions_[driver] = create_subscription<deepracing_msgs::msg::XinputState>(state_in_topic, rclcpp::QoS{1}, func_setstate);
             xinput_publishers_[driver] = create_publisher<deepracing_msgs::msg::XinputState>(state_out_topic, rclcpp::QoS{1});
             last_input_[driver] = deepracing_msgs::msg::XinputState().set__header(std_msgs::msg::Header().set__stamp(now));
-
           }
           // std::function<void(const std::string&)> func_timer = ;
           timer_ = rclcpp::create_timer(get_node_base_interface(), get_node_timers_interface(),
