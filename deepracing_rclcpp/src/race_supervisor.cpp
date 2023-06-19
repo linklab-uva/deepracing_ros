@@ -33,7 +33,7 @@ class RaceSupervisorNode : public rclcpp::Node
       car_names_descriptor.set__type(rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY);
       car_names_descriptor.set__read_only(false);
       car_names_descriptor.set__description("The names of the two cars to manage, each should have it's own namespace of various ROS2 schtuff");
-      std::vector<std::string> car_names = declare_parameter<std::vector<std::string>>(car_names_descriptor.name, car_names_descriptor);
+      std::vector<std::string> car_names = declare_parameter<std::vector<std::string>>(car_names_descriptor.name, {"player1", "player2"}, car_names_descriptor);
       m_car1_name_ = car_names[0];
 
       const std::string car1_state_topic = "/" + m_car1_name_ + "/driver_states";
