@@ -1,3 +1,4 @@
+from typing import Union
 import numpy as np
 import os
 import time
@@ -67,6 +68,7 @@ class PathServerROS(Node):
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
         self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(Odometry, 'odom', self.odomCallback, 1)
         self.session_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketSessionData, '/session_data', self.sessionCallback, 1)
+        self.current_session_data : Union[None, TimestampedPacketSessionData] = None
 
     def odomCallback(self, odom_msg : Odometry):
         self.get_logger().debug("Got a new pose: " + str(odom_msg))
@@ -74,6 +76,7 @@ class PathServerROS(Node):
 
     def sessionCallback(self, session_msg : TimestampedPacketSessionData):
         self.get_logger().debug("Got a new session packet: " + str(session_msg))
+        self.current_session_data = session_msg
         self.player_car_index = session_msg.udp_packet.header.player_car_index       
 
     def getTrajectory(self):
