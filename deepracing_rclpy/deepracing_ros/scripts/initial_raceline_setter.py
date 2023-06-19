@@ -60,7 +60,7 @@ def main(args=None):
         search_dirs = []
     exec : rclpy.executors.SingleThreadedExecutor = rclpy.executors.SingleThreadedExecutor()
     asynspinner : AsyncSpinner = AsyncSpinner(exec)
-    asynspinner.spin(node)
+    asynspinner.spin()
     rate : rclpy.timer.Rate = node.create_rate(2.0, clock=node.get_clock())
     while node.current_session_data is None:
         node.get_logger().info("Waiting for session data")
