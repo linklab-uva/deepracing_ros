@@ -96,7 +96,8 @@ class ControlToXinputNode(Node):
         if self.current_ackermann_data is None:
             # self.get_logger().error("Can't publish control, haven't received any steering data yet")
             return
-        state : XinputState = XinputState()
+        
+        state : XinputState = XinputState(header = data.header)
 
         if data.output>=0.0:
             state.gamepad.right_trigger = int(np.round(np.clip(data.output*255.0, 0.0, 255.0)))

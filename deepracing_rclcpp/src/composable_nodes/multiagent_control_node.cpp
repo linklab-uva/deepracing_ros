@@ -86,13 +86,21 @@ namespace deepracing
             double full_lock_right = full_lock_right_vec.at(i);
             interfaces_[driver] = factory_.createInterface();
             // vjoy_interfaces_[driver] = deepf1::F1InterfaceFactory::getDefaultInterface(i+1);
+            std::string override_in_topic = "/" + driver + "/controller_override";
             std::string state_in_topic = "/" + driver + "/controller_input";
             std::string state_out_topic = "/" + driver + "/controller_state";
+            
             std::function<void(const deepracing_msgs::msg::XinputState::UniquePtr &)> func_setstate
               = std::bind(&MultiagentControlNode::setState_, this, std::placeholders::_1, driver);
             xinput_subscriptions_[driver] = create_subscription<deepracing_msgs::msg::XinputState>(state_in_topic, rclcpp::QoS{1}, func_setstate);
+            
+            std::function<void(const deepracing_msgs::msg::XinputState::UniquePtr &)> func_overridestate
+              = std::bind(&MultiagentControlNode::overrideState_, this, std::placeholders::_1, driver);
+            override_subscriptions_[driver] = create_subscription<deepracing_msgs::msg::XinputState>(override_in_topic, rclcpp::QoS{1}, func_overridestate);
+
             xinput_publishers_[driver] = create_publisher<deepracing_msgs::msg::XinputState>(state_out_topic, rclcpp::QoS{1});
             last_input_[driver] = deepracing_msgs::msg::XinputState().set__header(std_msgs::msg::Header().set__stamp(now));
+            last_override_[driver] = deepracing_msgs::msg::XinputState().set__header(std_msgs::msg::Header().set__stamp(rclcpp::Time()));
           }
           // std::function<void(const std::string&)> func_timer = ;
           timer_ = rclcpp::create_timer(get_node_base_interface(), get_node_timers_interface(),
@@ -109,9 +117,11 @@ namespace deepracing
       deepf1::MultiagentF1InterfaceFactory factory_;
       std::unordered_map<std::string, std::shared_ptr<deepf1::F1Interface>> interfaces_;
       std::unordered_map<std::string, rclcpp::Subscription<deepracing_msgs::msg::XinputState>::SharedPtr> xinput_subscriptions_;
+      std::unordered_map<std::string, rclcpp::Subscription<deepracing_msgs::msg::XinputState>::SharedPtr> override_subscriptions_;
       std::unordered_map<std::string, std::mutex> xinput_mutexes_;
       std::unordered_map<std::string, rclcpp::Publisher<deepracing_msgs::msg::XinputState>::SharedPtr> xinput_publishers_;
       std::unordered_map<std::string, deepracing_msgs::msg::XinputState> last_input_;
+      std::unordered_map<std::string, deepracing_msgs::msg::XinputState> last_override_;
 
       rclcpp::TimerBase::SharedPtr timer_;
       std::mutex set_steering_mutex_;
@@ -120,17 +130,43 @@ namespace deepracing
       {
         for (const std::string &driver : driver_names_)
         {
-          xinput_publishers_[driver]->publish(last_input_[driver]);
+          const deepracing_msgs::msg::XinputState state_input(last_input_[driver]);
+          const deepracing_msgs::msg::XinputState state_override(last_override_[driver]);
+          if (rclcpp::Time(state_input.header.stamp) > rclcpp::Time(state_override.header.stamp))
+          {
+            xinput_publishers_[driver]->publish(state_input);
+          }
+          else
+          {
+            xinput_publishers_[driver]->publish(state_override);
+          }
         }
       }
       std::mutex& mutexGetter_(const std::string& driver)
       {
           return xinput_mutexes_[driver];
       }
+      void overrideState_(const deepracing_msgs::msg::XinputState::UniquePtr &state, const std::string &driver)
+      {
+        RCLCPP_DEBUG(get_logger(), "Overriding state for driver %s", driver.c_str());
+        const rclcpp::Time& time = state->header.stamp;
+        { 
+          std::lock_guard lock(mutexGetter_(driver));
+          last_override_[driver] = *state;
+          interfaces_[driver]->setStateDirectly(deepracing_ros::XinputMsgUtils::toXinput(last_override_[driver]));
+        }
+      }
       void setState_(const deepracing_msgs::msg::XinputState::UniquePtr &state, const std::string &driver)
       {
         RCLCPP_DEBUG(get_logger(), "Setting state for driver %s", driver.c_str());
-        const rclcpp::Time& time = get_clock()->now();
+        const rclcpp::Time& time = state->header.stamp;
+        const rclcpp::Duration& dt = time - last_override_[driver].header.stamp;
+        double dt_seconds = ((double)dt.nanoseconds())/1E9;
+        if (dt_seconds<.1)
+        {
+          RCLCPP_INFO(get_logger(), "Ignoring input because last override was received %f seconds ago.", dt_seconds);
+        }
+        else
         { 
           std::lock_guard lock(mutexGetter_(driver));
           last_input_[driver] = state->set__header(std_msgs::msg::Header().set__stamp(time));
