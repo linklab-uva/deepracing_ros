@@ -8,6 +8,20 @@
 #endif
 #include <algorithm>
 #include <sstream>
+std::string deepracing_ros::FileUtils::findTrackmap(const std::string& trackname, const std::vector<std::string> & search_dirs)
+{
+  for(const std::string& dir : search_dirs)
+  {
+    fs::path dirpath(dir);
+    fs::path checkpath = dirpath/fs::path(trackname);
+    fs::path metadata_checkpath = checkpath/fs::path("metadata.yaml");
+    if(fs::exists(checkpath) && fs::is_directory(checkpath) && fs::exists(metadata_checkpath) && fs::is_regular_file(metadata_checkpath))
+    {
+      return checkpath.string();
+    }
+  }
+  return std::string("");
+}
 std::string  deepracing_ros::FileUtils::findFile(const std::string& file, const std::vector<std::string> & search_dirs)
 {
   const fs::path filepath(file);
