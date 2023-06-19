@@ -169,7 +169,7 @@ class OraclePathServer(PathServerROS):
             
             self.get_logger().info("Loading file: %s" %(request.filename,))
 
-            raceline_structured_array : np.ndarray = deepracing.path_utils.loadPCD(request.filename)
+            numpytype, raceline_structured_array, height, width = deepracing.path_utils.loadPCD(request.filename)
 
             raceline_x : np.ndarray = np.squeeze(raceline_structured_array["x"])
             raceline_y : np.ndarray = np.squeeze(raceline_structured_array["y"])

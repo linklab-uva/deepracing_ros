@@ -81,7 +81,7 @@ class EKFMonitor(rclpy.node.Node):
     def odomFilteredCB(self, odom_filtered : nav_msgs.msg.Odometry):
         pass
     def publishState(self, motion_data : deepracing_msgs.msg.TimestampedPacketMotionData):
-        transform_stamped_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", "track", rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=5))
+        transform_stamped_msg : geometry_msgs.msg.TransformStamped = self.tf2_buffer.lookup_transform("map", "track", rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=10))
         translation_msg : geometry_msgs.msg.Vector3 = transform_stamped_msg.transform.translation
         rotation_msg : geometry_msgs.msg.Quaternion = transform_stamped_msg.transform.rotation
         mapToTrack : np.ndarray = np.eye(4, dtype=self.pose_cov.dtype)
