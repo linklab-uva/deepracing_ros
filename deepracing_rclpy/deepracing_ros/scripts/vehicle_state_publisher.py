@@ -46,7 +46,6 @@ class DriverStatePublisher(Node):
         self.motion_data_sub : Subscription = self.create_subscription(TimestampedPacketMotionData, "/motion_data", self.motionPacketCB, 1)
         self.session_data_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "/session_data", self.sessionDataCB, 1)
 
-        self.pose_array_pub : Publisher = self.create_publisher(PoseArray, "/driver_poses", 1)
         self.driver_state_pub : Publisher = self.create_publisher(DriverStates, "/driver_states", 1)
 
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = rclpy.duration.Duration(seconds=5))
@@ -56,8 +55,11 @@ class DriverStatePublisher(Node):
         self.centerline : np.ndarray = None
         self.track_length : float = None
 
-        tracked_index_param : rclpy.Parameter = self.declare_parameter("index", value=None)
-        self.tracked_index : int = tracked_index_param.get_parameter_value().integer_value
+        ego_index_param : rclpy.Parameter = self.declare_parameter("ego_index", value=-1)
+        self.ego_index : int = ego_index_param.get_parameter_value().integer_value
+
+        secondary_index_param : rclpy.Parameter = self.declare_parameter("secondary_index", value=-2)
+        self.secondary_index : int = secondary_index_param.get_parameter_value().integer_value
 
 
     def sessionDataCB(self, timestamped_session_data : TimestampedPacketSessionData):
@@ -96,37 +98,39 @@ class DriverStatePublisher(Node):
         if self.centerline is None:
             self.get_logger().error("Have not yet received any session data to infer track data")
             return
-        if self.tracked_index==-1:
-            ego_idx = timestamped_motion_data.udp_packet.header.player_car_index
-        elif self.tracked_index==-2:
-            ego_idx = timestamped_motion_data.udp_packet.header.secondary_player_car_index
-        else:
-            ego_idx = self.tracked_index
         
         if self.current_lap_data is None:
             self.get_logger().error("Have not yet received any lap data to infer vehicle indices")
             return
-        self.get_logger().debug("Processing motion packet")
-        udp_packet : PacketMotionData = timestamped_motion_data.udp_packet
-        motion_data_array : List[CarMotionData] = udp_packet.car_motion_data
         if not self.lap_data_semaphore.acquire(timeout = 2.0):
             self.get_logger().error("Unable to acquire lap_data_semaphore in lapDataCB")
             return
         lap_data_packet : PacketLapData = copy.deepcopy(self.current_lap_data)
         self.lap_data_semaphore.release()
+
+        self.get_logger().debug("Processing motion packet")
+        udp_packet : PacketMotionData = timestamped_motion_data.udp_packet
+        motion_data_array : List[CarMotionData] = udp_packet.car_motion_data
         lap_data_array : Sequence[LapData] = lap_data_packet.lap_data
-        if lap_data_array[ego_idx].result_status in {0,1}:
-            self.get_logger().error("Configured to track index %d, but this index has a result status of %d" % (ego_idx, lap_data_array[ego_idx].result_status))
-            return
-        valid_indices : np.ndarray = np.asarray( [i for i in range(len(lap_data_array)) if ( i!=ego_idx and (lap_data_array[i].result_status not in {0,1}) ) ] , dtype=np.int32)
-        driver_states : DriverStates = DriverStates(ego_vehicle_index = ego_idx)
+
+        if self.ego_index>=0 and self.ego_index<deepracing_ros.MAX_ARRAY_SIZE:
+            ego_idx = self.ego_index
+        else:
+            ego_idx = udp_packet.header.player_car_index
+
+        if self.secondary_index>=0 and self.secondary_index<deepracing_ros.MAX_ARRAY_SIZE:
+            secondary_idx = self.secondary_index
+        else:
+            secondary_idx = udp_packet.header.secondary_player_car_index
+        
+        valid_indices : np.ndarray = np.asarray( [i for i in range(len(lap_data_array)) if ( i not in {ego_idx, secondary_idx} and (lap_data_array[i].result_status not in {0,1}) ) ] , dtype=np.int32)
+        driver_states : DriverStates = DriverStates(ego_vehicle_index = ego_idx, secondary_vehicle_index = secondary_idx)
         driver_states.header.stamp = timestamped_motion_data.header.stamp
         driver_states.header.frame_id="map"
-        pose_array : PoseArray = PoseArray(header=driver_states.header)
         posetrack : np.ndarray = np.eye(4, dtype=self.centerline.dtype)
         linearveltrack : np.ndarray = np.zeros_like(posetrack[0:3,3])
         for i in range(valid_indices.shape[0]):
-            car_index = valid_indices[i]
+            car_index : int = valid_indices[i]
             rottrack = C.extractOrientation(udp_packet, car_index=car_index)
             posetrack[0:3,0:3] = rottrack.as_matrix()
             positiontrackmsg : Point = motion_data_array[car_index].world_position.point
@@ -135,46 +139,62 @@ class DriverStatePublisher(Node):
             positionmapmsg : Point = Point(x=posemap[0,3], y=posemap[1,3], z=posemap[2,3])
             quatmap : np.ndarray = Rot.from_matrix(posemap[0:3,0:3]).as_quat()
             pose = Pose(position = positionmapmsg, orientation=Quaternion(x=quatmap[0], y=quatmap[1], z=quatmap[2], w=quatmap[3]))        
-            pose_array.poses.append(pose)
             driver_states.other_agent_poses.append(pose)
             linearveltrack : np.ndarray = np.asarray([motion_data_array[car_index].world_velocity.vector.x, motion_data_array[car_index].world_velocity.vector.y, motion_data_array[car_index].world_velocity.vector.z], dtype=linearveltrack.dtype)
             linearvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], linearveltrack)
-            driver_states.other_agent_velocities.append(Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]))
             driver_states.vehicle_indices.append(car_index)
+            driver_states.other_agent_velocities.append(Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]))
             driver_states.other_agent_sectors.append(lap_data_array[car_index].sector)
             driver_states.other_agent_race_positions.append(lap_data_array[car_index].car_position)
-            driver_states.other_agent_race_positions.append(lap_data_array[car_index].current_lap_num)
-            ring_distance : float = lap_data_array[car_index].lap_distance
-            if ring_distance>self.track_length/2.0:
-                ring_distance-=self.track_length
-            driver_states.other_agent_track_progress.append(ring_distance)
+            driver_states.other_agent_lap_numbers.append(lap_data_array[car_index].current_lap_num)
+            driver_states.other_agent_track_progress.append(lap_data_array[car_index].lap_distance)
             driver_states.other_agent_total_distance.append(lap_data_array[car_index].total_distance)
-        #now grab data for ego vehicle
-        ego_rotation = C.extractOrientation(udp_packet)
-        posetrack[0:3,0:3] = ego_rotation.as_matrix()
-        positiontrackmsg : Point = motion_data_array[ego_idx].world_position.point
-        posetrack[0:3,3] = np.asarray([positiontrackmsg.x, positiontrackmsg.y, positiontrackmsg.z], dtype=posetrack.dtype)
-        posemap : np.ndarray = np.matmul(self.transform, posetrack)
-        positionmapmsg : Point = Point(x=posemap[0,3], y=posemap[1,3], z=posemap[2,3])
-        quatmap : np.ndarray = Rot.from_matrix(posemap[0:3,0:3]).as_quat()
-        driver_states.ego_pose = Pose(position = positionmapmsg, orientation=Quaternion(x=quatmap[0], y=quatmap[1], z=quatmap[2], w=quatmap[3]))
+
+        #now grab data for ego vehicle, if it's available
+        if ego_idx>=0 and ego_idx<deepracing_ros.MAX_ARRAY_SIZE:
+            ego_rotation = C.extractOrientation(udp_packet, car_index=ego_idx)
+            posetrack[0:3,0:3] = ego_rotation.as_matrix()
+            positiontrackmsg : Point = motion_data_array[ego_idx].world_position.point
+            posetrack[0:3,3] = np.asarray([positiontrackmsg.x, positiontrackmsg.y, positiontrackmsg.z], dtype=posetrack.dtype)
+            posemap : np.ndarray = np.matmul(self.transform, posetrack)
+            positionmapmsg : Point = Point(x=posemap[0,3], y=posemap[1,3], z=posemap[2,3])
+            quatmap : np.ndarray = Rot.from_matrix(posemap[0:3,0:3]).as_quat()
+            driver_states.ego_pose = Pose(position = positionmapmsg, orientation=Quaternion(x=quatmap[0], y=quatmap[1], z=quatmap[2], w=quatmap[3]))
         
-        linearveltrack : np.ndarray = np.asarray([motion_data_array[ego_idx].world_velocity.vector.x, motion_data_array[ego_idx].world_velocity.vector.y, motion_data_array[ego_idx].world_velocity.vector.z], dtype=linearveltrack.dtype)
-        angularveltrack : np.ndarray = np.nan*np.zeros_like(linearveltrack)
-        if ego_idx==timestamped_motion_data.udp_packet.header.player_car_index:
+            linearveltrack : np.ndarray = np.asarray([motion_data_array[ego_idx].world_velocity.vector.x, motion_data_array[ego_idx].world_velocity.vector.y, motion_data_array[ego_idx].world_velocity.vector.z], dtype=linearveltrack.dtype)
+            angularveltrack : np.ndarray = np.zeros_like(linearveltrack)
             angularveltrack[0]=udp_packet.angular_velocity.x
             angularveltrack[1]=udp_packet.angular_velocity.y
             angularveltrack[2]=udp_packet.angular_velocity.z
-        linearvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], linearveltrack)
-        angularvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], angularveltrack)
-        driver_states.ego_velocity.linear = Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]) 
-        driver_states.ego_velocity.angular = Vector3(x=angularvelmap[0], y=angularvelmap[1], z=angularvelmap[2]) 
-        driver_states.ego_track_progress = lap_data_array[ego_idx].lap_distance
-        driver_states.ego_current_sector = lap_data_array[ego_idx].sector
-        driver_states.ego_total_distance = lap_data_array[ego_idx].total_distance
-        driver_states.ego_race_position = lap_data_array[ego_idx].car_position
-        driver_states.ego_lap_number = lap_data_array[ego_idx].current_lap_num
-        self.pose_array_pub.publish(pose_array)
+            linearvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], linearveltrack)
+            angularvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], angularveltrack)
+            driver_states.ego_velocity.linear = Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]) 
+            driver_states.ego_velocity.angular = Vector3(x=angularvelmap[0], y=angularvelmap[1], z=angularvelmap[2]) 
+            driver_states.ego_track_progress = lap_data_array[ego_idx].lap_distance
+            driver_states.ego_current_sector = lap_data_array[ego_idx].sector
+            driver_states.ego_total_distance = lap_data_array[ego_idx].total_distance
+            driver_states.ego_race_position = lap_data_array[ego_idx].car_position
+            driver_states.ego_lap_number = lap_data_array[ego_idx].current_lap_num
+
+        #now grab data for secondary vehicle, if it's available
+        if secondary_idx>=0 and secondary_idx<deepracing_ros.MAX_ARRAY_SIZE:
+            ego_rotation = C.extractOrientation(udp_packet, car_index=secondary_idx)
+            posetrack[0:3,0:3] = ego_rotation.as_matrix()
+            positiontrackmsg : Point = motion_data_array[secondary_idx].world_position.point
+            posetrack[0:3,3] = np.asarray([positiontrackmsg.x, positiontrackmsg.y, positiontrackmsg.z], dtype=posetrack.dtype)
+            posemap : np.ndarray = np.matmul(self.transform, posetrack)
+            positionmapmsg : Point = Point(x=posemap[0,3], y=posemap[1,3], z=posemap[2,3])
+            quatmap : np.ndarray = Rot.from_matrix(posemap[0:3,0:3]).as_quat()
+            driver_states.ego_pose = Pose(position = positionmapmsg, orientation=Quaternion(x=quatmap[0], y=quatmap[1], z=quatmap[2], w=quatmap[3]))
+        
+            linearveltrack : np.ndarray = np.asarray([motion_data_array[secondary_idx].world_velocity.vector.x, motion_data_array[secondary_idx].world_velocity.vector.y, motion_data_array[secondary_idx].world_velocity.vector.z], dtype=linearveltrack.dtype)
+            linearvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], linearveltrack)
+            driver_states.secondary_vehicle_velocity.linear = Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]) 
+            driver_states.secondary_vehicle_track_progress = lap_data_array[secondary_idx].lap_distance
+            driver_states.secondary_vehicle_current_sector = lap_data_array[secondary_idx].sector
+            driver_states.secondary_vehicle_total_distance = lap_data_array[secondary_idx].total_distance
+            driver_states.secondary_vehicle_race_position = lap_data_array[secondary_idx].car_position
+            driver_states.secondary_vehicle_lap_number = lap_data_array[secondary_idx].current_lap_num
         self.driver_state_pub.publish(driver_states)
 
 

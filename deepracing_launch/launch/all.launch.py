@@ -16,7 +16,7 @@ def generate_launch_description():
     nodez = []
     argz = []
     
-    boundary_pub = DeclareLaunchArgument("boundary_pub", default_value="true")
+    boundary_pub = DeclareLaunchArgument("boundary_pub", default_value="false")
     argz.append(boundary_pub)
     use_sim_time = DeclareLaunchArgument("use_sim_time", default_value="false")
     argz.append(use_sim_time)
@@ -24,8 +24,10 @@ def generate_launch_description():
     argz.append(with_ekf)
     carname = DeclareLaunchArgument("carname", default_value="player1")
     argz.append(carname)
-    index = DeclareLaunchArgument("index", default_value="-1")
-    argz.append(index)
+    ego_index = DeclareLaunchArgument("ego_index", default_value="-1")
+    argz.append(ego_index)
+    secondary_index = DeclareLaunchArgument("secondary_index", default_value="-2")
+    argz.append(secondary_index)
     default_trackfile = DeclareLaunchArgument("default_trackfile", default_value="")
     argz.append(default_trackfile)
     rate = DeclareLaunchArgument("rate", default_value="10.0")
@@ -35,7 +37,7 @@ def generate_launch_description():
     ekf_with_angvel = DeclareLaunchArgument("ekf_with_angvel", default_value="false")
     argz.append(ekf_with_angvel)
     includez.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(PathJoinSubstitution([deepracing_launch_launch_dir, "utilities.launch.py"]))\
-                    ,launch_arguments=list({index.name: LaunchConfiguration(index.name), ekf_with_angvel.name: LaunchConfiguration(ekf_with_angvel.name), ekf_global.name: LaunchConfiguration(ekf_global.name), boundary_pub.name: LaunchConfiguration(boundary_pub.name), carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), with_ekf.name : LaunchConfiguration(with_ekf.name)}.items())))
+                    ,launch_arguments=list({ego_index.name: LaunchConfiguration(ego_index.name), secondary_index.name: LaunchConfiguration(secondary_index.name), ekf_with_angvel.name: LaunchConfiguration(ekf_with_angvel.name), ekf_global.name: LaunchConfiguration(ekf_global.name), boundary_pub.name: LaunchConfiguration(boundary_pub.name), carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), with_ekf.name : LaunchConfiguration(with_ekf.name)}.items())))
     includez.append(IncludeLaunchDescription(FrontendLaunchDescriptionSource(PathJoinSubstitution([deepracing_launch_launch_dir, "pure_pursuit_oracle.launch"]))\
                     ,launch_arguments=list({rate.name: LaunchConfiguration(rate.name), default_trackfile.name: LaunchConfiguration(default_trackfile.name), carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name)}.items())))
     includez.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(PathJoinSubstitution([deepracing_launch_launch_dir, "controllers.launch.py"]))\
