@@ -16,31 +16,13 @@ def generate_launch_description():
     with_ekf = DeclareLaunchArgument("with_ekf", default_value="true")
     ekf_global = DeclareLaunchArgument("ekf_global", default_value="true")
     carname = DeclareLaunchArgument("carname", default_value="player1")
-    ego_index = DeclareLaunchArgument("ego_index", default_value="-1")
-    secondary_index = DeclareLaunchArgument("secondary_index", default_value="-2")
+    index = DeclareLaunchArgument("index", default_value="-1")
     ekf_with_angvel = DeclareLaunchArgument("ekf_with_angvel", default_value="false")
     boundary_pub = DeclareLaunchArgument("boundary_pub", default_value="false")
     use_sim_time = DeclareLaunchArgument("use_sim_time", default_value="false")
     
-    entries = [boundary_pub, carname, ego_index, secondary_index, use_sim_time, with_ekf, ekf_global, ekf_with_angvel]
+    entries = [boundary_pub, carname, index, use_sim_time, with_ekf, ekf_global, ekf_with_angvel]
 
-    entries.append(launch_ros.actions.Node(package='deepracing_rclpy', name='f1_boundary_publisher', executable='boundary_publisher', output='screen',\
-         parameters=[{"track_search_dirs": os.getenv("F1_TRACK_DIRS","").split(os.pathsep), use_sim_time.name : LaunchConfiguration(use_sim_time.name)}],\
-           condition=IfCondition(LaunchConfiguration(boundary_pub.name)), namespace=LaunchConfiguration(carname.name)))  
-    
-    entries.append(launch_ros.actions.Node(package='deepracing_rclpy', 
-                                           name='vehicle_state_publisher', 
-                                           executable='vehicle_state_publisher', 
-                                           output='screen', 
-                                           parameters=[{
-                                              use_sim_time.name : LaunchConfiguration(use_sim_time.name),
-                                              ego_index.name : LaunchConfiguration(ego_index.name),
-                                              secondary_index.name : LaunchConfiguration(secondary_index.name)
-                                              }], 
-                                           namespace=LaunchConfiguration(carname.name),
-                                           condition=IfCondition(LaunchConfiguration(boundary_pub.name))
-                                           )
-                                           )
 
     
     entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='measurement_publisher', executable='measurement_publisher_exe', output='screen', 
@@ -48,7 +30,7 @@ def generate_launch_description():
                                                        {carname.name: LaunchConfiguration(carname.name), 
                                                         use_sim_time.name : LaunchConfiguration(use_sim_time.name), 
                                                         with_ekf.name : LaunchConfiguration(with_ekf.name), 
-                                                        "index" : LaunchConfiguration(ego_index.name)
+                                                        index.name : LaunchConfiguration(index.name)
                                                         }], 
                                                         namespace=LaunchConfiguration(carname.name)))
     
@@ -58,7 +40,7 @@ def generate_launch_description():
                         ("global", LaunchConfiguration(ekf_global.name)), 
                         (carname.name, LaunchConfiguration(carname.name)), 
                         (use_sim_time.name, LaunchConfiguration(use_sim_time.name)), 
-                        ("index", LaunchConfiguration(ego_index.name))
+                        (index.name, LaunchConfiguration(index.name))
                         ], 
                         condition=IfCondition(LaunchConfiguration(with_ekf.name))))
     
