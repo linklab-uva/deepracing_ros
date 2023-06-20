@@ -37,8 +37,13 @@ class BoundaryPubNode(rclpy.node.Node):
         search_dirs_descriptor : rcl_interfaces.msg.ParameterDescriptor = rcl_interfaces.msg.ParameterDescriptor()
         search_dirs_descriptor.name="track_search_dirs"
         search_dirs_descriptor.type=rcl_interfaces.msg.ParameterType.PARAMETER_STRING_ARRAY
-        search_dirs_param : rclpy.Parameter = self.declare_parameter(search_dirs_descriptor.name, value=[], descriptor=search_dirs_descriptor)
-        self.search_dirs = search_dirs_param.get_parameter_value().string_array_value
+        
+        search_dirs_param : rclpy.Parameter = self.declare_parameter(search_dirs_descriptor.name, value=None, descriptor=search_dirs_descriptor)
+        search_dirs_val = search_dirs_param.get_parameter_value().string_array_value
+        if search_dirs_val is None:
+            self.search_dirs = []
+        else:
+            self.search_dirs = search_dirs_val
         try:
             self.search_dirs.append(os.path.join(get_package_share_directory("deepracing_launch"), "maps"))
             #i'll add this package eventually
