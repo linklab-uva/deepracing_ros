@@ -56,6 +56,9 @@ class DriverStatePublisher(Node):
         self.centerline : np.ndarray = None
         self.track_length : float = None
 
+        tracked_index_param : rclpy.Parameter = self.declare_parameter("index", value=None)
+        self.tracked_index : int = tracked_index_param.get_parameter_value().integer_value
+
 
     def sessionDataCB(self, timestamped_session_data : TimestampedPacketSessionData):
         if self.centerline is None:
@@ -75,7 +78,7 @@ class DriverStatePublisher(Node):
             with open(centerline_file, "r") as f:
                 d : dict = json.load(f)
             centerline : np.ndarray = np.row_stack([d["xin"], d["yin"], d["zin"], np.ones_like(d["zin"])]).astype(np.float64)
-            transform_stamped_msg : TransformStamped = self.tf2_buffer.lookup_transform("map", "track", rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=3))
+            transform_stamped_msg : TransformStamped = self.tf2_buffer.lookup_transform("map", "track", rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=20))
             transform_msg : Transform = transform_stamped_msg.transform
             self.track_length : float = float(session_data.track_length)
             self.transform = np.eye(4, dtype=centerline.dtype)
@@ -84,7 +87,6 @@ class DriverStatePublisher(Node):
             self.centerline : np.ndarray = np.matmul(self.transform, centerline)[0:3].T.copy()
             self.destroy_subscription(self.session_data_sub)
     def lapDataCB(self, timestamped_lap_data : TimestampedPacketLapData):
-        ego_idx = timestamped_lap_data.udp_packet.header.player_car_index
         if not self.lap_data_semaphore.acquire(timeout = 2.0):
             self.get_logger().error("Unable to acquire lap_data_semaphore in lapDataCB")
             return
@@ -94,7 +96,13 @@ class DriverStatePublisher(Node):
         if self.centerline is None:
             self.get_logger().error("Have not yet received any session data to infer track data")
             return
-        ego_idx = timestamped_motion_data.udp_packet.header.player_car_index
+        if self.tracked_index==-1:
+            ego_idx = timestamped_motion_data.udp_packet.header.player_car_index
+        elif self.tracked_index==-2:
+            ego_idx = timestamped_motion_data.udp_packet.header.secondary_player_car_index
+        else:
+            ego_idx = self.tracked_index
+        
         if self.current_lap_data is None:
             self.get_logger().error("Have not yet received any lap data to infer vehicle indices")
             return
@@ -107,7 +115,10 @@ class DriverStatePublisher(Node):
         lap_data_packet : PacketLapData = copy.deepcopy(self.current_lap_data)
         self.lap_data_semaphore.release()
         lap_data_array : Sequence[LapData] = lap_data_packet.lap_data
-        valid_indices : np.ndarray = np.asarray( [i for i in range(len(lap_data_array)) if ( (lap_data_array[i].result_status not in {0,1}) ) ] , dtype=np.int32)
+        if lap_data_array[ego_idx].result_status in {0,1}:
+            self.get_logger().error("Configured to track index %d, but this index has a result status of %d" % (ego_idx, lap_data_array[ego_idx].result_status))
+            return
+        valid_indices : np.ndarray = np.asarray( [i for i in range(len(lap_data_array)) if ( i!=ego_idx and (lap_data_array[i].result_status not in {0,1}) ) ] , dtype=np.int32)
         driver_states : DriverStates = DriverStates(ego_vehicle_index = ego_idx)
         driver_states.header.stamp = timestamped_motion_data.header.stamp
         driver_states.header.frame_id="map"
@@ -149,18 +160,19 @@ class DriverStatePublisher(Node):
         driver_states.ego_pose = Pose(position = positionmapmsg, orientation=Quaternion(x=quatmap[0], y=quatmap[1], z=quatmap[2], w=quatmap[3]))
         
         linearveltrack : np.ndarray = np.asarray([motion_data_array[ego_idx].world_velocity.vector.x, motion_data_array[ego_idx].world_velocity.vector.y, motion_data_array[ego_idx].world_velocity.vector.z], dtype=linearveltrack.dtype)
-        angularveltrack : np.ndarray = np.asarray([udp_packet.angular_velocity.x, udp_packet.angular_velocity.y, udp_packet.angular_velocity.z], dtype=linearveltrack.dtype)
+        angularveltrack : np.ndarray = np.nan*np.zeros_like(linearveltrack)
+        if ego_idx==timestamped_motion_data.udp_packet.header.player_car_index:
+            angularveltrack[0]=udp_packet.angular_velocity.x
+            angularveltrack[1]=udp_packet.angular_velocity.y
+            angularveltrack[2]=udp_packet.angular_velocity.z
         linearvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], linearveltrack)
         angularvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], angularveltrack)
         driver_states.ego_velocity.linear = Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]) 
         driver_states.ego_velocity.angular = Vector3(x=angularvelmap[0], y=angularvelmap[1], z=angularvelmap[2]) 
-        ring_distance : float = lap_data_array[ego_idx].lap_distance
-        if ring_distance>self.track_length/2.0:
-            ring_distance-=self.track_length
-        driver_states.ego_track_progress=ring_distance
-        driver_states.ego_current_sector= lap_data_array[ego_idx].sector
-        driver_states.ego_total_distance= lap_data_array[ego_idx].total_distance
-        driver_states.ego_race_position= lap_data_array[ego_idx].car_position
+        driver_states.ego_track_progress = lap_data_array[ego_idx].lap_distance
+        driver_states.ego_current_sector = lap_data_array[ego_idx].sector
+        driver_states.ego_total_distance = lap_data_array[ego_idx].total_distance
+        driver_states.ego_race_position = lap_data_array[ego_idx].car_position
         driver_states.ego_lap_number = lap_data_array[ego_idx].current_lap_num
         self.pose_array_pub.publish(pose_array)
         self.driver_state_pub.publish(driver_states)

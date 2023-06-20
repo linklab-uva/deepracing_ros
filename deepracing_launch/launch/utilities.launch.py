@@ -30,7 +30,7 @@ def generate_launch_description():
                                            name='vehicle_state_publisher', 
                                            executable='vehicle_state_publisher', 
                                            output='screen', 
-                                           parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name)}], 
+                                           parameters=[{index.name : LaunchConfiguration(index.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name)}], 
                                            namespace=LaunchConfiguration(carname.name),
                                            condition=IfCondition(LaunchConfiguration(boundary_pub.name))
                                            )
