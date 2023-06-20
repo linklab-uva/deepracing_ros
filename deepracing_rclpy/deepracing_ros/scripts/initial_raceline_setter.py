@@ -74,8 +74,9 @@ def main(args=None):
     search_dirs.append(os.path.join(mapdir, "offset_lines"))
     trackfile  = deepracing.searchForFile(default_trackfile, search_dirs)
     if trackfile is None:
-        node.get_logger().error("Could not find %s in any of %s" % (trackfile, str(search_dirs)))
-
+        node.get_logger().error("Could not find %s in any of %s" % (default_trackfile, str(search_dirs)))
+        exit(-1)
+    node.get_logger().info("Setting raceline to %s" % (trackfile,))
     serviceclient : rclpy.client.Client = node.create_client(deepracing_msgs.srv.SetRaceline, "set_raceline")
     serviceclient.wait_for_service()
     req : deepracing_msgs.srv.SetRaceline.Request = deepracing_msgs.srv.SetRaceline.Request()
