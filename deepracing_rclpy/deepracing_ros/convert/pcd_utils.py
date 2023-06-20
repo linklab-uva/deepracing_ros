@@ -10,7 +10,7 @@ _DATATYPES_INVERSE : dict = dict()
 for k in sensor_msgs_py.point_cloud2._DATATYPES.keys():
     _DATATYPES_INVERSE[sensor_msgs_py.point_cloud2._DATATYPES[k]] = k
 
-def structuredArrayAsPointcloud2(numpytype : np.dtype, structured_array : np.ndarray, shape : tuple = None, header = Header()) -> PointCloud2:
+def structuredArrayAsPointcloud2(structured_array : np.ndarray, shape : tuple = None, header = Header()) -> PointCloud2:
     rtn : PointCloud2 = PointCloud2(is_dense=True, is_bigendian=False, header=header)
     if shape is not None:
         rtn.height = shape[0]
@@ -18,6 +18,7 @@ def structuredArrayAsPointcloud2(numpytype : np.dtype, structured_array : np.nda
     else:
         rtn.height = 1
         rtn.width = structured_array.shape[0]
+    numpytype : np.dtype = structured_array.dtype
     rtn.point_step = numpytype.itemsize
     rtn.row_step = rtn.point_step*rtn.width
     for name in numpytype.names:

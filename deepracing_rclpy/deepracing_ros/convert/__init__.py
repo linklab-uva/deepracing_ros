@@ -1,2 +1,2 @@
 from .msg_utils import extractPose, extractVelocity, extractAngularVelocity, extractAcceleration, extractPosition, extractOrientation, arrayToPointCloud2, toBezierCurveMsg, fromBezierCurveMsg, transformMsgToTorch, poseMsgToTorch, pointMsgToTorch, vectorMsgToTorch, torchToPointMsg, torchToVector3Msg, torchToPoseMsg
-from .pcd_utils import pcdAsPointCloud2
+from .pcd_utils import pcdAsPointCloud2, structuredArrayAsPointcloud2
