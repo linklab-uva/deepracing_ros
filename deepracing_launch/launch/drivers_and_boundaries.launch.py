@@ -21,7 +21,7 @@ def generate_launch_description():
     nodez = []
     
     nodez.append(launch_ros.actions.Node(package='deepracing_rclpy', name='f1_boundary_publisher', executable='boundary_publisher', output='screen',\
-         parameters=[{ use_sim_time.name : LaunchConfiguration(use_sim_time.name), "track_search_dirs": os.getenv("F1_TRACK_DIRS","").split(os.pathsep)}]))  
+         parameters=[{ use_sim_time.name : LaunchConfiguration(use_sim_time.name) }]))  
     
     nodez.append(launch_ros.actions.Node(package='deepracing_rclpy', 
                                            name='vehicle_state_publisher', 
