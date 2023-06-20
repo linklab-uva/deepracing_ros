@@ -151,7 +151,7 @@ class DriverStatePublisher(Node):
             driver_states.other_agent_total_distance.append(lap_data_array[car_index].total_distance)
 
         #now grab data for ego vehicle, if it's available
-        if ego_idx>=0 and ego_idx<deepracing_ros.MAX_ARRAY_SIZE:
+        if ego_idx>=0 and ego_idx<deepracing_ros.MAX_ARRAY_SIZE and (lap_data_array[ego_idx].result_status not in {0,1}):
             ego_rotation = C.extractOrientation(udp_packet, car_index=ego_idx)
             posetrack[0:3,0:3] = ego_rotation.as_matrix()
             positiontrackmsg : Point = motion_data_array[ego_idx].world_position.point
@@ -175,9 +175,11 @@ class DriverStatePublisher(Node):
             driver_states.ego_total_distance = lap_data_array[ego_idx].total_distance
             driver_states.ego_race_position = lap_data_array[ego_idx].car_position
             driver_states.ego_lap_number = lap_data_array[ego_idx].current_lap_num
+        else:
+            driver_states.ego_vehicle_index = 255
 
-        #now grab data for secondary vehicle, if it's available
-        if secondary_idx>=0 and secondary_idx<deepracing_ros.MAX_ARRAY_SIZE:
+        #now grab data for secondary vehicle, if it's available and valid
+        if secondary_idx>=0 and secondary_idx<deepracing_ros.MAX_ARRAY_SIZE and (lap_data_array[secondary_idx].result_status not in {0,1}):
             ego_rotation = C.extractOrientation(udp_packet, car_index=secondary_idx)
             posetrack[0:3,0:3] = ego_rotation.as_matrix()
             positiontrackmsg : Point = motion_data_array[secondary_idx].world_position.point
@@ -195,6 +197,9 @@ class DriverStatePublisher(Node):
             driver_states.secondary_vehicle_total_distance = lap_data_array[secondary_idx].total_distance
             driver_states.secondary_vehicle_race_position = lap_data_array[secondary_idx].car_position
             driver_states.secondary_vehicle_lap_number = lap_data_array[secondary_idx].current_lap_num
+        else:
+            driver_states.secondary_vehicle_index = 255
+
         self.driver_state_pub.publish(driver_states)
 
 
