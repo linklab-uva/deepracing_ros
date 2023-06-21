@@ -62,25 +62,29 @@ def main(args=None):
     asynspinner : AsyncSpinner = AsyncSpinner(exec)
     asynspinner.add_node(node)
     asynspinner.spin()
-    rate : rclpy.timer.Rate = node.create_rate(2.0, clock=node.get_clock())
+    rate : rclpy.timer.Rate = node.create_rate(1.0, clock=node.get_clock())
     while node.current_session_data is None:
         node.get_logger().info("Waiting for session data")
         rate.sleep()
     
     trackname = deepracing.trackNames[node.current_session_data.udp_packet.track_id]
     node.get_logger().info("Got track name: %s" % (trackname,))
-    mapdir : str = os.path.join(ament_index_python.get_package_share_directory("deepracing_launch"), "maps", trackname)
+
+    mapdir : str = os.path.join(ament_index_python.get_package_share_directory("deepracing_launch"), "maps")
     search_dirs.append(mapdir)
-    search_dirs.append(os.path.join(mapdir, "offset_lines"))
-    trackfile  = deepracing.searchForFile(default_trackfile, search_dirs)
-    if trackfile is None:
-        node.get_logger().error("Could not find %s in any of %s" % (default_trackfile, str(search_dirs)))
+
+    trackmap : deepracing.TrackMap  = deepracing.searchForTrackmap(trackname, search_dirs, align=True)
+    if trackmap is None:
+        node.get_logger().error("Could not find trackmap for %s in any of %s" % (trackname, str(search_dirs)))
         exit(-1)
-    node.get_logger().info("Setting raceline to %s" % (trackfile,))
+
+    linedict : dict = trackmap.linemap[default_trackfile]
+
+    node.get_logger().info("Setting raceline to %s" % (linedict["filepath"],))
     serviceclient : rclpy.client.Client = node.create_client(deepracing_msgs.srv.SetRaceline, "set_raceline")
     serviceclient.wait_for_service()
     req : deepracing_msgs.srv.SetRaceline.Request = deepracing_msgs.srv.SetRaceline.Request()
-    req.filename=trackfile
+    req.filename=linedict["filepath"]
     req.frame_id="track"
     success = False
     while not success:
