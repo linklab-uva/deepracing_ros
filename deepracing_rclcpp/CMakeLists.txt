@@ -9,14 +9,10 @@ endif()
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
-include(CheckCXXSourceCompiles)
-check_cxx_source_compiles("#include <filesystem>
-                            int main(int argc, char** argv) { std::filesystem::path p; return 0; }" HAS_STDCXXFS)
+option(WITH_STDCXXFS "Use the filesystem library from the C++ standard library" ON)
 
-# Default to C++14 if the filesystem library isn't available
 set(boost_components_ date_time random thread)
-if(NOT HAS_STDCXXFS)
-  set(CMAKE_CXX_STANDARD 14)
+if(NOT WITH_STDCXXFS)
   list(APPEND boost_components_ filesystem)
 endif()
 
@@ -76,7 +72,7 @@ target_include_directories(utils
     $<INSTALL_INTERFACE:include>
 )
 target_compile_definitions(utils PRIVATE "DEEPRACING_RCLCPP_UTILS_BUILDING_LIBRARY")
-if(NOT HAS_STDCXXFS)
+if(NOT WITH_STDCXXFS)
   target_compile_definitions(utils PUBLIC "DEEPRACING_RCLCPP_USE_BOOST_FILESYSTEM")
   target_link_libraries(utils PUBLIC Boost::filesystem)
   ament_export_dependencies(Boost)
