@@ -8,13 +8,14 @@
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
-#include <control_toolbox/pid_ros.hpp>
 #include <std_msgs/msg/float64.hpp>
 #include <ackermann_msgs/msg/ackermann_drive_stamped.hpp>
 #include <message_filters/time_synchronizer.h>
 #include <message_filters/subscriber.h>
 #include <Eigen/Geometry>
 #include <tf2_eigen/tf2_eigen.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
+#include <control_toolbox/pid_ros.hpp>
 
 class VelocityControlNode : public rclcpp::Node 
 {
@@ -31,12 +32,21 @@ class VelocityControlNode : public rclcpp::Node
           get_node_topics_interface())
     {
       setpoint_listener = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>("ctrl_cmd", rclcpp::QoS{1}, std::bind(&VelocityControlNode::setpointCallback, this, std::placeholders::_1));
-      m_with_acceleration_ = declare_parameter<bool>("with_acceleration", false);
+      
+      rcl_interfaces::msg::ParameterDescriptor with_acceleration_desc;
+      with_acceleration_desc.description="Set to true to use current acceleration as estimate of error rate";
+      with_acceleration_desc.name = "with_acceleration";
+      with_acceleration_desc.read_only = true;
+      with_acceleration_desc.type =  rcl_interfaces::msg::ParameterType::PARAMETER_BOOL;
+      with_acceleration_desc.dynamic_typing = false;
+
+      m_with_acceleration_ = declare_parameter<bool>(with_acceleration_desc.name, false, with_acceleration_desc);
+
       m_setpoint_scale_factor_ = declare_parameter<double>("setpoint_scale_factor", 1.0);
       if (m_with_acceleration_)
       {
-        odom_synch_listener.subscribe(this, "odom_in", setpoint_listener->get_actual_qos().get_rmw_qos_profile() );
-        accel_synch_listener.subscribe(this, "accel_in", setpoint_listener->get_actual_qos().get_rmw_qos_profile() );
+        odom_synch_listener.subscribe(this, "odom_in", setpoint_listener->get_actual_qos().get_rmw_qos_profile());
+        accel_synch_listener.subscribe(this, "accel_in", setpoint_listener->get_actual_qos().get_rmw_qos_profile());
         odom_accel_synchronizer.reset(new message_filters::TimeSynchronizer<nav_msgs::msg::Odometry, geometry_msgs::msg::AccelWithCovarianceStamped>(odom_synch_listener, accel_synch_listener, 4));
         odom_accel_synchronizer->registerCallback(std::bind(&VelocityControlNode::synchCallback, this, std::placeholders::_1, std::placeholders::_2));
       }
@@ -45,8 +55,55 @@ class VelocityControlNode : public rclcpp::Node
         odom_listener = create_subscription<nav_msgs::msg::Odometry>("odom_in", rclcpp::QoS{1}, std::bind(&VelocityControlNode::odomCallback, this, std::placeholders::_1));
       }
       m_pid_controller_.initPid(1.0, 0.0, 0.0, 0.5, -0.5, true);
+      remove_on_set_parameters_callback(m_pid_controller_.getParametersCallbackHandle().get());
+      parameter_cb_handle = add_on_set_parameters_callback(std::bind(&VelocityControlNode::setParametersCB, this, std::placeholders::_1));
+      
     }
-
+    rcl_interfaces::msg::SetParametersResult setParametersCB(const std::vector<rclcpp::Parameter>& parameters)
+    {
+      rcl_interfaces::msg::SetParametersResult rtn;
+      bool changed_pid = false;
+      control_toolbox::Pid::Gains gains = m_pid_controller_.getGains();
+      for (const rclcpp::Parameter& parameter : parameters) {
+        const std::string param_name = parameter.get_name();
+        try {
+          if (param_name == "p") {
+            gains.p_gain_ = parameter.get_value<double>();
+            changed_pid = true;
+          } else if (param_name =="i") {
+            gains.i_gain_ = parameter.get_value<double>();
+            changed_pid = true;
+          } else if (param_name == "d") {
+            gains.d_gain_ = parameter.get_value<double>();
+            changed_pid = true;
+          } else if (param_name == "i_clamp_max") {
+            gains.i_max_ = parameter.get_value<double>();
+            changed_pid = true;
+          } else if (param_name == "i_clamp_min") {
+            gains.i_min_ = parameter.get_value<double>();
+            changed_pid = true;
+          } else if (param_name == "antiwindup") {
+            gains.antiwindup_ = parameter.get_value<bool>();
+            changed_pid = true;
+          } else if (param_name == "setpoint_scale_factor") {
+            m_setpoint_scale_factor_ = parameter.get_value<double>();
+          }
+        } catch (const rclcpp::exceptions::InvalidParameterTypeException & e) {
+          std::stringstream error_msg;
+          error_msg << "Can't set parameter " << param_name << " to type " << parameter.get_type_name() << ". Use the right type please." << std::endl;
+          error_msg << "Underlying exception message: " << std::string(e.what());
+          rtn.set__successful(false).set__reason(error_msg.str());
+          RCLCPP_ERROR(get_logger(), "%s", rtn.reason.c_str());
+          return rtn;
+        }
+      }
+      if(changed_pid)
+      {
+        m_pid_controller_.setGains(gains);
+      }
+      rtn.set__successful(true).set__reason("You");
+      return rtn;
+    }
     inline double getError()
     {
       return m_setpoint_scale_factor_*m_setpoint_.drive.speed - m_current_speed_;
@@ -90,6 +147,8 @@ class VelocityControlNode : public rclcpp::Node
 
   private:
     bool m_with_acceleration_;
+
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_cb_handle;
 
     rclcpp::Subscription<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr setpoint_listener;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_listener;
