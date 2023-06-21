@@ -7,6 +7,7 @@
 #include <deepracing_msgs/msg/timestamped_packet_session_data.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include "tf2_ros/static_transform_broadcaster.h"
+#include "tf2_ros/transform_listener.h"
 #include <tf2/LinearMath/Quaternion.h>
 #include <boost/math/constants/constants.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -43,11 +44,12 @@ class MeasurementPublisher
     //  rclcpp::NodeOptions node_options(options);
     //  node_options.rosout_qos(rclcpp::SystemDefaultsQoS().keep_last(100).durability_volatile());
      node = rclcpp::Node::make_shared("f1_tf_updater",options);
+     tfbuffer.reset(new tf2_ros::Buffer(node->get_clock(), tf2::durationFromSec(20.0), node));
+     tflistener.reset(new tf2_ros::TransformListener(*tfbuffer));
      m_with_ekf_ = node->declare_parameter<bool>("with_ekf", false);
      carname = node->declare_parameter<std::string>("carname", "");
      statictfbroadcaster.reset(new tf2_ros::StaticTransformBroadcaster(node));
-     mapToTrack.header.frame_id = "map";
-     mapToTrack.child_frame_id = deepracing_ros::F1MsgUtils2020::world_coordinate_name;
+    
      std::filesystem::path covariance_file_path = std::filesystem::path(ament_index_cpp::get_package_share_directory("deepracing_launch")) / std::filesystem::path("data") / std::filesystem::path("covariances.json");
 
      Json::Value root;
@@ -105,11 +107,6 @@ class MeasurementPublisher
     
 
 
-
-     tf2::Quaternion quat;
-     quat.setRPY( boost::math::constants::half_pi<double>(), 0.0, 0.0 );
-     tf2::Transform t(quat, tf2::Vector3(0.0,0.0,0.0));
-     mapToTrack.transform = tf2::toMsg(t);
      node->declare_parameter< std::vector<double> >("centroid_to_base_translation", std::vector<double>{-0.925, 0.0, 0.0});
      
      m_extra_position_noise = node->declare_parameter< double >("extra_position_noise", 0.0);
@@ -133,7 +130,6 @@ class MeasurementPublisher
      carToBaseLink.transform.rotation.w = 1.0;
     
      carToBaseLinkEigen = tf2::transformToEigen(carToBaseLink);
-     mapToTrackEigen = tf2::transformToEigen(mapToTrack);
      baseLinkToCarEigen = carToBaseLinkEigen.inverse();
 
      rcl_interfaces::msg::ParameterDescriptor index_desc;
@@ -158,6 +154,8 @@ class MeasurementPublisher
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
 
     std::shared_ptr<rclcpp::Node> node;
+    std::shared_ptr<tf2_ros::Buffer> tfbuffer;
+    std::shared_ptr<tf2_ros::TransformListener> tflistener;
     std::shared_ptr<tf2_ros::TransformBroadcaster> tfbroadcaster;
     std::shared_ptr<tf2_ros::StaticTransformBroadcaster> statictfbroadcaster;
     geometry_msgs::msg::TransformStamped mapToTrack, carToBaseLink;    
@@ -165,7 +163,6 @@ class MeasurementPublisher
     inline void publishStatic()
     {
       this->statictfbroadcaster->sendTransform(carToBaseLink);
-      this->statictfbroadcaster->sendTransform(mapToTrack);
     }
     rclcpp::node_interfaces::NodeBaseInterface::SharedPtr
     get_node_base_interface() const
@@ -178,6 +175,7 @@ class MeasurementPublisher
     nav_msgs::msg::Odometry odom_msg_;
     sensor_msgs::msg::Imu imu_msg_;
     geometry_msgs::msg::AccelWithCovarianceStamped accel_msg_;
+    deepracing_msgs::msg::TimestampedPacketSessionData::UniquePtr current_session_msg_;
     
     double m_extra_position_noise;
     double m_extra_rot_noise;
@@ -188,73 +186,18 @@ class MeasurementPublisher
     std::string carname;
     void sessionCallback(const deepracing_msgs::msg::TimestampedPacketSessionData::UniquePtr session_msg)
     {
-      if((session_msg->udp_packet.track_id>=0) && (session_msg->udp_packet.track_id!=current_track_id))
-      {
-        char* envrtn = std::getenv("F1_TRACK_DIRS");
-        std::vector<std::string> search_dirs;
-        if (envrtn)
-        {
-          search_dirs = deepracing_ros::FileUtils::split(std::string(envrtn));
-        }
-        try
-        {
-          std::filesystem::path f1_datalogger_path = std::filesystem::path(ament_index_cpp::get_package_share_directory("f1_datalogger"));
-          search_dirs.push_back((f1_datalogger_path / std::filesystem::path("f1_tracks")).string());
-          search_dirs.push_back((f1_datalogger_path / std::filesystem::path("f1_tracks") / std::filesystem::path("minimumcurvature")).string());
-        }
-        catch(const std::exception& e)
-        {
-          
-        }
-        std::stringstream ss;
-        for (const std::string& dir : search_dirs)
-        {
-          ss << dir <<", ";
-        }
-        RCLCPP_INFO(node->get_logger(), "Looking for starting pose file in: %s" , ss.str().c_str());
-        
-        std::array<std::string, 25> tracknames = deepracing_ros::F1MsgUtils2020::track_names();
-        std::string trackname = tracknames[session_msg->udp_packet.track_id];
-        std::string starting_pose_filepath = deepracing_ros::FileUtils::findFile(trackname+"_startingpose.json", search_dirs);
-        RCLCPP_INFO(node->get_logger(), "Got starting pose file: %s", starting_pose_filepath.c_str());
-        if (starting_pose_filepath.empty())
-        {
-          RCLCPP_ERROR(node->get_logger(), "Could not find starting pose file for track: %s", trackname.c_str());
-          return;
-        }
-        Json::Value root;
-        Json::CharReaderBuilder builder;
-        builder["collectComments"] = true;
-        JSONCPP_STRING errs;
-        std::ifstream ifs;
-        ifs.open(starting_pose_filepath);
-        bool success = parseFromStream(builder, ifs, &root, &errs);
-        ifs.close();
-        if(!success)
-        {
-          RCLCPP_ERROR(node->get_logger(), "Unable to parse json file at %s. Error message: %s", starting_pose_filepath.c_str(), errs.c_str());
-          return;
-        }
-        Json::Value position_dict = root["position"];
-        Json::Value quaternion_dict = root["quaternion"];
-
-        tf2::Vector3 eigen_position(position_dict["x"].asDouble(), position_dict["y"].asDouble(), position_dict["z"].asDouble());
-        tf2::Quaternion eigen_quaternion(quaternion_dict["x"].asDouble(), quaternion_dict["y"].asDouble(), quaternion_dict["z"].asDouble(), quaternion_dict["w"].asDouble());
-        
-        mapToTrack.transform = tf2::toMsg(tf2::Transform(eigen_quaternion, eigen_position).inverse());
-        mapToTrackEigen = tf2::transformToEigen(mapToTrack);
-
-        current_track_id = session_msg->udp_packet.track_id;
-      }
+      mapToTrack = tfbuffer->lookupTransform("map", deepracing_ros::F1MsgUtils2020::world_coordinate_name, node->get_clock()->now(), rclcpp::Duration::from_seconds(5.0));
+      mapToTrackEigen = tf2::transformToEigen(mapToTrack);
       carToBaseLink.header.set__stamp(session_msg->header.stamp);
       mapToTrack.header.set__stamp(session_msg->header.stamp);
       publishStatic();
+      current_session_msg_.reset(new deepracing_msgs::msg::TimestampedPacketSessionData(*session_msg));
     }  
     void packetCallback(const deepracing_msgs::msg::TimestampedPacketMotionData::UniquePtr motion_data_packet)
     {
      // std::cout << "Got some data" << std::endl;
       // RCLCPP_INFO(node->get_logger(), "Got some data");
-      if(current_track_id<0)
+      if(!current_session_msg_)
       {
         RCLCPP_ERROR(node->get_logger(), "%s", "Haven't received track information from the session data stream yet");
         return;

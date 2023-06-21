@@ -60,6 +60,8 @@ class BoundaryPubNode(rclpy.node.Node):
         self.session_data_sub : rclpy.subscription.Subscription = self.create_subscription(deepracing_msgs.msg.TimestampedPacketSessionData, "session_data", self.sessionDataCB, 1)
         self.trackmap : deepracing.TrackMap = None
 
+        self.tf2_broadcaster : tf2_ros.StaticTransformBroadcaster = tf2_ros.StaticTransformBroadcaster(self)
+
         self.semaphore : threading.Semaphore = threading.Semaphore()
 
 
@@ -91,6 +93,8 @@ class BoundaryPubNode(rclpy.node.Node):
             self.get_logger().error("Could not acquire semaphore")
             return
         try:
+            map_to_track_rotmat : np.ndarray = self.trackmap.starting_line_rotation.inv().as_matrix().astype(self.trackmap.starting_line_position.dtype)
+            map_to_track_position : np.ndarray = np.matmul(map_to_track_rotmat, -self.trackmap.starting_line_position)
             innerbound_dict : dict = self.trackmap.linemap["inner_boundary"]
             innerbound_array : np.ndarray = innerbound_dict["line"].copy()
             outerbound_dict : dict = self.trackmap.linemap["outer_boundary"]
@@ -109,6 +113,19 @@ class BoundaryPubNode(rclpy.node.Node):
         ib_msg.header = header
         ob_msg.header = header
         rl_msg.header = header
+        map_to_track_quat : np.ndarray = Rotation.from_matrix(map_to_track_rotmat).as_quat()
+
+        transform_msg : geometry_msgs.msg.TransformStamped = geometry_msgs.msg.TransformStamped()
+        transform_msg.header = header
+        transform_msg.child_frame_id = deepracing_ros.world_coordinate_name
+        transform_msg.transform.translation.x = map_to_track_position[0]
+        transform_msg.transform.translation.y = map_to_track_position[1]
+        transform_msg.transform.translation.z = map_to_track_position[2]
+        transform_msg.transform.rotation.x = map_to_track_quat[0]
+        transform_msg.transform.rotation.y = map_to_track_quat[1]
+        transform_msg.transform.rotation.z = map_to_track_quat[2]
+        transform_msg.transform.rotation.w = map_to_track_quat[3]
+        self.tf2_broadcaster.sendTransform(transform_msg)
         self.inner_boundary_pc2_pub.publish(ib_msg)
         self.outer_boundary_pc2_pub.publish(ob_msg)
         self.racline_pc2_pub.publish(rl_msg)
