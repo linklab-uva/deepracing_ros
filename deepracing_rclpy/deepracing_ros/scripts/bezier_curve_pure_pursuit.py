@@ -98,7 +98,7 @@ class BezierCurvePurePursuit(Node):
 
     def odomCB(self, odom_msg : Odometry):
         if self.current_curve_msg is None:
-            self.get_logger().error("No bezier curve received yet")
+            self.get_logger().debug("No bezier curve received yet")
             return
         if not self.current_curve_mutex.acquire(timeout=0.5):
             self.get_logger().error("Unable to acquire current_curve_mutex")

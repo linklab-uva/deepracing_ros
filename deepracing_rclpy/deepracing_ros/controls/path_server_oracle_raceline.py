@@ -319,10 +319,10 @@ class OraclePathServer(PathServerROS):
 
     def getTrajectory(self):
         if (self.racelineframe is None) or (self.raceline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None) or (self.racelinetangents is None) or (self.racelinenormals is None):
-            self.get_logger().error("Returning None because raceline not yet received")
+            self.get_logger().debug("Returning None because raceline not yet received")
             return None
         if self.current_odom is None:
-            self.get_logger().error("Returning None because odometry not yet received")
+            self.get_logger().debug("Returning None because odometry not yet received")
             return None
         posemsg = deepcopy(self.current_odom)
         if not (posemsg.header.frame_id==self.racelineframe):
