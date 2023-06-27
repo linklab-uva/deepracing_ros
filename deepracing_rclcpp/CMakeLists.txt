@@ -51,7 +51,10 @@ find_package(control_toolbox)
 
 #Provides imported targets for f1_datalogger, armadillo, Boost, Eigen3, Opencv, and (on Windows) vJoy_plusplus
 find_package(f1_datalogger CONFIG REQUIRED)
-find_package(Eigen3 REQUIRED)
+find_package(Eigen3 CONFIG QUIET)
+if(NOT (TARGET Eigen3::Eigen))
+  find_package(Eigen3 REQUIRED)
+endif()
 
 add_library(utils SHARED src/utils/f1_msg_utils_2020.cpp src/utils/file_utils.cpp)
 if(MSVC)
