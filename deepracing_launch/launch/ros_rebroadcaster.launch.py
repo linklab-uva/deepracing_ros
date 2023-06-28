@@ -26,14 +26,14 @@ def generate_launch_description():
             package='udp_driver',
             plugin='drivers::udp_driver::UdpReceiverNode',
             name='raw_udp_receiver_node',
-            remappings=[('udp_read', 'all_raw_udp')],
+            remappings=[('udp_read', '_all_raw_udp')],
             parameters=[{ip.name : launch.substitutions.LaunchConfiguration(ip.name), port.name : launch.substitutions.LaunchConfiguration(port.name)}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
             plugin='deepracing::composable_nodes::UdpDemuxer',
             name='udp_demuxer_node',
-            remappings=[('udp_in', 'all_raw_udp')],
+            remappings=[('udp_in', '_all_raw_udp')],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
@@ -78,8 +78,7 @@ def generate_launch_description():
         executable='component_container_mt',
         parameters=[{"thread_num" : len(composable_nodez)+1}],
         composable_node_descriptions=composable_nodez,
-        output='both',
-        condition=launch.conditions.IfCondition(launch.substitutions.LaunchConfiguration(composable_api.name))
+        output='both'
     )
     nodez = []
     nodez.append(launch_ros.actions.Node(package='deepracing_rclpy', 
@@ -88,4 +87,4 @@ def generate_launch_description():
                                          namespace="udp_interface",
                                          output='screen'))
     
-    return launch.LaunchDescription(argz + nodez + [node, container])
+    return launch.LaunchDescription(argz + nodez + [container,])
