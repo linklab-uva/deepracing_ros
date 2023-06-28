@@ -268,7 +268,12 @@ deepracing_msgs::msg::PacketCarTelemetryData deepracing_ros::F1MsgUtils2023::toR
 deepracing_msgs::msg::PacketHeader deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::PacketHeader& header_data)
 {
     deepracing_msgs::msg::PacketHeader rtn;
+    
     rtn.frame_identifier = header_data.frameIdentifier;
+    rtn.game_year = header_data.gameYear;
+    rtn.game_major_version = header_data.gameMajorVersion;
+    rtn.game_minor_version = header_data.gameMinorVersion;
+    rtn.overall_frame_identifier = header_data.overallFrameIdentifier;
     rtn.packet_format = header_data.packetFormat;
     rtn.packet_id = header_data.packetId;
     rtn.packet_version = header_data.packetVersion;
