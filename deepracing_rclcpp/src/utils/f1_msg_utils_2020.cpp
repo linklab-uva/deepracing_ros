@@ -140,17 +140,17 @@ deepracing_msgs::msg::PacketLapData deepracing_ros::F1MsgUtils2020::toROS(const 
 {
   deepracing_msgs::msg::PacketLapData rtn;
   rtn.header = deepracing_ros::F1MsgUtils2020::toROS(lap_data.header);
-  if (rtn.header.player_car_index<22)
+  if (rtn.header.player_car_index<rtn.lap_data.size())
   {
     rtn.lap_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2020::toROS(lap_data.lapData[rtn.header.player_car_index]);
   }
-  if (rtn.header.secondary_player_car_index<22)
+  if (rtn.header.secondary_player_car_index<rtn.lap_data.size())
   {
     rtn.lap_data[rtn.header.secondary_player_car_index] = deepracing_ros::F1MsgUtils2020::toROS(lap_data.lapData[rtn.header.secondary_player_car_index]);
   }
   if(copy_all_cars)
   {
-    for(unsigned int i =0; i < 22; i++)
+    for(unsigned int i =0; i < rtn.lap_data.size(); i++)
     {
       if (i!=rtn.header.player_car_index)
       {
@@ -163,12 +163,16 @@ deepracing_msgs::msg::PacketLapData deepracing_ros::F1MsgUtils2020::toROS(const 
 deepracing_msgs::msg::LapData deepracing_ros::F1MsgUtils2020::toROS(const deepf1::twenty_twenty::LapData& lap_data)
 {
   deepracing_msgs::msg::LapData rtn;
+  rtn.driver_status = lap_data.driverStatus;
+  if ((rtn.driver_status==0) || (rtn.driver_status==1))
+  {
+    return rtn;
+  }
   rtn.best_lap_time = lap_data.bestLapTime;
   rtn.car_position = lap_data.carPosition;
   rtn.current_lap_invalid = lap_data.currentLapInvalid;
   rtn.current_lap_num = lap_data.currentLapNum;
   rtn.current_lap_time = lap_data.currentLapTime;
-  rtn.driver_status = lap_data.driverStatus;
   rtn.grid_position = lap_data.gridPosition;
   rtn.lap_distance = lap_data.lapDistance;
   rtn.last_lap_time = lap_data.lastLapTime;
