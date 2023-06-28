@@ -23,7 +23,7 @@ namespace composable_nodes
                 rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(10).durability_volatile();
                 m_publisher_ = create_publisher<deepracing_msgs::msg::TimestampedPacketLapData>("lap_data", qos);
                 m_valid_indices_publisher_ = create_publisher<std_msgs::msg::UInt8MultiArray>("valid_indices", qos);
-                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("lap_data/raw_udp", qos, 
+                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("_lap_data/raw_udp", qos, 
                     std::bind(&ReceiveLapData::udp_cb, this, std::placeholders::_1));
                 m_time_start_ = get_clock()->now();
                 m_all_cars_param_ = declare_parameter<bool>("all_cars", false);
@@ -42,11 +42,12 @@ namespace composable_nodes
                 rosdata.udp_packet = deepracing_ros::F1MsgUtils2023::toROS(*udp_data, m_all_cars_param_); 
                 std_msgs::msg::UInt8MultiArray valid_indices;
                 valid_indices.data.reserve(rosdata.udp_packet.lap_data.size());
-                for(const deepracing_msgs::msg::LapData& lapdata : rosdata.udp_packet.lap_data)
+                for(std::size_t i = 0; i < rosdata.udp_packet.lap_data.size(); i++)
                 {
+                    const deepracing_msgs::msg::LapData& lapdata = rosdata.udp_packet.lap_data[i];
                     if( !( (lapdata.result_status==0) || (lapdata.result_status==1) ) )
                     {
-                       valid_indices.data.push_back(lapdata.result_status);
+                       valid_indices.data.push_back(i);
                     }
                 }
                 rosdata.header.set__stamp(udp_packet->header.stamp).set__frame_id(deepracing_ros::F1MsgUtils2023::world_coordinate_name);
