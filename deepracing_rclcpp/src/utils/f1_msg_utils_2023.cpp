@@ -55,17 +55,17 @@ deepracing_msgs::msg::PacketCarSetupData deepracing_ros::F1MsgUtils2023::toROS(c
 {
   deepracing_msgs::msg::PacketCarSetupData rtn;
   rtn.header = deepracing_ros::F1MsgUtils2023::toROS(packet_setup_data.header);
-  if (rtn.header.player_car_index<22)
+  if (rtn.header.player_car_index<rtn.car_setup_data.size())
   {
     rtn.car_setup_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2023::toROS(packet_setup_data.carSetups[rtn.header.player_car_index]);
   }
-  if (rtn.header.secondary_player_car_index<22)
+  if (rtn.header.secondary_player_car_index<rtn.car_setup_data.size())
   {
     rtn.car_setup_data[rtn.header.secondary_player_car_index] = deepracing_ros::F1MsgUtils2023::toROS(packet_setup_data.carSetups[rtn.header.secondary_player_car_index]);
   }
   if(copy_all_cars)
   {
-    for(unsigned int i =0; i < 22; i++)
+    for(unsigned int i =0; i < rtn.car_setup_data.size(); i++)
     {
       if (i!=rtn.header.player_car_index)
       {
@@ -108,17 +108,17 @@ deepracing_msgs::msg::PacketCarStatusData deepracing_ros::F1MsgUtils2023::toROS(
 
   deepracing_msgs::msg::PacketCarStatusData rtn;
   rtn.header = deepracing_ros::F1MsgUtils2023::toROS(packet_status_data.header);
-  if (rtn.header.player_car_index<22)
+  if (rtn.header.player_car_index<rtn.car_status_data.size())
   {
     rtn.car_status_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2023::toROS(packet_status_data.carStatusData[rtn.header.player_car_index]);
   }
-  if (rtn.header.secondary_player_car_index<22)
+  if (rtn.header.secondary_player_car_index<rtn.car_status_data.size())
   {
     rtn.car_status_data[rtn.header.secondary_player_car_index] = deepracing_ros::F1MsgUtils2023::toROS(packet_status_data.carStatusData[rtn.header.secondary_player_car_index]);
   }
   if(copy_all_cars)
   {
-    for(unsigned int i =0; i < 22; i++)
+    for(unsigned int i =0; i < rtn.car_status_data.size(); i++)
     {
       if (i!=rtn.header.player_car_index)
       {
@@ -134,17 +134,17 @@ deepracing_msgs::msg::PacketLapData deepracing_ros::F1MsgUtils2023::toROS(const 
 {
   deepracing_msgs::msg::PacketLapData rtn;
   rtn.header = deepracing_ros::F1MsgUtils2023::toROS(lap_data.header);
-  if (rtn.header.player_car_index<22)
+  if (rtn.header.player_car_index<rtn.lap_data.size())
   {
     rtn.lap_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2023::toROS(lap_data.lapData[rtn.header.player_car_index]);
   }
-  if (rtn.header.secondary_player_car_index<22)
+  if (rtn.header.secondary_player_car_index<rtn.lap_data.size())
   {
     rtn.lap_data[rtn.header.secondary_player_car_index] = deepracing_ros::F1MsgUtils2023::toROS(lap_data.lapData[rtn.header.secondary_player_car_index]);
   }
   if(copy_all_cars)
   {
-    for(unsigned int i =0; i < 22; i++)
+    for(unsigned int i =0; i < rtn.lap_data.size(); i++)
     {
       if (i!=rtn.header.player_car_index)
       {
@@ -245,17 +245,17 @@ deepracing_msgs::msg::PacketCarTelemetryData deepracing_ros::F1MsgUtils2023::toR
 {
   deepracing_msgs::msg::PacketCarTelemetryData rtn;
   rtn.header = deepracing_ros::F1MsgUtils2023::toROS(telemetry_data.header);
-  if (rtn.header.player_car_index<22)
+  if (rtn.header.player_car_index<rtn.car_telemetry_data.size())
   {
     rtn.car_telemetry_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2023::toROS(telemetry_data.carTelemetryData[rtn.header.player_car_index]);
   }
-  if (rtn.header.secondary_player_car_index<22)
+  if (rtn.header.secondary_player_car_index<rtn.car_telemetry_data.size())
   {
     rtn.car_telemetry_data[rtn.header.secondary_player_car_index] = deepracing_ros::F1MsgUtils2023::toROS(telemetry_data.carTelemetryData[rtn.header.secondary_player_car_index]);
   }
   if(copy_all_cars)
   {
-    for(unsigned int i =0; i < 22; i++)
+    for(unsigned int i =0; i < rtn.car_telemetry_data.size(); i++)
     {
       if (i!=rtn.header.player_car_index)
       {
@@ -316,8 +316,8 @@ deepracing_msgs::msg::PacketMotionData deepracing_ros::F1MsgUtils2023::toROS(con
     rtn.header = deepracing_ros::F1MsgUtils2023::toROS(motion_data.header);    
     if(copy_all_cars)
     {
-      auto beg = std::cbegin<deepf1::twenty_twentythree::CarMotionData [22]>(motion_data.carMotionData);
-      auto end = std::cend<deepf1::twenty_twentythree::CarMotionData [22]>(motion_data.carMotionData);
+      auto beg = std::cbegin<deepf1::twenty_twentythree::CarMotionData [rtn.car_motion_data.size()]>(motion_data.carMotionData);
+      auto end = std::cend<deepf1::twenty_twentythree::CarMotionData [rtn.car_motion_data.size()]>(motion_data.carMotionData);
       std::function<deepracing_msgs::msg::CarMotionData (const deepf1::twenty_twentythree::CarMotionData&)> f = &deepracing_ros::F1MsgUtils2023::toROSMotionData;
       std::transform(beg, end, rtn.car_motion_data.begin(), f);
       return rtn;
