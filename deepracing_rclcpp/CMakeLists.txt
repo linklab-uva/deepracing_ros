@@ -56,7 +56,7 @@ if(NOT (TARGET Eigen3::Eigen))
   find_package(Eigen3 REQUIRED)
 endif()
 
-add_library(utils SHARED src/utils/f1_msg_utils_2020.cpp src/utils/file_utils.cpp)
+add_library(utils SHARED src/utils/f1_msg_utils_2023.cpp src/utils/file_utils.cpp)
 if(MSVC)
   target_sources(utils PRIVATE src/utils/xinput_msg_utils.cpp)
   target_compile_definitions(utils PRIVATE "WIN32_LEAN_AND_MEAN" "NOGDI")
