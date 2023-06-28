@@ -268,18 +268,7 @@ class MeasurementPublisher
       Eigen::Vector3d centroidLinearAccel=9.81*Eigen::Vector3d(motion_data.g_force_longitudinal, motion_data.g_force_lateral, motion_data.g_force_vertical);
       imu_msg_.linear_acceleration.set__x(centroidLinearAccel.x());
       imu_msg_.linear_acceleration.set__y(centroidLinearAccel.y());
-      imu_msg_.linear_acceleration.set__z(centroidLinearAccel.z());
-
-      if(idx==motion_data_packet->udp_packet.header.player_car_index)
-      {
-        Eigen::Vector3d centroidAngVelTrack(motion_data_packet->udp_packet.angular_velocity.x, motion_data_packet->udp_packet.angular_velocity.y, motion_data_packet->udp_packet.angular_velocity.z);
-        Eigen::Vector3d centroidAngVel = trackToCarEigen.rotation().inverse()*centroidAngVelTrack;
-        odom_msg_.twist.twist.angular.x=centroidAngVel.x();
-        odom_msg_.twist.twist.angular.y=centroidAngVel.y();
-        odom_msg_.twist.twist.angular.z=centroidAngVel.z();
-        imu_msg_.set__angular_velocity(odom_msg_.twist.twist.angular);
-      }
-      
+      imu_msg_.linear_acceleration.set__z(centroidLinearAccel.z());    
 
       if (!m_with_ekf_)
       {

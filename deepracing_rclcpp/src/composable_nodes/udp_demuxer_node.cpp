@@ -5,8 +5,8 @@
 #include <rclcpp/subscription.hpp>
 #include <udp_msgs/msg/udp_packet.hpp>
 #include <deepracing_msgs/msg/timestamped_packet_motion_data.hpp>
-#include <f1_datalogger/car_data/f1_2018/timestamped_car_data.h>
-#include <deepracing_ros/utils/f1_msg_utils_2020.h>
+#include <f1_datalogger/car_data/f1_2023/timestamped_car_data.h>
+#include <deepracing_ros/utils/f1_msg_utils_2023.h>
 
 namespace deepracing
 {
@@ -34,11 +34,11 @@ namespace composable_nodes
         private:
             inline DEEPRACING_RCLCPP_LOCAL void udp_cb(udp_msgs::msg::UdpPacket::UniquePtr udp_packet)
             {
-                if(udp_packet->data.size()<sizeof(deepf1::twenty_twenty::PacketEventData))
+                if(udp_packet->data.size()<sizeof(deepf1::twenty_twentythree::PacketEventData))
                 {
                     RCLCPP_ERROR(get_logger(), 
                         "Received a packet with only %llu bytes. Smallest packet that should ever be received (Event Data) has %llu bytes",
-                             udp_packet->data.size(), sizeof(deepf1::twenty_twenty::PacketEventData));
+                             udp_packet->data.size(), sizeof(deepf1::twenty_twentythree::PacketEventData));
                     return;
                 }
                 uint16_t* packet_format = reinterpret_cast<uint16_t*>(&(udp_packet->data[0]));
@@ -51,40 +51,40 @@ namespace composable_nodes
                     RCLCPP_ERROR(get_logger(), "%s", error_msg.c_str());
                     throw std::runtime_error(error_msg);
                 }
-                deepf1::twenty_twenty::PacketHeader* header = reinterpret_cast<deepf1::twenty_twenty::PacketHeader*>(&(udp_packet->data[0]));
+                deepf1::twenty_twentythree::PacketHeader* header = reinterpret_cast<deepf1::twenty_twentythree::PacketHeader*>(&(udp_packet->data[0]));
                 switch (header->packetId)
                 {
-                    case deepf1::twenty_twenty::PacketID::MOTION:
+                    case deepf1::twenty_twentythree::PacketID::MOTION:
                     {
                         m_motion_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_twenty::PacketID::CARTELEMETRY:
+                    case deepf1::twenty_twentythree::PacketID::CARTELEMETRY:
                     {
                         m_telemetry_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_twenty::PacketID::CARSETUPS:
+                    case deepf1::twenty_twentythree::PacketID::CARSETUPS:
                     {
                         m_car_setup_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_twenty::PacketID::CARSTATUS:
+                    case deepf1::twenty_twentythree::PacketID::CARSTATUS:
                     {
                         m_car_status_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_twenty::PacketID::LAPDATA:
+                    case deepf1::twenty_twentythree::PacketID::LAPDATA:
                     {
                         m_lap_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_twenty::PacketID::SESSION:
+                    case deepf1::twenty_twentythree::PacketID::SESSION:
                     {
                         m_session_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_twenty::PacketID::PARTICIPANTS:
+                    case deepf1::twenty_twentythree::PacketID::PARTICIPANTS:
                     {
                         m_participants_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
