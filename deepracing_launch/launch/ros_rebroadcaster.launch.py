@@ -21,7 +21,6 @@ def generate_launch_description():
     argz.append(port)
     allcars = launch.actions.DeclareLaunchArgument("publish_all_cars", default_value="false")
     argz.append(allcars)
-
     composable_nodez = [
         launch_ros.descriptions.ComposableNode(
             package='udp_driver',
@@ -80,6 +79,7 @@ def generate_launch_description():
         parameters=[{"thread_num" : len(composable_nodez)+1}],
         composable_node_descriptions=composable_nodez,
         output='both',
+        condition=launch.conditions.IfCondition(launch.substitutions.LaunchConfiguration(composable_api.name))
     )
     nodez = []
     nodez.append(launch_ros.actions.Node(package='deepracing_rclpy', 
@@ -88,4 +88,4 @@ def generate_launch_description():
                                          namespace="udp_interface",
                                          output='screen'))
     
-    return launch.LaunchDescription(argz + nodez + [container])
+    return launch.LaunchDescription(argz + nodez + [node, container])
