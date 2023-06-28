@@ -42,11 +42,11 @@ namespace composable_nodes
                     return;
                 }
                 uint16_t* packet_format = reinterpret_cast<uint16_t*>(&(udp_packet->data[0]));
-                if(!((*packet_format)==2020))
+                if(!((*packet_format)==2023))
                 {
                     std::stringstream error_stream;
                     error_stream << "Received UDP packet formatted for " << *packet_format;
-                    error_stream << ", but deepracing_ros is compiled for packet format 2020";
+                    error_stream << ", but deepracing_ros is compiled for packet format 2023";
                     std::string error_msg = error_stream.str();
                     RCLCPP_ERROR(get_logger(), "%s", error_msg.c_str());
                     throw std::runtime_error(error_msg);
