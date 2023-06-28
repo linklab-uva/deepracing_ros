@@ -235,10 +235,10 @@ deepracing_msgs::msg::CarTelemetryData deepracing_ros::F1MsgUtils2023::toROS(con
   //We use a left-positive convention for steering angle, but the F1 UDP uses a right-positive.
   rtn.steer = -telemetry_data.steer;
   rtn.throttle = telemetry_data.throttle;
-  std::copy_n(&(telemetry_data.brakesTemperature[0]), 4, rtn.brakes_temperature.begin());
-  std::copy_n(&(telemetry_data.tyresInnerTemperature[0]), 4, rtn.tyres_inner_temperature.begin());
-  std::copy_n(&(telemetry_data.tyresPressure[0]), 4, rtn.tyres_pressure.begin());
-  std::copy_n(&(telemetry_data.tyresSurfaceTemperature[0]), 4, rtn.tyres_surface_temperature.begin());
+  std::copy_n(&(telemetry_data.brakesTemperature[0]), rtn.brakes_temperature.size(), rtn.brakes_temperature.begin());
+  std::copy_n(&(telemetry_data.tyresInnerTemperature[0]), rtn.tyres_inner_temperature.size(), rtn.tyres_inner_temperature.begin());
+  std::copy_n(&(telemetry_data.tyresPressure[0]), rtn.tyres_pressure.size(), rtn.tyres_pressure.begin());
+  std::copy_n(&(telemetry_data.tyresSurfaceTemperature[0]), rtn.tyres_surface_temperature.size(), rtn.tyres_surface_temperature.begin());
   return rtn;
 }
 deepracing_msgs::msg::PacketCarTelemetryData deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::PacketCarTelemetryData& telemetry_data, bool copy_all_cars)
@@ -268,7 +268,7 @@ deepracing_msgs::msg::PacketCarTelemetryData deepracing_ros::F1MsgUtils2023::toR
 deepracing_msgs::msg::PacketHeader deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::PacketHeader& header_data)
 {
     deepracing_msgs::msg::PacketHeader rtn;
-    
+
     rtn.frame_identifier = header_data.frameIdentifier;
     rtn.game_year = header_data.gameYear;
     rtn.game_major_version = header_data.gameMajorVersion;
@@ -299,15 +299,15 @@ deepracing_msgs::msg::PacketMotionExData toROS(const deepf1::twenty_twentythree:
     rtn.local_velocity.y = motion_ex_data.localVelocityY;
     rtn.local_velocity.z = motion_ex_data.localVelocityZ;
     rtn.front_wheels_angle = motion_ex_data.frontWheelsAngle;
-    std::copy_n(std::cbegin(motion_ex_data.wheelSlipAngle), 4, rtn.wheel_slip_angle.begin());
-    std::copy_n(std::cbegin(motion_ex_data.wheelSlipRatio), 4, rtn.wheel_slip_ratio.begin());
-    std::copy_n(std::cbegin(motion_ex_data.wheelSpeed), 4, rtn.wheel_speed.begin());
-    std::copy_n(std::cbegin(motion_ex_data.suspensionAcceleration), 4, rtn.suspension_acceleration.begin());
-    std::copy_n(std::cbegin(motion_ex_data.suspensionVelocity), 4, rtn.suspension_velocity.begin());
-    std::copy_n(std::cbegin(motion_ex_data.suspensionPosition), 4, rtn.suspension_position.begin());
-    std::copy_n(std::cbegin(motion_ex_data.wheelLatForce), 4, rtn.wheel_lat_force.begin());
-    std::copy_n(std::cbegin(motion_ex_data.wheelLongForce), 4, rtn.wheel_long_force.begin());
-    std::copy_n(std::cbegin(motion_ex_data.wheelVertForce), 4, rtn.wheel_vert_force.begin());
+    std::copy_n(std::cbegin(motion_ex_data.wheelSlipAngle), rtn.wheel_slip_angle.size(), rtn.wheel_slip_angle.begin());
+    std::copy_n(std::cbegin(motion_ex_data.wheelSlipRatio), rtn.wheel_slip_ratio.size(), rtn.wheel_slip_ratio.begin());
+    std::copy_n(std::cbegin(motion_ex_data.wheelSpeed), rtn.wheel_speed.size(), rtn.wheel_speed.begin());
+    std::copy_n(std::cbegin(motion_ex_data.suspensionAcceleration), rtn.suspension_acceleration.size(), rtn.suspension_acceleration.begin());
+    std::copy_n(std::cbegin(motion_ex_data.suspensionVelocity), rtn.suspension_velocity.size(), rtn.suspension_velocity.begin());
+    std::copy_n(std::cbegin(motion_ex_data.suspensionPosition), rtn.suspension_position.size(), rtn.suspension_position.begin());
+    std::copy_n(std::cbegin(motion_ex_data.wheelLatForce), rtn.wheel_lat_force.size(), rtn.wheel_lat_force.begin());
+    std::copy_n(std::cbegin(motion_ex_data.wheelLongForce), rtn.wheel_long_force.size(), rtn.wheel_long_force.begin());
+    std::copy_n(std::cbegin(motion_ex_data.wheelVertForce), rtn.wheel_vert_force.size(), rtn.wheel_vert_force.begin());
     return rtn;
 }
 deepracing_msgs::msg::PacketMotionData deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::PacketMotionData& motion_data, bool copy_all_cars)
@@ -322,11 +322,11 @@ deepracing_msgs::msg::PacketMotionData deepracing_ros::F1MsgUtils2023::toROS(con
       std::transform(beg, end, rtn.car_motion_data.begin(), f);
       return rtn;
     }
-    if(rtn.header.player_car_index<22)
+    if(rtn.header.player_car_index<rtn.car_motion_data.size())
     {
       rtn.car_motion_data[rtn.header.player_car_index] = deepracing_ros::F1MsgUtils2023::toROSMotionData(motion_data.carMotionData[rtn.header.player_car_index]);
     }
-    if (rtn.header.secondary_player_car_index<22)
+    if (rtn.header.secondary_player_car_index<rtn.car_motion_data.size())
     {
       rtn.car_motion_data[rtn.header.secondary_player_car_index] = deepracing_ros::F1MsgUtils2023::toROSMotionData(motion_data.carMotionData[rtn.header.secondary_player_car_index]);
     }
