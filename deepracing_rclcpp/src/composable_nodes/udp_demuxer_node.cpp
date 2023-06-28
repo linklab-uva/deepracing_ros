@@ -27,7 +27,7 @@ namespace composable_nodes
                 m_lap_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("_lap_data/raw_udp", qos);
                 m_session_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("_session_data/raw_udp", qos);
                 m_participants_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("_participants_data/raw_udp", qos);
-                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("udp_in", qos.keep_last(100), 
+                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("_all_udp_in", qos.keep_last(100), 
                     std::bind(&UdpDemuxer::udp_cb, this, std::placeholders::_1));
                 m_time_start_ = get_clock()->now();
             } 

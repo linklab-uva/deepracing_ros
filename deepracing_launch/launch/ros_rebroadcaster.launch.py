@@ -26,14 +26,13 @@ def generate_launch_description():
             package='udp_driver',
             plugin='drivers::udp_driver::UdpReceiverNode',
             name='raw_udp_receiver_node',
-            remappings=[('udp_read', '_all_raw_udp')],
+            remappings=[('udp_read', '_all_udp_in')],
             parameters=[{ip.name : launch.substitutions.LaunchConfiguration(ip.name), port.name : launch.substitutions.LaunchConfiguration(port.name)}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
             plugin='deepracing::composable_nodes::UdpDemuxer',
             name='udp_demuxer_node',
-            remappings=[('udp_in', '_all_raw_udp')],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
