@@ -1,7 +1,0 @@
----
-nav_msgs/Path current_raceline
-uint8 error_code
-string message
-uint8 SUCCESS=1
-uint8 UNKNOWN_ERROR=2
-uint8 NO_RACELINE_RECEIVED=3

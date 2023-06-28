@@ -33,28 +33,36 @@ class RaceSupervisorNode : public rclcpp::Node
       car_names_descriptor.set__type(rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY);
       car_names_descriptor.set__read_only(false);
       car_names_descriptor.set__description("The names of the two cars to manage, each should have it's own namespace of various ROS2 schtuff");
-      std::vector<std::string> car_names = declare_parameter<std::vector<std::string>>(car_names_descriptor.name, car_names_descriptor);
+      std::vector<std::string> car_names = declare_parameter<std::vector<std::string>>(car_names_descriptor.name, {"player1", "player2"}, car_names_descriptor);
       m_car1_name_ = car_names[0];
 
-      const std::string car1_state_topic = "/" + m_car1_name_ + "/driver_states";
-      m_car1_states_listener_ = this->create_subscription<deepracing_msgs::msg::DriverStates>(car1_state_topic, 1, std::bind(&RaceSupervisorNode::car1_states_CB_, this, std::placeholders::_1));
+      std::string driver_states_topic = "/driver_states";
+      m_driver_states_listener_ = this->create_subscription<deepracing_msgs::msg::DriverStates>(driver_states_topic, 1, std::bind(&RaceSupervisorNode::states_CB_, this, std::placeholders::_1));
+     
+
+
       std::string car1_get_raceline_service = "/" + m_car1_name_ + "/get_raceline";
       m_car1_raceline_getter_ = create_client<deepracing_msgs::srv::GetRaceline>(car1_get_raceline_service);
       std::string car1_set_raceline_service = "/" + m_car1_name_ + "/set_raceline";
       m_car1_raceline_setter_ = create_client<deepracing_msgs::srv::SetRaceline>(car1_set_raceline_service);
       std::string car1_set_params_service = "/" + m_car1_name_ + "/control_node/set_parameters";
       m_car1_param_setter_ = create_client<rcl_interfaces::srv::SetParameters>(car1_set_params_service);
-      // m_car1_param_setter_ = create_client<rcl_interfaces::srv::SetParameters>(car1_set_params_service, rmw_qos_profile_services_default, create_callback_group(rclcpp::CallbackGroupType::Reentrant));
 
       m_car2_name_ = car_names[1];
-      std::string car2_state_topic = "/" + m_car2_name_ + "/driver_states";
-      m_car2_states_listener_ = this->create_subscription<deepracing_msgs::msg::DriverStates>(car2_state_topic, 1, std::bind(&RaceSupervisorNode::car2_states_CB_, this, std::placeholders::_1));
-      std::string car2_get_raceline_service = "/" + m_car2_name_ + "/get_raceline";
+       std::string car2_get_raceline_service = "/" + m_car2_name_ + "/get_raceline";
       m_car2_raceline_getter_ = create_client<deepracing_msgs::srv::GetRaceline>(car2_get_raceline_service);
       std::string car2_set_raceline_service = "/" + m_car2_name_ + "/set_raceline";
       m_car2_raceline_setter_ = create_client<deepracing_msgs::srv::SetRaceline>(car2_set_raceline_service);
       std::string car2_set_params_service = "/" + m_car2_name_ + "/control_node/set_parameters";
       m_car2_param_setter_ = create_client<rcl_interfaces::srv::SetParameters>(car2_set_params_service);
+
+      rcl_interfaces::msg::ParameterDescriptor player_indices_descriptor;
+      player_indices_descriptor.set__name("player_indices");
+      player_indices_descriptor.set__type(rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER_ARRAY);
+      player_indices_descriptor.set__read_only(true);
+      std::vector<int64_t> player_indices = declare_parameter< std::vector<int64_t> >(player_indices_descriptor.name, {-1, -2}, player_indices_descriptor);
+      m_car1_index_ = player_indices.at(0);
+      m_car2_index_ = player_indices.at(1);
 
     }
     void start()
@@ -115,7 +123,13 @@ class RaceSupervisorNode : public rclcpp::Node
     }
     void handle_following_racelines()
     {
-      if (m_car1_states_->ego_lap_number<2  ||  m_car2_states_->ego_lap_number<2)
+      if(!m_driver_states_)
+      {
+
+        RCLCPP_ERROR(this->get_logger(), "Haven't received any driver states data");
+        return;
+      }
+      if (m_driver_states_->ego_lap_number<2  ||  m_driver_states_->secondary_vehicle_lap_number<2)
       {
         RCLCPP_DEBUG(this->get_logger(), "don't start overtaking until lap 2");
         return;
@@ -123,16 +137,24 @@ class RaceSupervisorNode : public rclcpp::Node
       if( this->get_clock()->now() > m_time_of_next_overtake_)
       {
         RCLCPP_DEBUG(this->get_logger(), "Starting an overtake.");
-        if (m_car1_states_->ego_race_position < m_car2_states_->ego_race_position)
+        if (m_driver_states_->ego_race_position < m_driver_states_->secondary_vehicle_race_position)
         {
           //car1 is defending (ahead) and car2 is attacking (behind)
           set_car1_speedfactor(0.75);
           set_car2_speedfactor(1.0);
+          m_current_state_.attacking_car_name = m_car2_name_;
+          m_current_state_.attacking_car_index = m_driver_states_->secondary_vehicle_index;
+          m_current_state_.defending_car_name = m_car1_name_;
+          m_current_state_.defending_car_index = m_driver_states_->ego_vehicle_index;
         }
         else
         {
           set_car2_speedfactor(0.75);
           set_car1_speedfactor(1.0);
+          m_current_state_.attacking_car_name = m_car1_name_;
+          m_current_state_.attacking_car_index = m_driver_states_->ego_vehicle_index;
+          m_current_state_.defending_car_name = m_car2_name_;
+          m_current_state_.defending_car_index = m_driver_states_->secondary_vehicle_index;
         }
         m_current_state_.description=m_current_state_.attacking_car_name + " is overtaking "   + m_current_state_.defending_car_name;
         m_current_state_.current_state=deepracing_msgs::msg::RaceSupervisorState::STATE_OVERTAKE;
@@ -140,20 +162,19 @@ class RaceSupervisorNode : public rclcpp::Node
       }
     }
     void handle_overtaking()
-    {
-      deepracing_msgs::msg::DriverStates::ConstSharedPtr attacker_states;
-      if (m_current_state_.attacking_car_name.compare(m_car1_name_)==0)
+    {     
+      double offset = m_driver_states_->ego_total_distance - m_driver_states_->secondary_vehicle_total_distance;
+      bool player1_ahead = m_driver_states_->ego_race_position < m_driver_states_->secondary_vehicle_race_position, positions_flipped;
+      if(m_current_state_.attacking_car_index == m_driver_states_->secondary_vehicle_index)
       {
-        //car1 is attacking, car2 is defending
-        attacker_states = m_car1_states_;
+        offset*=-1.0;
+        positions_flipped = !player1_ahead;
       }
       else
       {
-        //car2 is attacking, car1 is defending
-        attacker_states = m_car2_states_;
+        positions_flipped = player1_ahead;
       }
-      double offset = attacker_states->ego_total_distance - attacker_states->other_agent_total_distance.at(0);
-      if ((attacker_states->ego_race_position < attacker_states->other_agent_race_positions.at(0)) && offset>30.0)
+      if (positions_flipped && offset>30.0)
       {
         //overtake is done, transition back to follow raceline and swap roles.
         set_car1_speedfactor(1.0);
@@ -161,6 +182,11 @@ class RaceSupervisorNode : public rclcpp::Node
         std::string temp(m_current_state_.defending_car_name);
         m_current_state_.defending_car_name=m_current_state_.attacking_car_name;
         m_current_state_.attacking_car_name=temp;
+
+        uint8_t temp_idx(m_current_state_.defending_car_index);
+        m_current_state_.defending_car_index=m_current_state_.attacking_car_index;
+        m_current_state_.attacking_car_index=temp_idx;
+
         m_current_state_.description = "Following racelines at full speed. " + m_current_state_.defending_car_name + " is defending and " + m_current_state_.attacking_car_name + " is attacking.";
         RCLCPP_DEBUG(this->get_logger(), "transition to state: Following racelines");
         double deltat = 10.0*(1.0 + m_rng_.uniform01());
@@ -202,29 +228,24 @@ class RaceSupervisorNode : public rclcpp::Node
         RCLCPP_ERROR(this->get_logger(), "car2 raceline setter not available.");
         return;
       }
-      if (!m_car1_states_)
+      if (!m_driver_states_)
       {
-        RCLCPP_ERROR(this->get_logger(), "No driver 1 state data received");
+        RCLCPP_ERROR(this->get_logger(), "No driver state data received");
         return;
       }
-      if (!m_car2_states_)
-      {
-        RCLCPP_ERROR(this->get_logger(), "No driver 2 state data received");
-        return;
-      }
-      if (m_car1_states_->ego_race_position < m_car2_states_->ego_race_position)
+      if (m_driver_states_->ego_race_position < m_driver_states_->secondary_vehicle_race_position)
       {
         //car1 is defending (ahead) and car2 is attacking (behind)
-        m_current_state_.defending_car_index=m_car1_states_->ego_vehicle_index; 
-        m_current_state_.attacking_car_index=m_car2_states_->ego_vehicle_index; 
+        m_current_state_.defending_car_index=m_driver_states_->ego_vehicle_index; 
+        m_current_state_.attacking_car_index=m_driver_states_->secondary_vehicle_index; 
         m_current_state_.defending_car_name=m_car1_name_;
         m_current_state_.attacking_car_name=m_car2_name_;
       }
       else
       {
         //car2 is defending (ahead) and car1 is attacking (behind)
-        m_current_state_.defending_car_index=m_car2_states_->ego_vehicle_index; 
-        m_current_state_.attacking_car_index=m_car1_states_->ego_vehicle_index; 
+        m_current_state_.defending_car_index=m_driver_states_->secondary_vehicle_index; 
+        m_current_state_.attacking_car_index=m_driver_states_->ego_vehicle_index; 
         m_current_state_.defending_car_name=m_car2_name_;
         m_current_state_.attacking_car_name=m_car1_name_;
       }
@@ -232,40 +253,37 @@ class RaceSupervisorNode : public rclcpp::Node
       RCLCPP_DEBUG(this->get_logger(), "transition to state: Following racelines");
       set_car1_speedfactor(1.0);
       set_car2_speedfactor(1.0);
-      double deltat = 5.0 + 5.0*m_rng_.uniform01();
+      double deltat = 10.0 + 10.0*m_rng_.uniform01();
       m_time_of_next_overtake_ = this->get_clock()->now() + rclcpp::Duration::from_seconds(deltat);
       m_current_state_.current_state = deepracing_msgs::msg::RaceSupervisorState::STATE_FOLLOWING_RACELINES;
     }
-    void car1_states_CB_(const deepracing_msgs::msg::DriverStates::SharedPtr car1_states)
+
+    void states_CB_(const deepracing_msgs::msg::DriverStates::SharedPtr car_states)
     {
-      RCLCPP_DEBUG(this->get_logger(), "Got some car1 state data");
-      m_car1_states_=car1_states;
+      RCLCPP_DEBUG(this->get_logger(), "Got some driver state data");
+      m_driver_states_=car_states;
     }
-    void car2_states_CB_(const deepracing_msgs::msg::DriverStates::SharedPtr car2_states)
-    {
-      RCLCPP_DEBUG(this->get_logger(), "Got some car2 state data");
-      m_car2_states_=car2_states;
-    }
+
     rclcpp::Time m_time_of_next_overtake_;
     random_numbers::RandomNumberGenerator m_rng_;
     double m_frequency_;
     rclcpp::TimerBase::SharedPtr m_timer_;
     deepracing_msgs::msg::RaceSupervisorState m_current_state_;
+    deepracing_msgs::msg::DriverStates::ConstSharedPtr m_driver_states_;
+    rclcpp::Subscription<deepracing_msgs::msg::DriverStates>::SharedPtr m_driver_states_listener_;
     rclcpp::Publisher<deepracing_msgs::msg::RaceSupervisorState>::SharedPtr m_current_state_publisher_;
 
-    deepracing_msgs::msg::DriverStates::ConstSharedPtr m_car1_states_;
     std::string m_car1_name_;
-    rclcpp::Subscription<deepracing_msgs::msg::DriverStates>::SharedPtr m_car1_states_listener_;
     rclcpp::Client<deepracing_msgs::srv::SetRaceline>::SharedPtr m_car1_raceline_setter_;
     rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr m_car1_param_setter_;
     rclcpp::Client<deepracing_msgs::srv::GetRaceline>::SharedPtr m_car1_raceline_getter_;
+    int64_t m_car1_index_;
 
-    deepracing_msgs::msg::DriverStates::ConstSharedPtr m_car2_states_;
     std::string m_car2_name_;
-    rclcpp::Subscription<deepracing_msgs::msg::DriverStates>::SharedPtr m_car2_states_listener_;
     rclcpp::Client<deepracing_msgs::srv::SetRaceline>::SharedPtr m_car2_raceline_setter_;
     rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr m_car2_param_setter_;
     rclcpp::Client<deepracing_msgs::srv::GetRaceline>::SharedPtr m_car2_raceline_getter_;
+    int64_t m_car2_index_;
 
 };
 int main(int argc, char *argv[]) {

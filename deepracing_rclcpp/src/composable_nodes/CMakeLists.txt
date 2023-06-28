@@ -8,6 +8,9 @@ set(deepracing_composable_node_srcs
   session_data_node.cpp
   telemetry_data_node.cpp
   udp_demuxer_node.cpp
+  map_to_baselink_transform.cpp
+  map_to_odom_transform.cpp
+  measurement_publisher.cpp
 )
 add_library(deepracing_composable_nodes SHARED ${deepracing_composable_node_srcs})
 if(WIN32)
@@ -18,17 +21,12 @@ if(WIN32)
       xinput
   )
   target_compile_definitions(deepracing_composable_nodes PUBLIC "NOGDI" "WIN32_LEAN_AND_MEAN")
-  rclcpp_components_register_node(deepracing_composable_nodes
-    PLUGIN "deepracing::composable_nodes::GamepadMultiplexerNode"
-    EXECUTABLE gamepad_multiplexer_node_exe
-  )
-  if(TARGET f1_datalogger::f1_datalogger_controllers)
+  set(with_gamepad_multiplexer_ TRUE PARENT_SCOPE)
+  if((TARGET f1_datalogger::f1_datalogger_controllers)  AND control_msgs_FOUND AND ackermann_msgs_FOUND)
     target_sources(deepracing_composable_nodes PRIVATE multiagent_control_node.cpp)
     target_link_libraries(deepracing_composable_nodes PUBLIC f1_datalogger::f1_datalogger_controllers)
-    rclcpp_components_register_node(deepracing_composable_nodes
-      PLUGIN "deepracing::composable_nodes::MultiagentControlNode"
-      EXECUTABLE multiagent_control_node_exe
-    )
+    ament_target_dependencies(deepracing_composable_nodes PUBLIC control_msgs ackermann_msgs)
+    set(with_multiagent_control_node_ TRUE PARENT_SCOPE)
   endif()
 endif()
 
@@ -38,11 +36,23 @@ ament_target_dependencies(deepracing_composable_nodes
     rclcpp_components
     ament_index_cpp
     deepracing_msgs
+    geometry_msgs
+    nav_msgs
+    random_numbers
     std_msgs
-    udp_msgs
+    tf2_ros
+    tf2_eigen
+    tf2_geometry_msgs
+    udp_msgs  
 )
 
 target_link_libraries(deepracing_composable_nodes PUBLIC utils)
+
+if(TARGET JsonCpp::JsonCpp)
+  target_link_libraries(deepracing_composable_nodes PRIVATE JsonCpp::JsonCpp)
+else()
+  target_link_libraries(deepracing_composable_nodes PRIVATE jsoncpp_lib)
+endif()
 
 target_include_directories(deepracing_composable_nodes
   PUBLIC

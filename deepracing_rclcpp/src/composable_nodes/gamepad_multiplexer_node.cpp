@@ -21,14 +21,14 @@ class GamepadMultiplexerNode : public rclcpp::Node
         rclcpp::Duration::from_seconds(1.0/frequency), std::bind(&GamepadMultiplexerNode::timerCallback, this));
       device_index_= (unsigned long)declare_parameter<int>("device_index", 0);
       driver_names_ = declare_parameter<std::vector<std::string>>("driver_names", std::vector<std::string>());
-      if(driver_names_.size()<2)
+      if(driver_names_.empty() || driver_names_.size()>2)
       {
-        throw std::runtime_error("Must specify at least 2 driver names");
+        throw std::runtime_error("Must specify either 1 or 2 driver names");
       }
       for(const std::string& driver : driver_names_)
       {
-        std::string direct_topic_name = "/" + driver + "/controller_override";
-        publishers_[driver] = create_publisher<deepracing_msgs::msg::XinputState>(direct_topic_name, rclcpp::SensorDataQoS());
+        std::string direct_topic_name = "/" + driver + "/controller_input";
+        publishers_[driver] = create_publisher<deepracing_msgs::msg::XinputState>(direct_topic_name, rclcpp::QoS{1});
       }
     }
   private:
@@ -37,6 +37,7 @@ class GamepadMultiplexerNode : public rclcpp::Node
       XINPUT_STATE state;
       try
       {
+        state = XINPUT_STATE();
         XInputGetState(device_index_, &state);
         if(state.Gamepad.sThumbRY>30000)
         {
@@ -45,7 +46,7 @@ class GamepadMultiplexerNode : public rclcpp::Node
           msg.gamepad.thumb_rx = msg.gamepad.thumb_ry = 0;
           publishers_[driver_names_.at(0)]->publish(msg);
         }
-        else if(state.Gamepad.sThumbRY<-30000)
+        else if(driver_names_.size()>1 && (state.Gamepad.sThumbRY<-30000))
         {
           deepracing_msgs::msg::XinputState msg = deepracing_ros::XinputMsgUtils::toMsg(state)
             .set__header(std_msgs::msg::Header().set__stamp(get_clock()->now()));

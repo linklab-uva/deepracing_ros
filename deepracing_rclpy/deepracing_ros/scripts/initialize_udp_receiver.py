@@ -14,6 +14,8 @@ import rclpy
 import rclpy.timer
 import rclpy.client
 import rclpy.executors
+import rclpy.parameter
+import rclpy.exceptions
 from rclpy.node import Node
 import lifecycle_msgs.srv, lifecycle_msgs.msg
 
@@ -21,11 +23,12 @@ class InitializerUDPRecevier(Node):
     def __init__(self, name="initialize_udp_receiver"):
         super(InitializerUDPRecevier, self).__init__(name)
 
+
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
     node = InitializerUDPRecevier()
-    serviceclient : rclpy.client.Client = node.create_client(lifecycle_msgs.srv.ChangeState, "raw_udp_receiver_node/change_state")
+    serviceclient : rclpy.client.Client = node.create_client(lifecycle_msgs.srv.ChangeState, "/raw_udp_receiver_node/change_state")
     serviceclient.wait_for_service()
     req : lifecycle_msgs.srv.ChangeState.Request = lifecycle_msgs.srv.ChangeState.Request()
 

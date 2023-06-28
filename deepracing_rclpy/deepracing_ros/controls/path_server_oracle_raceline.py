@@ -9,14 +9,11 @@ import time
 from concurrent import futures
 import logging
 import argparse
-import lmdb
-import deepracing.backend
 import torch
 import torchvision.transforms as tf
 import deepracing.imutils
 import scipy
 import scipy.interpolate
-import deepracing.pose_utils
 import deepracing
 import threading
 import numpy.linalg as la
@@ -52,9 +49,9 @@ import json
 import torch, torch.distributions
 import geometry_msgs.msg
 from deepracing_msgs.msg import BezierCurve
+import deepracing.path_utils
 import deepracing_ros.convert as C
 import deepracing.raceline_utils as raceline_utils
-import pickle as pkl
 from deepracing_msgs.srv import SetRaceline, GetRaceline
 import deepracing_models.math_utils as mu
 import math
@@ -164,22 +161,21 @@ class OraclePathServer(PathServerROS):
             response.error_code=SetRaceline.Response.BOTH_ARGUMENTS_SET
             return response
         if not (request.filename==""):
-            self.get_logger().info("Loading file: %s" %(request.filename,))
-            searchdirs : List[str] = str.split(os.getenv("F1_TRACK_DIRS", ""), os.pathsep)
-            try:
-                f1_datalogger_dir : str = ament_index_python.get_package_share_directory("f1_datalogger")
-                searchdirs.append(os.path.join(f1_datalogger_dir, "f1_tracks", "minimumcurvature"))
-                searchdirs.append(os.path.join(f1_datalogger_dir, "f1_tracks"))
-            except ament_index_python.PackageNotFoundError:
-                pass
-            # self.get_logger().info("Searching in: %s" % (str(searchdirs)))
-            racelinefile : str = deepracing.searchForFile(request.filename, searchdirs)
-            if racelinefile is None:
-                response.message="File %s not found" % (request.filename,)
+            
+            if not os.path.isfile(request.filename):
+                response.message="Filename %s doesn't exist." % request.filename
                 response.error_code=SetRaceline.Response.FILEPATH_NOT_FOUND
                 return response
-            with open(racelinefile, "r") as f:
-                racelinedict : dict = json.load(f)
+            
+            self.get_logger().info("Loading file: %s" %(request.filename,))
+
+            numpytype, raceline_structured_array, height, width = deepracing.path_utils.loadPCD(request.filename)
+
+            raceline_x : np.ndarray = np.squeeze(raceline_structured_array["x"])
+            raceline_y : np.ndarray = np.squeeze(raceline_structured_array["y"])
+            raceline_z : np.ndarray = np.squeeze(raceline_structured_array["z"])
+            raceline_r : np.ndarray = np.squeeze(raceline_structured_array["arclength"])
+            raceline_speed : np.ndarray = np.squeeze(raceline_structured_array["speed"])
 
             self.get_logger().info("Looking up transform")
             try:
@@ -193,27 +189,28 @@ class OraclePathServer(PathServerROS):
             try:
                 rmat : np.ndarray = Rotation.from_quat([transform_msg.transform.rotation.x, transform_msg.transform.rotation.y, transform_msg.transform.rotation.z, transform_msg.transform.rotation.w]).as_matrix().astype(np.float64)
                 transformvec : np.ndarray = np.asarray([transform_msg.transform.translation.x, transform_msg.transform.translation.y, transform_msg.transform.translation.z], dtype=rmat.dtype)
-                racelinenp : np.ndarray = np.row_stack([np.asarray(racelinedict["x"], dtype=rmat.dtype), np.asarray(racelinedict["y"], dtype=rmat.dtype), np.asarray(racelinedict["z"], dtype=rmat.dtype)])
+                racelinenp : np.ndarray = np.row_stack([raceline_x, raceline_y, raceline_z])
                 racelinenp = (np.matmul(rmat, racelinenp) + transformvec[:,np.newaxis])
                 racelinenp = racelinenp.T
-                rsamp : np.ndarray = np.asarray(racelinedict["r"], dtype=racelinenp.dtype)
-                racelinespeeds : np.ndarray = np.asarray(racelinedict["speeds"], dtype=racelinenp.dtype)
-                velsquares : np.ndarray = np.square(racelinespeeds)
-                racelinet : np.ndarray = np.zeros_like(racelinespeeds)
-                for i in range(rsamp.shape[0]-1):
-                    ds : float = rsamp[i+1] - rsamp[i]
-                    v0 : float = racelinespeeds[i]
-                    vf : float = racelinespeeds[i+1]
+                velsquares : np.ndarray = np.square(raceline_speed)
+                racelinet : np.ndarray = np.zeros_like(raceline_speed)
+                for i in range(raceline_r.shape[0]-1):
+                    ds : float = raceline_r[i+1] - raceline_r[i]
+                    v0 : float = raceline_speed[i]
+                    vf : float = raceline_speed[i+1]
                     v0square : float = velsquares[i]
                     vfsquare : float = velsquares[i+1]
                     a0 : float = float((vfsquare-v0square)/(2.0*ds))
-                    if a0>=0.0:
+                    # if a0>=0.0:
                         #positive (or no) acceleration
-                        p : np.polynomial.Polynomial = np.polynomial.Polynomial([-ds, v0, 0.5*a0])
-                    else:
+                    p : np.polynomial.Polynomial = np.polynomial.Polynomial([-ds, v0, 0.5*a0])
+                    # else:
                         #negative acceleration (braking)
-                        p : np.polynomial.Polynomial = np.polynomial.Polynomial([-ds, vf, -0.5*a0])
-                    deltat : float = float(np.max(np.real(p.roots())))
+                        # p : np.polynomial.Polynomial = np.polynomial.Polynomial([-ds, vf, -0.5*a0])
+                    allroots = p.roots()
+                    realroots = np.real(allroots[np.abs(np.imag(allroots))<1E-6])
+                    positiverealroots = realroots[realroots>0.0]
+                    deltat : float = float(np.min(positiverealroots))
 
                     racelinet[i+1] = racelinet[i]+deltat
                 if np.all(racelinenp[0]==racelinenp[-1]):
@@ -221,16 +218,19 @@ class OraclePathServer(PathServerROS):
                     splinepts : np.ndarray = racelinenp
                 else:
                     dsfinal = np.linalg.norm(racelinenp[0] - racelinenp[-1], ord=2)
-                    vf = racelinespeeds[0] #The "end" of this last segment connecting endpoint to starting point
-                    v0 = racelinespeeds[-1] #The "start" of this last segment connecting endpoint to starting point
-                    afinal : float = float((racelinespeeds[0]**2 - racelinespeeds[-1]**2)/(2.0*dsfinal))
-                    if afinal>=0.0:
+                    vf = raceline_speed[0] #The "end" of this last segment connecting endpoint to starting point
+                    v0 = raceline_speed[-1] #The "start" of this last segment connecting endpoint to starting point
+                    afinal : float = float((vf**2 - v0**2)/(2.0*dsfinal))
+                    # if afinal>=0.0:
                         #positive (or no) acceleration
-                        p : np.polynomial.Polynomial = np.polynomial.Polynomial([-dsfinal, v0, 0.5*afinal])
-                    else:
+                    p : np.polynomial.Polynomial = np.polynomial.Polynomial([-dsfinal, v0, 0.5*afinal])
+                    # else:
                         #negative acceleration (braking)
-                        p : np.polynomial.Polynomial = np.polynomial.Polynomial([-dsfinal, vf, -0.5*afinal])
-                    finaldeltat : float = float(np.max(np.real(p.roots())))
+                        # p : np.polynomial.Polynomial = np.polynomial.Polynomial([-dsfinal, vf, -0.5*afinal])
+                    allroots = p.roots()
+                    realroots = np.real(allroots[np.abs(np.imag(allroots))<1E-6])
+                    positiverealroots = realroots[realroots>0.0]
+                    finaldeltat : float = float(np.min(positiverealroots))
                     finalt = racelinet[-1] + finaldeltat
                     self.get_logger().info("finaldeltat: %f" %(finaldeltat,))
                     splinet : np.ndarray = np.concatenate([racelinet, np.asarray([finalt])], axis=0)
@@ -253,7 +253,7 @@ class OraclePathServer(PathServerROS):
                 raceline[:,0:3] = torch.as_tensor(racelinenp, dtype=self.tsamp.dtype, device=self.tsamp.device)
                 self.racelineframe = str(transform_msg.header.frame_id)
                 self.racelinetimes = torch.as_tensor(racelinet, dtype=self.tsamp.dtype, device=self.tsamp.device)
-                self.racelinespeeds = torch.as_tensor(racelinedict["speeds"], dtype=self.tsamp.dtype, device=self.tsamp.device)
+                self.racelinespeeds = torch.as_tensor(raceline_speed, dtype=self.tsamp.dtype, device=self.tsamp.device)
                 self.racelinetangents = torch.as_tensor(tangent_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
                 self.racelinenormals = torch.as_tensor(normal_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
                 self.raceline = raceline
@@ -319,10 +319,10 @@ class OraclePathServer(PathServerROS):
 
     def getTrajectory(self):
         if (self.racelineframe is None) or (self.raceline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None) or (self.racelinetangents is None) or (self.racelinenormals is None):
-            self.get_logger().error("Returning None because raceline not yet received")
+            self.get_logger().debug("Returning None because raceline not yet received")
             return None
         if self.current_odom is None:
-            self.get_logger().error("Returning None because odometry not yet received")
+            self.get_logger().debug("Returning None because odometry not yet received")
             return None
         posemsg = deepcopy(self.current_odom)
         if not (posemsg.header.frame_id==self.racelineframe):

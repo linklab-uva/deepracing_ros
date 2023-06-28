@@ -19,6 +19,7 @@ namespace deepracing_ros
                 #endif
             }
             static DEEPRACING_RCLCPP_UTILS_PUBLIC std::string findFile(const std::string& file, const std::vector<std::string> & search_dirs);
+            static DEEPRACING_RCLCPP_UTILS_PUBLIC std::string findTrackmap(const std::string& trackname, const std::vector<std::string> & search_dirs);
             static DEEPRACING_RCLCPP_UTILS_PUBLIC std::vector<std::string> split(const std::string& str, char delim=pathsep());
     };
 }

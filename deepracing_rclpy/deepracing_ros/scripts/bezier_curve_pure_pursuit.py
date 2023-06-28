@@ -34,6 +34,8 @@ import tf2_ros
 import rclpy.time
 import rclpy.duration
 import threading 
+import deepracing_ros.convert as C
+import std_msgs.msg
 
 
 class BezierCurvePurePursuit(Node):
@@ -41,9 +43,11 @@ class BezierCurvePurePursuit(Node):
         super(BezierCurvePurePursuit,self).__init__('bezier_pure_pursuit')
         self.setpoint_pub : Publisher = self.create_publisher(AckermannDriveStamped, "ctrl_cmd", 1)
         self.lateral_error_pub : Publisher = self.create_publisher(Float64, "lateral_error", 1)
+        self.local_curve_pub : Publisher = self.create_publisher(BezierCurve, "local_bezier_curves", 1)
         self.curve_sub : Subscription = self.create_subscription(BezierCurve, "beziercurves_in", self.curveCB, 1)
+
         self.odom_sub : Subscription = self.create_subscription(Odometry, "odom", self.odomCB, 1)
-        self.session_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "session_data", self.sessionCB, 1)
+        self.session_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "/session_data", self.sessionCB, 1)
         self.current_curve_msg : BezierCurve = None
         self.current_curve_mutex : threading.Semaphore = threading.Semaphore()
 
@@ -94,7 +98,7 @@ class BezierCurvePurePursuit(Node):
 
     def odomCB(self, odom_msg : Odometry):
         if self.current_curve_msg is None:
-            self.get_logger().error("No bezier curve received yet")
+            self.get_logger().debug("No bezier curve received yet")
             return
         if not self.current_curve_mutex.acquire(timeout=0.5):
             self.get_logger().error("Unable to acquire current_curve_mutex")
@@ -115,14 +119,20 @@ class BezierCurvePurePursuit(Node):
             self.get_logger().error("Unable to lookup TF2 transform for base link frame: %s." % (self.base_link_id,))
             return
         
-        transform : torch.Tensor = torch.inverse(pose_curr)
+        # transform : torch.Tensor = torch.eye(4, device=pose_curr.device, dtype=pose_curr.dtype)
+        # transform[0:3] = pose_curr[0:3].t()
+        # transform[0:3,3] = torch.matmul(transform[0:3], -pose_curr[0:3,3])
+        Rinv = pose_curr[0:3,0:3].t()
+        transform : torch.Tensor = torch.cat([Rinv, torch.matmul(Rinv, -pose_curr[0:3,3]).unsqueeze(-1)], dim=1)
 
         bcurve_global : torch.Tensor = torch.ones(4, len(current_curve.control_points), dtype=transform.dtype, device=transform.device )
         for i in range(bcurve_global.shape[1]):
             bcurve_global[0,i]=current_curve.control_points[i].x
             bcurve_global[1,i]=current_curve.control_points[i].y
             bcurve_global[2,i]=current_curve.control_points[i].z
-        bcurve_local = torch.matmul(transform[0:3], bcurve_global).T.unsqueeze(0)
+        bcurve_local = torch.matmul(transform, bcurve_global).T.unsqueeze(0)
+        curve_msg : BezierCurve = C.toBezierCurveMsg(bcurve_local[0], std_msgs.msg.Header(frame_id=self.base_link_id, stamp=odom_msg.header.stamp))
+        self.local_curve_pub.publish(curve_msg)
         dt : float = (float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9)
         
         Msamp : torch.Tensor = mu.bezierM(self.tsamp, bcurve_local.shape[1]-1)
@@ -158,7 +168,7 @@ class BezierCurvePurePursuit(Node):
         alpha = torch.atan2(lookaheadDirection[1],lookaheadDirection[0])
 
         control_out : AckermannDriveStamped = AckermannDriveStamped(header=odom_msg.header)
-        control_out.header.frame_id=odom_msg.child_frame_id
+        control_out.header.frame_id=self.base_link_id
         control_out.drive.steering_angle = torch.atan((self.twoL * torch.sin(alpha)) / ld).item()
         control_out.drive.speed=speeds[lookahead_index_vel].item()
 

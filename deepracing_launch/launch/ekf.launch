@@ -1,16 +1,59 @@
 <launch>
    <arg name="carname" default=""/>
    <arg name="use_sim_time" default="false"/>
+   <arg name="global" default="true"/>
+   <arg name="with_angvel" default="false"/>
+   <arg name="index" default="-1"/>
+   <group scoped="false" if="$(var with_angvel)">
+      <let name="ekf_odom_mask"
+      value="[true,true,true,true,true,true,true,true,true,true,true,true,false,false,false]"/>
+   </group>
+   <group scoped="false" unless="$(var with_angvel)">
+      <let name="ekf_odom_mask" 
+      value="[true,true,true,true,true,true,true,true,true,false,false,false,false,false,false]"/>
+   </group>
+
    <node pkg="robot_localization" exec="ekf_node" name="ekf_localization_node" output="screen" namespace="$(var carname)">
         <param from="$(find-pkg-share deepracing_launch)/config/ekf.yaml"/>
         <param name="base_link_frame" value="centroid_$(var carname)"/>
         <param name="odom_frame" value="odom_$(var carname)"/>
         <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="odom0_config" value="$(var ekf_odom_mask)"/>
         <remap from="odometry/filtered" to="odom/filtered"/>
         <remap from="/diagnostics" to="diagnostics"/>
    </node>
    <node pkg="deepracing_rclpy" exec="ekf_monitor" namespace="$(var carname)">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="index" value="$(var index)"/>
    </node>
-   <node pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom_$(var carname)">
-   </node>
+
+   <group scoped="false" unless="$(var global)">
+      <node pkg="robot_localization" exec="ekf_node" name="ekf_localization_node_local" output="screen" namespace="$(var carname)">
+         <param from="$(find-pkg-share deepracing_launch)/config/ekf_local.yaml"/>
+         <param name="base_link_frame" value="centroid_$(var carname)"/>
+         <param name="odom_frame" value="odom_$(var carname)"/>
+         <param name="world_frame" value="odom_$(var carname)"/>
+         <param name="use_sim_time" value="$(var use_sim_time)"/>
+         <param name="odom0_config" value="$(var ekf_odom_mask)"/>
+         <remap from="odometry/filtered" to="localodom/filtered"/>
+         <remap from="/diagnostics" to="diagnostics"/>
+      </node>
+      <node pkg="deepracing_rclcpp" exec="map_to_odom_transform_exe" namespace="$(var carname)">
+         <param name="base_link_frame" value="centroid_$(var carname)"/>
+         <param name="odom_frame" value="odom_$(var carname)"/>
+         <param name="map_frame" value="map"/>
+         <param name="use_sim_time" value="$(var use_sim_time)"/>
+      </node>
+   </group>
+
+   <group scoped="false" if="$(var global)">
+      <node pkg="deepracing_rclcpp" exec="map_to_baselink_transform_exe" name="$(var carname)_maptobl" namespace="$(var carname)">
+         <param name="use_sim_time" value="$(var use_sim_time)"/>
+      </node>
+      <node pkg="tf2_ros" exec="static_transform_publisher" name="$(var carname)_rsp" args="--frame-id map --child-frame-id odom_$(var carname)">
+         <param name="use_sim_time" value="$(var use_sim_time)"/>
+      </node>
+   </group>
+
+
 </launch>

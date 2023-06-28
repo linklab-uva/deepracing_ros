@@ -6,7 +6,7 @@
 #include <udp_msgs/msg/udp_packet.hpp>
 #include <deepracing_msgs/msg/timestamped_packet_motion_data.hpp>
 #include <f1_datalogger/car_data/f1_2018/timestamped_car_data.h>
-#include <deepracing_ros/utils/f1_msg_utils.h>
+#include <deepracing_ros/utils/f1_msg_utils_2020.h>
 
 namespace deepracing
 {
@@ -19,56 +19,74 @@ namespace composable_nodes
             DEEPRACING_RCLCPP_PUBLIC UdpDemuxer(const rclcpp::NodeOptions & options) : 
                 rclcpp::Node("udp_demuxer_node", options)
             {
-                m_motion_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("motion_data/raw_udp", 10);
-                m_telemetry_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("telemetry_data/raw_udp", 10);
-                m_car_setup_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("car_setup_data/raw_udp", 10);
-                m_car_status_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("car_status_data/raw_udp", 10);
-                m_lap_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("lap_data/raw_udp", 10);
-                m_session_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("session_data/raw_udp", 1);
-                m_participants_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("participants_data/raw_udp", 1);
-                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("udp_in", 10, 
+                rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(10).durability_volatile();
+                m_motion_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("motion_data/raw_udp", qos);
+                m_telemetry_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("telemetry_data/raw_udp", qos);
+                m_car_setup_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("car_setup_data/raw_udp", qos);
+                m_car_status_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("car_status_data/raw_udp", qos);
+                m_lap_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("lap_data/raw_udp", qos);
+                m_session_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("session_data/raw_udp", qos);
+                m_participants_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("participants_data/raw_udp", qos);
+                m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("udp_in", qos.keep_last(100), 
                     std::bind(&UdpDemuxer::udp_cb, this, std::placeholders::_1));
                 m_time_start_ = get_clock()->now();
             } 
         private:
-            inline DEEPRACING_RCLCPP_LOCAL void udp_cb(const udp_msgs::msg::UdpPacket::ConstPtr& udp_packet)
+            inline DEEPRACING_RCLCPP_LOCAL void udp_cb(udp_msgs::msg::UdpPacket::UniquePtr udp_packet)
             {
-                deepf1::twenty_eighteen::PacketHeader* header = reinterpret_cast<deepf1::twenty_eighteen::PacketHeader*>((void*)&(udp_packet->data.at(0)));
-                switch (header->m_packetId)
+                if(udp_packet->data.size()<sizeof(deepf1::twenty_twenty::PacketEventData))
                 {
-                    case deepf1::twenty_eighteen::PacketID::MOTION:
+                    RCLCPP_ERROR(get_logger(), 
+                        "Received a packet with only %llu bytes. Smallest packet that should ever be received (Event Data) has %llu bytes",
+                             udp_packet->data.size(), sizeof(deepf1::twenty_twenty::PacketEventData));
+                    return;
+                }
+                uint16_t* packet_format = reinterpret_cast<uint16_t*>(&(udp_packet->data[0]));
+                if(!((*packet_format)==2020))
+                {
+                    std::stringstream error_stream;
+                    error_stream << "Received UDP packet formatted for " << *packet_format;
+                    error_stream << ", but deepracing_ros is compiled for packet format 2020";
+                    std::string error_msg = error_stream.str();
+                    RCLCPP_ERROR(get_logger(), "%s", error_msg.c_str());
+                    throw std::runtime_error(error_msg);
+                }
+                deepf1::twenty_twenty::PacketHeader* header = reinterpret_cast<deepf1::twenty_twenty::PacketHeader*>(&(udp_packet->data[0]));
+                switch (header->packetId)
+                {
+                    case deepf1::twenty_twenty::PacketID::MOTION:
                     {
-                        m_motion_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_motion_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::CARTELEMETRY:
+                    case deepf1::twenty_twenty::PacketID::CARTELEMETRY:
                     {
-                        m_telemetry_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_telemetry_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::CARSETUPS:
+                    case deepf1::twenty_twenty::PacketID::CARSETUPS:
                     {
-                        m_car_setup_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_car_setup_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::CARSTATUS:
+                    case deepf1::twenty_twenty::PacketID::CARSTATUS:
                     {
-                        m_car_status_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_car_status_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::LAPDATA:
+                    case deepf1::twenty_twenty::PacketID::LAPDATA:
                     {
-                        m_lap_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_lap_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::SESSION:
+                    case deepf1::twenty_twenty::PacketID::SESSION:
                     {
-                        m_session_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_session_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
-                    case deepf1::twenty_eighteen::PacketID::PARTICIPANTS:
+                    case deepf1::twenty_twenty::PacketID::PARTICIPANTS:
                     {
-                        m_participants_data_udp_publisher_->publish(std::make_unique<udp_msgs::msg::UdpPacket>(*udp_packet));
+                        m_participants_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
                     default:
