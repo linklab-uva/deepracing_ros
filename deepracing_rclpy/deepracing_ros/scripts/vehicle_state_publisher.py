@@ -162,14 +162,8 @@ class DriverStatePublisher(Node):
             driver_states.ego_pose = Pose(position = positionmapmsg, orientation=Quaternion(x=quatmap[0], y=quatmap[1], z=quatmap[2], w=quatmap[3]))
         
             linearveltrack : np.ndarray = np.asarray([motion_data_array[ego_idx].world_velocity.vector.x, motion_data_array[ego_idx].world_velocity.vector.y, motion_data_array[ego_idx].world_velocity.vector.z], dtype=linearveltrack.dtype)
-            angularveltrack : np.ndarray = np.zeros_like(linearveltrack)
-            angularveltrack[0]=udp_packet.angular_velocity.x
-            angularveltrack[1]=udp_packet.angular_velocity.y
-            angularveltrack[2]=udp_packet.angular_velocity.z
             linearvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], linearveltrack)
-            angularvelmap : np.ndarray = np.matmul(self.transform[0:3,0:3], angularveltrack)
             driver_states.ego_velocity.linear = Vector3(x=linearvelmap[0], y=linearvelmap[1], z=linearvelmap[2]) 
-            driver_states.ego_velocity.angular = Vector3(x=angularvelmap[0], y=angularvelmap[1], z=angularvelmap[2]) 
             driver_states.ego_track_progress = lap_data_array[ego_idx].lap_distance
             driver_states.ego_current_sector = lap_data_array[ego_idx].sector
             driver_states.ego_total_distance = lap_data_array[ego_idx].total_distance
