@@ -288,12 +288,12 @@ deepracing_msgs::msg::PacketMotionExData deepracing_ros::F1MsgUtils2023::toROS(c
 {
     deepracing_msgs::msg::PacketMotionExData rtn;
     rtn.header = deepracing_ros::F1MsgUtils2023::toROS(motion_ex_data.header);
-    rtn.angular_acceleration.x = motion_ex_data.angularAccelerationZ;
-    rtn.angular_acceleration.y = motion_ex_data.angularAccelerationX;
-    rtn.angular_acceleration.z = motion_ex_data.angularAccelerationY;
-    rtn.angular_velocity.x = motion_ex_data.angularVelocityZ;
-    rtn.angular_velocity.y = motion_ex_data.angularVelocityX;
-    rtn.angular_velocity.z = motion_ex_data.angularVelocityY;
+    rtn.angular_acceleration.x = motion_ex_data.angularAccelerationX;
+    rtn.angular_acceleration.y = motion_ex_data.angularAccelerationY;
+    rtn.angular_acceleration.z = motion_ex_data.angularAccelerationZ;
+    rtn.angular_velocity.x = motion_ex_data.angularVelocityX;
+    rtn.angular_velocity.y = motion_ex_data.angularVelocityY;
+    rtn.angular_velocity.z = motion_ex_data.angularVelocityZ;
     rtn.local_velocity.x = motion_ex_data.localVelocityZ;
     rtn.local_velocity.y = motion_ex_data.localVelocityX;
     rtn.local_velocity.z = motion_ex_data.localVelocityY;
