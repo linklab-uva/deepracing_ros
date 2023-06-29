@@ -230,16 +230,14 @@ class MeasurementPublisher
       const geometry_msgs::msg::Vector3Stamped &velocityROS = motion_data.world_velocity;
       const geometry_msgs::msg::Vector3Stamped &forwardROS = motion_data.world_forward_dir;
       const geometry_msgs::msg::Vector3Stamped &leftROS = motion_data.world_left_dir;
+      const geometry_msgs::msg::Vector3Stamped &upROS = motion_data.world_up_dir;
       const geometry_msgs::msg::PointStamped& positionROS = motion_data.world_position;
 
       Eigen::Vector3d positioneigen_track(positionROS.point.x, positionROS.point.y, positionROS.point.z);
-      Eigen::Vector3d leftEigen=Eigen::Vector3d(leftROS.vector.x, leftROS.vector.y, leftROS.vector.z).normalized();
-      Eigen::Vector3d forwardEigen=Eigen::Vector3d(forwardROS.vector.x, forwardROS.vector.y, forwardROS.vector.z).normalized();
-      Eigen::Vector3d upEigen = forwardEigen.cross(leftEigen).normalized();
       Eigen::Matrix3d rotmat;
-      rotmat.col(0) = forwardEigen;
-      rotmat.col(1) = leftEigen;
-      rotmat.col(2) = upEigen;
+      rotmat.col(0) = Eigen::Vector3d(leftROS.vector.x, leftROS.vector.y, leftROS.vector.z).normalized();
+      rotmat.col(1) = Eigen::Vector3d(forwardROS.vector.x, forwardROS.vector.y, forwardROS.vector.z).normalized();
+      rotmat.col(2) = Eigen::Vector3d(upROS.vector.x, upROS.vector.y, upROS.vector.z).normalized();
       Eigen::Quaterniond rotationEigen(rotmat);
       rotationEigen.normalize();
     

@@ -370,6 +370,7 @@ deepracing_msgs::msg::CarMotionData deepracing_ros::F1MsgUtils2023::toROSMotionD
     Eigen::Vector3d leftVec = 
       (-Eigen::Vector3d( (double)motion_data.worldRightDirX, (double)motion_data.worldRightDirY, (double)motion_data.worldRightDirZ )).normalized();
     Eigen::Vector3d upVec = forwardVec.cross(leftVec).normalized();
+    leftVec = upVec.cross(forwardVec).normalized();
     rtn.world_up_dir.header.frame_id=world_coordinate_name;
     rtn.world_up_dir.vector.x = upVec.x();
     rtn.world_up_dir.vector.y = upVec.y();
