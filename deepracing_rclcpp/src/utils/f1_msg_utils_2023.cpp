@@ -47,7 +47,6 @@ deepracing_msgs::msg::CarSetupData deepracing_ros::F1MsgUtils2023::toROS(const d
   rtn.front_right_tyre_pressure = setup_data.frontRightTyrePressure;
   rtn.rear_left_tyre_pressure = setup_data.rearLeftTyrePressure;
   rtn.rear_right_tyre_pressure = setup_data.rearRightTyrePressure;
-
   rtn.rear_wing = setup_data.rearWing;
   return rtn;
 }
@@ -80,8 +79,12 @@ deepracing_msgs::msg::PacketCarSetupData deepracing_ros::F1MsgUtils2023::toROS(c
 deepracing_msgs::msg::CarStatusData deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::CarStatusData& status_data)
 {
   deepracing_msgs::msg::CarStatusData rtn;
+  rtn.actual_tyre_compound = status_data.actualTyreCompound;
   rtn.anti_lock_brakes = status_data.antiLockBrakes;
+  rtn.drs_activation_distance = status_data.drsActivationDistance;
   rtn.drs_allowed = status_data.drsAllowed;
+  rtn.engine_power_ice = status_data.enginePowerICE;
+  rtn.engine_power_mguk = status_data.enginePowerMGUK;
   rtn.ers_deploy_mode = status_data.ersDeployMode;
   rtn.ers_deployed_this_lap = status_data.ersDeployedThisLap;
   rtn.ers_harvested_this_lap_mguh = status_data.ersHarvestedThisLapMGUH;
@@ -91,16 +94,16 @@ deepracing_msgs::msg::CarStatusData deepracing_ros::F1MsgUtils2023::toROS(const 
   rtn.fuel_capacity = status_data.fuelCapacity;
   rtn.fuel_in_tank = status_data.fuelInTank;
   rtn.fuel_mix = status_data.fuelMix;
+  rtn.fuel_remaining_laps = status_data.fuelRemainingLaps;
   rtn.idle_rpm = status_data.idleRPM;
   rtn.max_gears = status_data.maxGears;
   rtn.max_rpm = status_data.maxRPM;
+  rtn.network_paused = status_data.networkPaused;
   rtn.pit_limiter_status = status_data.pitLimiterStatus;
   rtn.traction_control = status_data.tractionControl;
+  rtn.tyres_age_laps = status_data.tyresAgeLaps;
   rtn.vehicle_fia_flags = status_data.vehicleFiaFlags;
-  rtn.actual_tyre_compound = status_data.actualTyreCompound;
   rtn.visual_tyre_compound = status_data.visualTyreCompound;
-  // std::copy_n(&(status_data.tyresDamage[0]), 4, rtn.tyres_damage.begin());
-  // std::copy_n(&(status_data.tyresWear[0]), 4, rtn.tyres_wear.begin());
   return rtn;
 }
 deepracing_msgs::msg::PacketCarStatusData deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::PacketCarStatusData& packet_status_data, bool copy_all_cars)
@@ -157,36 +160,50 @@ deepracing_msgs::msg::PacketLapData deepracing_ros::F1MsgUtils2023::toROS(const 
 deepracing_msgs::msg::LapData deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::LapData& lap_data)
 {
   deepracing_msgs::msg::LapData rtn;
-  rtn.corner_cutting_warnings = lap_data.cornerCuttingWarnings;
+  rtn.result_status = lap_data.resultStatus;
+  if((rtn.result_status==0) || (rtn.result_status==1))
+  {
+    //This car is not producing valid data, the rest of the fields are garbage.
+    return rtn;
+  }
   rtn.car_position = lap_data.carPosition;
+  rtn.corner_cutting_warnings = lap_data.cornerCuttingWarnings;
   rtn.current_lap_invalid = lap_data.currentLapInvalid;
   rtn.current_lap_num = lap_data.currentLapNum;
   rtn.current_lap_time_in_ms = lap_data.currentLapTimeInMS;
+  rtn.delta_to_car_in_front_in_ms = lap_data.deltaToCarInFrontInMS;
+  rtn.delta_to_race_leader_in_ms = lap_data.deltaToRaceLeaderInMS;
   rtn.driver_status = lap_data.driverStatus;
   rtn.grid_position = lap_data.gridPosition;
   rtn.lap_distance = lap_data.lapDistance;
   rtn.last_lap_time_in_ms = lap_data.lastLapTimeInMS;
+  rtn.num_pit_stops = lap_data.numPitStops;
+  rtn.num_unserved_drive_through_pens = lap_data.numUnservedDriveThroughPens;
+  rtn.num_unserved_stop_go_pens = lap_data.numUnservedStopGoPens;
   rtn.penalties = lap_data.penalties;
+  rtn.pit_lane_time_in_lane_in_ms = lap_data.pitLaneTimeInLaneInMS;
+  rtn.pit_lane_timer_active = lap_data.pitLaneTimerActive;
   rtn.pit_status = lap_data.pitStatus;
-  rtn.result_status = lap_data.resultStatus;
   rtn.safety_car_delta = lap_data.safetyCarDelta;
-
   rtn.sector1_time_in_ms = lap_data.sector1TimeInMS;
   rtn.sector1_time_minutes = lap_data.sector1TimeMinutes;
   rtn.sector2_time_in_ms = lap_data.sector2TimeInMS;
   rtn.sector2_time_minutes = lap_data.sector2TimeMinutes;
-
   rtn.sector = lap_data.sector;
   rtn.total_distance = lap_data.totalDistance;
+  rtn.total_warnings = lap_data.totalWarnings;
   return rtn;
 }
 deepracing_msgs::msg::WeatherForecastSample deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::WeatherForecastSample& weather_forecast)
 {
   deepracing_msgs::msg::WeatherForecastSample rtn;
   rtn.air_temperature = weather_forecast.airTemperature;
+  rtn.air_temperature_change = weather_forecast.airTemperatureChange;
+  rtn.rain_percentage = weather_forecast.rainPercentage;
   rtn.session_type = weather_forecast.sessionType;
   rtn.time_offset = weather_forecast.timeOffset;
   rtn.track_temperature = weather_forecast.trackTemperature;
+  rtn.track_temperature_change = weather_forecast.trackTemperatureChange;
   rtn.weather = weather_forecast.weather;
   return rtn;
 }
@@ -218,6 +235,12 @@ deepracing_msgs::msg::PacketSessionData deepracing_ros::F1MsgUtils2023::toROS(co
   rtn.track_id = session_data.trackId;
   rtn.track_length = session_data.trackLength;
   rtn.track_temperature = session_data.trackTemperature;
+
+  rtn.ai_difficulty = session_data.aiDifficulty;
+  rtn.braking_assist = session_data.brakingAssist;
+  rtn.drs_assist = session_data.DRSAssist;
+  rtn.dynamic_racing_line = session_data.dynamicRacingLine;
+  rtn.dynamic_racing_line_type = session_data.dynamicRacingLineType;     
   return rtn;
 }
 deepracing_msgs::msg::CarTelemetryData deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::CarTelemetryData& telemetry_data)
@@ -338,39 +361,32 @@ deepracing_msgs::msg::PacketMotionData deepracing_ros::F1MsgUtils2023::toROS(con
 deepracing_msgs::msg::CarMotionData deepracing_ros::F1MsgUtils2023::toROSMotionData(const deepf1::twenty_twentythree::CarMotionData& motion_data)
 {
     deepracing_msgs::msg::CarMotionData rtn;
-    Eigen::Vector3d forwardVec( (double)motion_data.worldForwardDirX, (double)motion_data.worldForwardDirY, (double)motion_data.worldForwardDirZ );
-    forwardVec.normalize();
+    Eigen::Vector3d forwardVec = 
+      Eigen::Vector3d( (double)motion_data.worldForwardDirX, (double)motion_data.worldForwardDirY, (double)motion_data.worldForwardDirZ ).normalized();
     rtn.world_forward_dir.header.frame_id=world_coordinate_name;
- //   rtn.world_forward_dir.header.stamp = rostime;
     rtn.world_forward_dir.vector.x = forwardVec.x();
     rtn.world_forward_dir.vector.y = forwardVec.y();
     rtn.world_forward_dir.vector.z = forwardVec.z();
-    Eigen::Vector3d rightVec( (double)motion_data.worldRightDirX, (double)motion_data.worldRightDirY, (double)motion_data.worldRightDirZ );
-    rightVec.normalize();
-    Eigen::Vector3d leftVec( -rightVec );
-    Eigen::Vector3d upVec = forwardVec.cross(leftVec);
-    upVec.normalize();
+    Eigen::Vector3d leftVec = 
+      (-Eigen::Vector3d( (double)motion_data.worldRightDirX, (double)motion_data.worldRightDirY, (double)motion_data.worldRightDirZ )).normalized();
+    Eigen::Vector3d upVec = forwardVec.cross(leftVec).normalized();
     rtn.world_up_dir.header.frame_id=world_coordinate_name;
-  //  rtn.world_up_dir.header.stamp = rostime;
     rtn.world_up_dir.vector.x = upVec.x();
     rtn.world_up_dir.vector.y = upVec.y();
     rtn.world_up_dir.vector.z = upVec.z();
-    rtn.world_right_dir.header.frame_id=world_coordinate_name;
-    //rtn.world_right_dir.header.stamp = rostime;
-    rtn.world_right_dir.vector.x = rightVec.x();
-    rtn.world_right_dir.vector.y = rightVec.y();
-    rtn.world_right_dir.vector.z = rightVec.z();
+    rtn.world_left_dir.header.frame_id=world_coordinate_name;
+    rtn.world_left_dir.vector.x = leftVec.x();
+    rtn.world_left_dir.vector.y = leftVec.y();
+    rtn.world_left_dir.vector.z = leftVec.z();
 
 
     rtn.world_position.header.frame_id=world_coordinate_name;
- //   rtn.world_position.header.stamp = rostime;
     rtn.world_position.point.x = motion_data.worldPositionX;
     rtn.world_position.point.y = motion_data.worldPositionY;
     rtn.world_position.point.z = motion_data.worldPositionZ;
 
 
     rtn.world_velocity.header.frame_id=world_coordinate_name;
-  //  rtn.world_velocity.header.stamp = rostime;
     rtn.world_velocity.vector.x = motion_data.worldVelocityX;
     rtn.world_velocity.vector.y = motion_data.worldVelocityY;
     rtn.world_velocity.vector.z = motion_data.worldVelocityZ;

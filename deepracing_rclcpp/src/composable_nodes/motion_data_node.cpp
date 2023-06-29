@@ -44,7 +44,7 @@ namespace composable_nodes
                     deepracing_msgs::msg::CarMotionData& ego_motion_data = rosdata.udp_packet.car_motion_data.at(rosdata.udp_packet.header.player_car_index);
                     ego_motion_data.world_forward_dir.header.stamp =
                     ego_motion_data.world_position.header.stamp = 
-                    ego_motion_data.world_right_dir.header.stamp =
+                    ego_motion_data.world_left_dir.header.stamp =
                     ego_motion_data.world_up_dir.header.stamp = 
                     ego_motion_data.world_velocity.header.stamp = rosdata.header.stamp;
                 }
@@ -54,7 +54,7 @@ namespace composable_nodes
                     {
                         motion_data.world_forward_dir.header.stamp =
                         motion_data.world_position.header.stamp = 
-                        motion_data.world_right_dir.header.stamp =
+                        motion_data.world_left_dir.header.stamp =
                         motion_data.world_up_dir.header.stamp = 
                         motion_data.world_velocity.header.stamp = rosdata.header.stamp;
                     }
