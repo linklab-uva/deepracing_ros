@@ -32,7 +32,7 @@ namespace composable_nodes
                 // }
             } 
         private:
-            inline DEEPRACING_RCLCPP_LOCAL void udp_cb(const udp_msgs::msg::UdpPacket::ConstPtr& udp_packet)
+            inline DEEPRACING_RCLCPP_LOCAL void udp_cb(const udp_msgs::msg::UdpPacket::UniquePtr& udp_packet)
             {
                 deepf1::twenty_twentythree::PacketMotionExData* udp_data = reinterpret_cast<deepf1::twenty_twentythree::PacketMotionExData*>((void*)&(udp_packet->data.at(0)));
                 deepracing_msgs::msg::TimestampedPacketMotionExData rosdata;
