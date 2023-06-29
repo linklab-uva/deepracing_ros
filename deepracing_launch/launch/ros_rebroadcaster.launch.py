@@ -60,6 +60,11 @@ def generate_launch_description():
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
+            plugin='deepracing::composable_nodes::ReceiveMotionExData',
+            name='motion_data_ex_node',
+            extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
+        launch_ros.descriptions.ComposableNode(
+            package='deepracing_rclcpp',
             plugin='deepracing::composable_nodes::ReceiveSessionData',
             name='session_data_node',
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),

@@ -21,6 +21,7 @@ namespace composable_nodes
             {
                 rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(10).durability_volatile();
                 m_motion_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("_motion_data/raw_udp", qos);
+                m_motion_data_ex_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("_motion_data_ex/raw_udp", qos);
                 m_telemetry_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("_telemetry_data/raw_udp", qos);
                 m_car_setup_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("_car_setup_data/raw_udp", qos);
                 m_car_status_data_udp_publisher_ = create_publisher<udp_msgs::msg::UdpPacket>("_car_status_data/raw_udp", qos);
@@ -90,6 +91,11 @@ namespace composable_nodes
                         m_participants_data_udp_publisher_->publish(std::move(udp_packet));
                         break;
                     }
+                    case deepf1::twenty_twentythree::PacketID::MOTION_DATA_EX:
+                    {
+                        m_motion_data_ex_udp_publisher_->publish(std::move(udp_packet));
+                        break;
+                    }
                     default:
                     {
                         return;
@@ -100,6 +106,7 @@ namespace composable_nodes
             
             rclcpp::Subscription<udp_msgs::msg::UdpPacket>::SharedPtr m_udp_subscription_;
             rclcpp::Publisher<udp_msgs::msg::UdpPacket>::SharedPtr m_motion_data_udp_publisher_;
+            rclcpp::Publisher<udp_msgs::msg::UdpPacket>::SharedPtr m_motion_data_ex_udp_publisher_;
             rclcpp::Publisher<udp_msgs::msg::UdpPacket>::SharedPtr m_telemetry_data_udp_publisher_;
             rclcpp::Publisher<udp_msgs::msg::UdpPacket>::SharedPtr m_car_setup_data_udp_publisher_;
             rclcpp::Publisher<udp_msgs::msg::UdpPacket>::SharedPtr m_car_status_data_udp_publisher_;

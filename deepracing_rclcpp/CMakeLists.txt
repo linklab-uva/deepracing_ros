@@ -187,6 +187,10 @@ rclcpp_components_register_node(deepracing_composable_nodes
   EXECUTABLE receive_motion_data_exe
 )
 rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::ReceiveMotionExData"
+  EXECUTABLE receive_motion_ex_data_exe
+)
+rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::ReceiveSessionData"
   EXECUTABLE receive_session_data_exe
 )

@@ -284,30 +284,33 @@ deepracing_msgs::msg::PacketHeader deepracing_ros::F1MsgUtils2023::toROS(const d
 
     return rtn;
 }
-deepracing_msgs::msg::PacketMotionExData toROS(const deepf1::twenty_twentythree::PacketMotionExData& motion_ex_data)
+deepracing_msgs::msg::PacketMotionExData deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::PacketMotionExData& motion_ex_data)
 {
-  
     deepracing_msgs::msg::PacketMotionExData rtn;
     rtn.header = deepracing_ros::F1MsgUtils2023::toROS(motion_ex_data.header);
-    rtn.angular_acceleration.x = motion_ex_data.angularAccelerationX;
-    rtn.angular_acceleration.y = motion_ex_data.angularAccelerationY;
-    rtn.angular_acceleration.z = motion_ex_data.angularAccelerationZ;
-    rtn.angular_velocity.x = motion_ex_data.angularVelocityX;
-    rtn.angular_velocity.y = motion_ex_data.angularVelocityY;
-    rtn.angular_velocity.z = motion_ex_data.angularVelocityZ;
-    rtn.local_velocity.x = motion_ex_data.localVelocityX;
-    rtn.local_velocity.y = motion_ex_data.localVelocityY;
-    rtn.local_velocity.z = motion_ex_data.localVelocityZ;
+    rtn.angular_acceleration.x = motion_ex_data.angularAccelerationZ;
+    rtn.angular_acceleration.y = motion_ex_data.angularAccelerationX;
+    rtn.angular_acceleration.z = motion_ex_data.angularAccelerationY;
+    rtn.angular_velocity.x = motion_ex_data.angularVelocityZ;
+    rtn.angular_velocity.y = motion_ex_data.angularVelocityX;
+    rtn.angular_velocity.z = motion_ex_data.angularVelocityY;
+    rtn.local_velocity.x = motion_ex_data.localVelocityZ;
+    rtn.local_velocity.y = motion_ex_data.localVelocityX;
+    rtn.local_velocity.z = motion_ex_data.localVelocityY;
     rtn.front_wheels_angle = motion_ex_data.frontWheelsAngle;
-    std::copy_n(std::cbegin(motion_ex_data.wheelSlipAngle), rtn.wheel_slip_angle.size(), rtn.wheel_slip_angle.begin());
-    std::copy_n(std::cbegin(motion_ex_data.wheelSlipRatio), rtn.wheel_slip_ratio.size(), rtn.wheel_slip_ratio.begin());
-    std::copy_n(std::cbegin(motion_ex_data.wheelSpeed), rtn.wheel_speed.size(), rtn.wheel_speed.begin());
-    std::copy_n(std::cbegin(motion_ex_data.suspensionAcceleration), rtn.suspension_acceleration.size(), rtn.suspension_acceleration.begin());
-    std::copy_n(std::cbegin(motion_ex_data.suspensionVelocity), rtn.suspension_velocity.size(), rtn.suspension_velocity.begin());
-    std::copy_n(std::cbegin(motion_ex_data.suspensionPosition), rtn.suspension_position.size(), rtn.suspension_position.begin());
-    std::copy_n(std::cbegin(motion_ex_data.wheelLatForce), rtn.wheel_lat_force.size(), rtn.wheel_lat_force.begin());
-    std::copy_n(std::cbegin(motion_ex_data.wheelLongForce), rtn.wheel_long_force.size(), rtn.wheel_long_force.begin());
-    std::copy_n(std::cbegin(motion_ex_data.wheelVertForce), rtn.wheel_vert_force.size(), rtn.wheel_vert_force.begin());
+    rtn.height_of_cg_above_ground = motion_ex_data.heightOfCOGAboveGround;
+    for(std::size_t i = 0; i < 4; i++)
+    {
+      rtn.wheel_slip_angle[i] = motion_ex_data.wheelSlipAngle[i];
+      rtn.wheel_slip_ratio[i] = motion_ex_data.wheelSlipRatio[i];
+      rtn.wheel_speed[i] = motion_ex_data.wheelSpeed[i];
+      rtn.suspension_acceleration[i] = motion_ex_data.suspensionAcceleration[i];
+      rtn.suspension_velocity[i] = motion_ex_data.suspensionVelocity[i];
+      rtn.suspension_position[i] = motion_ex_data.suspensionPosition[i];
+      rtn.wheel_lat_force[i] = motion_ex_data.wheelLatForce[i];
+      rtn.wheel_long_force[i] = motion_ex_data.wheelLongForce[i];
+      rtn.wheel_vert_force[i] = motion_ex_data.wheelVertForce[i];
+    }
     return rtn;
 }
 deepracing_msgs::msg::PacketMotionData deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::PacketMotionData& motion_data, bool copy_all_cars)
