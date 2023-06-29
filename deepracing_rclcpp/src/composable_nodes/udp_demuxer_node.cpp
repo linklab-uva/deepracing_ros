@@ -36,13 +36,13 @@ namespace composable_nodes
             inline DEEPRACING_RCLCPP_LOCAL void udp_cb(udp_msgs::msg::UdpPacket::UniquePtr udp_packet)
             {
                 
-                // if(udp_packet->data.size()<sizeof(deepf1::twenty_twentythree::PacketEventData))
-                // {
-                //     RCLCPP_ERROR(get_logger(), 
-                //         "Received a packet with only %llu bytes. Smallest packet that should ever be received (Event Data) has %llu bytes",
-                //              udp_packet->data.size(), sizeof(deepf1::twenty_twentythree::PacketEventData));
-                //     return;
-                // }
+                if(udp_packet->data.size()<deepf1::twenty_twentythree::SMALLEST_EVENT_PACKET_SIZE)
+                {
+                    RCLCPP_ERROR(get_logger(), 
+                        "Received a packet with only %lu bytes. Smallest packet that should ever be received (Event Data) has at least %u bytes",
+                             udp_packet->data.size(), deepf1::twenty_twentythree::SMALLEST_EVENT_PACKET_SIZE);
+                    return;
+                }
                 uint16_t* packet_format = reinterpret_cast<uint16_t*>(&(udp_packet->data[0]));
                 if(!((*packet_format)==2023))
                 {
