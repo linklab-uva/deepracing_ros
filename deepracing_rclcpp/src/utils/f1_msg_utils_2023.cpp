@@ -240,7 +240,31 @@ deepracing_msgs::msg::PacketSessionData deepracing_ros::F1MsgUtils2023::toROS(co
   rtn.braking_assist = session_data.brakingAssist;
   rtn.drs_assist = session_data.DRSAssist;
   rtn.dynamic_racing_line = session_data.dynamicRacingLine;
-  rtn.dynamic_racing_line_type = session_data.dynamicRacingLineType;     
+  rtn.dynamic_racing_line_type = session_data.dynamicRacingLineType;    
+  rtn.ers_assist = session_data.ERSAssist;
+  rtn.forecast_accuracy = session_data.forecastAccuracy;
+  rtn.game_mode = session_data.gameMode;
+  rtn.gearbox_assist = session_data.gearboxAssist;
+  rtn.num_red_flag_periods = session_data.numRedFlagPeriods;
+  rtn.num_safety_car_periods = session_data.numSafetyCarPeriods;
+  rtn.num_virtual_safety_car_periods = session_data.numVirtualSafetyCarPeriods;
+  rtn.pit_assist = session_data.pitAssist;
+  rtn.pit_release_assist = session_data.pitReleaseAssist;
+  rtn.pit_speed_limit = session_data.pitSpeedLimit;
+  rtn.pit_stop_rejoin_position = session_data.pitStopRejoinPosition;
+  rtn.pit_stop_window_ideal_lap = session_data.pitStopWindowIdealLap;
+  rtn.pit_stop_window_latest_lap = session_data.pitStopWindowLatestLap;
+  rtn.rule_set = session_data.ruleSet;
+  rtn.session_duration = session_data.sessionDuration;
+  rtn.session_length = session_data.sessionLength;
+  rtn.sli_pro_native_support = session_data.sliProNativeSupport;
+  rtn.steering_assist = session_data.steeringAssist;
+  rtn.temperature_units_lead_player = session_data.temperatureUnitsLeadPlayer;
+  rtn.temperature_units_secondary_player = session_data.temperatureUnitsSecondaryPlayer;
+  rtn.time_of_day = session_data.timeOfDay;
+  rtn.total_laps = session_data.totalLaps;
+  rtn.weekend_link_identifier = session_data.weekendLinkIdentifier; 
+  
   return rtn;
 }
 deepracing_msgs::msg::CarTelemetryData deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::CarTelemetryData& telemetry_data)
@@ -253,15 +277,20 @@ deepracing_msgs::msg::CarTelemetryData deepracing_ros::F1MsgUtils2023::toROS(con
   rtn.engine_rpm = telemetry_data.engineRPM;
   rtn.engine_temperature = telemetry_data.engineTemperature;
   rtn.gear = telemetry_data.gear;
+  rtn.rev_lights_bit_value = telemetry_data.revLightsBitValue;
   rtn.rev_lights_percent = telemetry_data.revLightsPercent;
   rtn.speed = telemetry_data.speed;
   //We use a left-positive convention for steering angle, but the F1 UDP uses a right-positive.
   rtn.steer = -telemetry_data.steer;
   rtn.throttle = telemetry_data.throttle;
-  std::copy_n(&(telemetry_data.brakesTemperature[0]), rtn.brakes_temperature.size(), rtn.brakes_temperature.begin());
-  std::copy_n(&(telemetry_data.tyresInnerTemperature[0]), rtn.tyres_inner_temperature.size(), rtn.tyres_inner_temperature.begin());
-  std::copy_n(&(telemetry_data.tyresPressure[0]), rtn.tyres_pressure.size(), rtn.tyres_pressure.begin());
-  std::copy_n(&(telemetry_data.tyresSurfaceTemperature[0]), rtn.tyres_surface_temperature.size(), rtn.tyres_surface_temperature.begin());
+  for(std::size_t i = 0; i < 4; i++)
+  {
+    rtn.brakes_temperature[i] = telemetry_data.brakesTemperature[i];
+    rtn.tyres_inner_temperature[i] = telemetry_data.tyresInnerTemperature[i];
+    rtn.tyres_pressure[i] = telemetry_data.tyresPressure[i];
+    rtn.tyres_surface_temperature[i] = telemetry_data.tyresSurfaceTemperature[i];
+    rtn.surface_type[i] = telemetry_data.surfaceType[i];
+  }
   return rtn;
 }
 deepracing_msgs::msg::PacketCarTelemetryData deepracing_ros::F1MsgUtils2023::toROS(const deepf1::twenty_twentythree::PacketCarTelemetryData& telemetry_data, bool copy_all_cars)
