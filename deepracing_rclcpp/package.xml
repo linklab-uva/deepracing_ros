@@ -11,6 +11,7 @@
   <depend>ackermann_msgs</depend>
   <depend>control_msgs</depend>
   <depend>control_toolbox</depend>
+  <depend>deepracing_cpp</depend>  
   <depend>deepracing_msgs</depend>
   <depend>f1_datalogger</depend>
   <depend>geometry_msgs</depend>
