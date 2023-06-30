@@ -134,18 +134,18 @@ def extractOrientation(packet : drmsgs.PacketMotionData, car_index = -1) -> scip
          raise ValueError("cannot extract provided index: %d" % (idx,))
    motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
 
-   rightdir : geo_msgs.Vector3 = motion_data.world_right_dir.vector
+   leftdir : geo_msgs.Vector3 = motion_data.world_left_dir.vector
    forwarddir : geo_msgs.Vector3 = motion_data.world_forward_dir.vector
 
-   rightvector = np.array((rightdir.x, rightdir.y, rightdir.z), dtype=np.float64)
-   rightvector = rightvector/la.norm(rightvector)
+   leftvector = np.array((leftdir.x, leftdir.y, leftdir.z), dtype=np.float64)
+   leftvector = leftvector/la.norm(leftvector)
 
    forwardvector = np.array((forwarddir.x, forwarddir.y, forwarddir.z), dtype=np.float64)
    forwardvector = forwardvector/la.norm(forwardvector)
 
-   upvector = np.cross(rightvector,forwardvector)
+   upvector = np.cross(forwardvector,leftvector)
    upvector = upvector/la.norm(upvector)
-   rotationmat = np.column_stack([forwardvector,-rightvector,upvector])
+   rotationmat = np.column_stack([forwardvector,leftvector,upvector])
    return scipy.spatial.transform.Rotation.from_matrix(rotationmat)
 
 def extractPose(packet : drmsgs.PacketMotionData, car_index = -1) -> Tuple[np.ndarray, scipy.spatial.transform.Rotation]:
