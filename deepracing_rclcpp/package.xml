@@ -15,6 +15,7 @@
   <depend>deepracing_msgs</depend>
   <depend>f1_datalogger</depend>
   <depend>geometry_msgs</depend>
+  <depend>jsoncpp</depend>
   <depend>image_tools</depend>
   <depend>image_transport</depend>
   <depend>laser_geometry</depend>
