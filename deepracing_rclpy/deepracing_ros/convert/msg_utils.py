@@ -81,7 +81,7 @@ def extractAcceleration(packet : drmsgs.PacketMotionData , car_index = -1) -> np
    acceleration = 9.8*np.array( (motion_data.g_force_longitudinal, motion_data.g_force_lateral, motion_data.g_force_vertical), dtype=np.float64)
    return acceleration 
 
-def extractAngularVelocity(packet : drmsgs.PacketMotionData) -> np.ndarray:
+def extractAngularVelocity(packet : drmsgs.PacketMotionExData) -> np.ndarray:
    angular_velocity = np.array( (packet.angular_velocity.x, packet.angular_velocity.y, packet.angular_velocity.z), dtype=np.float64)
    return angular_velocity 
 
@@ -216,3 +216,96 @@ def torchToPoseMsg(pose_torch : torch.Tensor) -> geo_msgs.Pose:
    quatnp = rotsp.as_quat()
    rtn.orientation = geo_msgs.Quaternion(x = float(quatnp[0]), y = float(quatnp[1]), z = float(quatnp[2]), w = float(quatnp[3]))
    return rtn
+
+def numpifySessionData(session_data_msgs : list[drmsgs.TimestampedPacketSessionData], float_type=np.float32, int_type=np.int32) -> \
+   dict[str, np.ndarray]:
+   numpackets = len(session_data_msgs)
+   if numpackets<=0:
+      raise ValueError("input list cannot be empty")
+   session_times = np.empty(numpackets, dtype=float_type)
+   game_modes = np.empty(numpackets, dtype=int_type)
+   game_paused = np.empty(numpackets, dtype=int_type)
+   session_types = np.empty(numpackets, dtype=int_type)
+   track_ids = np.empty(numpackets, dtype=int_type)
+   for packetnumber in range(numpackets):
+      session_data : drmsgs.PacketSessionData = session_data_msgs[packetnumber].udp_packet
+      session_times[packetnumber] = session_data.header.session_time
+      track_ids[packetnumber] = session_data.track_id
+      game_modes[packetnumber] = session_data.game_mode
+      game_paused[packetnumber] = session_data.game_paused
+      session_types[packetnumber] = session_data.session_type
+   return { 
+      "session_times": session_times, 
+      "track_ids": track_ids, 
+      "game_modes": game_modes, 
+      "session_types": session_types, 
+      "game_paused": game_paused 
+   }
+def numpifyMotionData(motion_data_msgs : list[drmsgs.TimestampedPacketMotionData], float_type=np.float32) -> \
+   dict[str, np.ndarray]:
+   numpackets = len(motion_data_msgs)
+   if numpackets<=0:
+      raise ValueError("input list cannot be empty")
+   numdrivers = len(motion_data_msgs[0].udp_packet.car_motion_data)
+   session_times = np.empty(numpackets, dtype=float_type)
+   positions = np.empty([numdrivers, numpackets, 3], dtype=float_type)
+   quaternions = np.empty([numdrivers, numpackets, 4], dtype=float_type)
+   velocities = np.empty([numdrivers, numpackets, 3], dtype=float_type)
+   accelerations = np.empty([numdrivers, numpackets, 3], dtype=float_type)
+
+   for packetnumber in range(numpackets):
+      session_times[packetnumber] = motion_data_msgs[packetnumber].udp_packet.header.session_time
+      motion_packet = motion_data_msgs[packetnumber].udp_packet
+      for carindex in range(numdrivers):
+         position, rotation = extractPose(motion_packet, car_index=carindex)
+         positions[carindex, packetnumber] = position.astype(float_type)
+         quaternions[carindex, packetnumber] = rotation.as_quat().astype(float_type)
+         velocities[carindex, packetnumber] = extractVelocity(motion_packet, car_index=carindex)
+         accelerations[carindex, packetnumber] = extractAcceleration(motion_packet, car_index=carindex)
+   return { 
+      "session_times": session_times, 
+      "positions" : positions, 
+      "quaternions" : quaternions, 
+      "velocities": velocities, 
+      "accelerations": accelerations
+   }
+
+def numpifyLapData(lap_data_msgs : list[drmsgs.TimestampedPacketLapData], float_type=np.float32, int_type=np.int32) -> \
+   dict[str, np.ndarray]:
+   numpackets = len(lap_data_msgs)
+   if numpackets<=0:
+      raise ValueError("input list cannot be empty")
+   numdrivers = len(lap_data_msgs[0].udp_packet.lap_data)
+   session_times = np.empty(numpackets, dtype=float_type)
+   lap_distances = np.empty([numdrivers, numpackets], dtype=float_type)
+   total_distances = np.empty([numdrivers, numpackets], dtype=float_type)
+   last_lap_times = np.empty([numdrivers, numpackets], dtype=float_type)
+   current_lap_times = np.empty([numdrivers, numpackets], dtype=float_type)
+   lap_numbers = np.empty([numdrivers, numpackets], dtype=int_type)
+   result_status = np.empty([numdrivers, numpackets], dtype=int_type)
+   for packetnumber in range(numpackets):
+      session_times[packetnumber] = lap_data_msgs[packetnumber].udp_packet.header.session_time
+      lap_data_array : List[drmsgs.LapData] = lap_data_msgs[packetnumber].udp_packet.lap_data
+      for carindex in range(numdrivers):
+         lap_data : drmsgs.LapData = lap_data_array[carindex]
+         lap_distances[carindex, packetnumber] = lap_data.lap_distance
+         total_distances[carindex, packetnumber] = lap_data.total_distance
+         if lap_data.last_lap_time_in_ms<=0:
+            last_lap_times[carindex, packetnumber] = np.inf
+         else:
+            last_lap_times[carindex, packetnumber] = float(lap_data.last_lap_time_in_ms)/1000.0
+         if lap_data.current_lap_time_in_ms<0:
+            current_lap_times[carindex, packetnumber] = np.inf
+         else:
+            current_lap_times[carindex, packetnumber] = float(lap_data.current_lap_time_in_ms)/1000.0
+         lap_numbers[carindex, packetnumber] = lap_data.current_lap_num
+         result_status[carindex, packetnumber] = lap_data.result_status
+   return {
+      "session_times" : session_times,
+      "lap_distances" : lap_distances, 
+      "total_distances" : total_distances, 
+      "last_lap_times" : last_lap_times, 
+      "current_lap_times" : current_lap_times, 
+      "lap_numbers" : lap_numbers, 
+      "result_status" : result_status
+   }
