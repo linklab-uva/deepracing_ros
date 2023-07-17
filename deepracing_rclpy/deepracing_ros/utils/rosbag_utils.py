@@ -3,6 +3,7 @@ import numpy as np
 import os
 import tqdm
 import yaml
+import multiprocessing, multiprocessing.pool
 
 from rclpy.serialization import deserialize_message 
 from rosidl_runtime_py.utilities import get_message
@@ -57,6 +58,25 @@ def systemTimeKey( msg : Union[deepracing_msgs.msg.TimestampedPacketSessionData,
 def sessionTimeKey( msg : Union[deepracing_msgs.msg.TimestampedPacketSessionData, deepracing_msgs.msg.TimestampedPacketLapData, deepracing_msgs.msg.TimestampedPacketMotionData] ):
     return msg.udp_packet.header.session_time
 
+def allFromTopic(bag_dir : str, topicname : str) -> list:
+    metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
+    if not os.path.isfile(metadatafile):
+        raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
+    with open(metadatafile, "r") as f:
+        metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
+    topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
+    _, type_map, _, reader = open_bagfile(bag_dir)
+    msg_type = type_map[topicname]
+    msg_type_full = get_message(msg_type)
+    filt = rosbag2_py.StorageFilter([topicname])
+    reader.set_filter(filt)
+    out : list = []
+    for idx in tqdm.tqdm(iterable=range(topic_count_dict[topicname]), desc="Loading data from topic %s in bag: %s" % (topicname, bag_dir)):
+        if(reader.has_next()):
+            (topic, data, t) = reader.read_next()
+        out.append(deserialize_message(data, msg_type_full))
+    return out
+
 def getAllData(bag_dir : str)\
       -> Tuple[List[deepracing_msgs.msg.TimestampedPacketMotionData],\
                List[deepracing_msgs.msg.TimestampedPacketLapData],\
@@ -64,47 +84,55 @@ def getAllData(bag_dir : str)\
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
-    with open(metadatafile, "r") as f:
-        metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
-    topic_types, type_map, topic_metadata_map, reader = open_bagfile(bag_dir)
-    topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
-
+    
     motiondata_topic : str = "/motion_data"
     lapdata_topic : str = "/lap_data"
     sessiondata_topic : str = "/session_data"
+
+    # threadpool : multiprocessing.pool.Pool = multiprocessing.pool.Pool(processes=3)
+    # motion_result : multiprocessing.pool.AsyncResult = threadpool.apply_async(allFromTopic, (bag_dir, motiondata_topic)) 
+    # lap_result : multiprocessing.pool.AsyncResult = threadpool.apply_async(allFromTopic, (bag_dir, lapdata_topic)) 
+    # session_result : multiprocessing.pool.AsyncResult = threadpool.apply_async(allFromTopic, (bag_dir, sessiondata_topic)) 
+    # threadpool.close()
+    # threadpool.join()
+
+    # motion_packets : List[deepracing_msgs.msg.TimestampedPacketMotionData] = motion_result.get()
+    # lap_packets : List[deepracing_msgs.msg.TimestampedPacketLapData] = lap_result.get()
+    # session_packets : List[deepracing_msgs.msg.TimestampedPacketSessionData] = session_result.get()
+
+    with open(metadatafile, "r") as f:
+        metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
+    topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
+    _, _, _, reader = open_bagfile(bag_dir)
+
 
     topics = [lapdata_topic, motiondata_topic, sessiondata_topic]
     count = int(np.sum(np.asarray([topic_count_dict[t] for t in topics], dtype=np.int64)))
     filt = rosbag2_py.StorageFilter(topics)
     reader.set_filter(filt)
 
-    motiondata_type_string : str = "deepracing_msgs/msg/TimestampedPacketMotionData"
-    lapdata_type_string : str = "deepracing_msgs/msg/TimestampedPacketLapData"
-    session_type_string : str = "deepracing_msgs/msg/TimestampedPacketSessionData"
+    motiondata_type = get_message("deepracing_msgs/msg/TimestampedPacketMotionData")
+    lapdata_type = get_message("deepracing_msgs/msg/TimestampedPacketLapData")
+    session_type = get_message("deepracing_msgs/msg/TimestampedPacketSessionData")
 
     motion_packets : List[deepracing_msgs.msg.TimestampedPacketMotionData] = []
     lap_packets : List[deepracing_msgs.msg.TimestampedPacketLapData] = []
     session_packets : List[deepracing_msgs.msg.TimestampedPacketSessionData] = []
-
 
     for idx in tqdm.tqdm(iterable=range(count), desc="Loading data from bag: %s" % (bag_dir,)):
         if(reader.has_next()):
             (topic, data, t) = reader.read_next()
         else:
             break
-        msg_type = type_map[topic]
-        msg_type_full = get_message(msg_type)
-        if msg_type==motiondata_type_string:
-            current_msg : deepracing_msgs.msg.TimestampedPacketMotionData = deserialize_message(data, msg_type_full)
+        if topic==motiondata_topic:
+            current_msg : deepracing_msgs.msg.TimestampedPacketMotionData = deserialize_message(data, motiondata_type)
             motion_packets.append(current_msg)
-        elif msg_type==lapdata_type_string:
-            current_msg : deepracing_msgs.msg.TimestampedPacketLapData = deserialize_message(data, msg_type_full)
+        elif topic==lapdata_topic:
+            current_msg : deepracing_msgs.msg.TimestampedPacketLapData = deserialize_message(data, lapdata_type)
             lap_packets.append(current_msg)
-        elif msg_type==session_type_string:
-            current_msg : deepracing_msgs.msg.TimestampedPacketSessionData = deserialize_message(data, msg_type_full)
+        elif topic==sessiondata_topic:
+            current_msg : deepracing_msgs.msg.TimestampedPacketSessionData = deserialize_message(data, session_type)
             session_packets.append(current_msg)
-        else: 
-            raise ValueError("topic %s contains data of type %s" % (topic,msg_type))
         
     motion_packets_sorted = sorted(motion_packets, key=sessionTimeKey)
     isearch_motion = 0
