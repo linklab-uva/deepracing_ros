@@ -297,6 +297,10 @@ def numpifyLapData(lap_data_msgs : list[drmsgs.TimestampedPacketLapData], float_
    current_lap_times = np.empty([numdrivers, numpackets], dtype=float_type)
    lap_numbers = np.empty([numdrivers, numpackets], dtype=int_type)
    result_status = np.empty([numdrivers, numpackets], dtype=int_type)
+   driver_status = np.empty([numdrivers, numpackets], dtype=int_type)
+   pit_status = np.empty([numdrivers, numpackets], dtype=int_type)
+   pit_lane_timer_active = np.empty([numdrivers, numpackets], dtype=bool)
+   
    for packetnumber in range(numpackets):
       session_times[packetnumber] = lap_data_msgs[packetnumber].udp_packet.header.session_time
       lap_packet : drmsgs.PacketLapData = lap_data_msgs[packetnumber].udp_packet
@@ -317,6 +321,10 @@ def numpifyLapData(lap_data_msgs : list[drmsgs.TimestampedPacketLapData], float_
             current_lap_times[carindex, packetnumber] = float(lap_data.current_lap_time_in_ms)/1000.0
          lap_numbers[carindex, packetnumber] = lap_data.current_lap_num
          result_status[carindex, packetnumber] = lap_data.result_status
+         driver_status[carindex, packetnumber] = lap_data.driver_status
+         pit_status[carindex, packetnumber] = lap_data.pit_status
+         pit_lane_timer_active[carindex, packetnumber] = lap_data.pit_lane_timer_active>0
+         
    return {
       "session_times" : session_times,
       "frame_identifiers": frame_identifiers, 
@@ -326,5 +334,8 @@ def numpifyLapData(lap_data_msgs : list[drmsgs.TimestampedPacketLapData], float_
       "last_lap_times" : last_lap_times, 
       "current_lap_times" : current_lap_times, 
       "lap_numbers" : lap_numbers, 
-      "result_status" : result_status
+      "result_status" : result_status, 
+      "driver_status" : driver_status, 
+      "pit_status" : pit_status, 
+      "pit_lane_timer_active" : pit_lane_timer_active
    }
