@@ -77,7 +77,7 @@ def allFromTopic(bag_dir : str, topicname : str) -> list:
         out.append(deserialize_message(data, msg_type_full))
     return out
 
-def getAllData(bag_dir : str)\
+def getAllData(bag_dir : str, with_tqdm=True)\
       -> Tuple[List[deepracing_msgs.msg.TimestampedPacketMotionData],\
                List[deepracing_msgs.msg.TimestampedPacketLapData],\
                List[deepracing_msgs.msg.TimestampedPacketSessionData]]:
@@ -118,8 +118,11 @@ def getAllData(bag_dir : str)\
     motion_packets : List[deepracing_msgs.msg.TimestampedPacketMotionData] = []
     lap_packets : List[deepracing_msgs.msg.TimestampedPacketLapData] = []
     session_packets : List[deepracing_msgs.msg.TimestampedPacketSessionData] = []
-
-    for idx in tqdm.tqdm(iterable=range(count), desc="Loading data from bag: %s" % (bag_dir,)):
+    if with_tqdm:
+        tq = tqdm.tqdm(iterable=range(count), desc="Loading data from bag: %s" % (bag_dir,))
+    else:
+        tq = range(count)
+    for idx in tq:
         if(reader.has_next()):
             (topic, data, t) = reader.read_next()
         else:
