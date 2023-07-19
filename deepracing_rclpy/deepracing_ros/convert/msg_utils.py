@@ -133,11 +133,15 @@ def extractOrientation(packet : drmsgs.PacketMotionData, car_index = -1) -> scip
       if idx<0 or idx>22:
          raise ValueError("cannot extract provided index: %d" % (idx,))
    motion_data : drmsgs.CarMotionData = packet.car_motion_data[idx]
+   try:
+      leftdir : geo_msgs.Vector3 = motion_data.world_left_dir.vector
+      leftvector = np.array((leftdir.x, leftdir.y, leftdir.z), dtype=np.float64)
+   except AttributeError as e:
+      rightdir : geo_msgs.Vector3 = motion_data.world_right_dir.vector
+      leftvector = -np.array((rightdir.x, rightdir.y, rightdir.z), dtype=np.float64)
 
-   leftdir : geo_msgs.Vector3 = motion_data.world_left_dir.vector
    forwarddir : geo_msgs.Vector3 = motion_data.world_forward_dir.vector
 
-   leftvector = np.array((leftdir.x, leftdir.y, leftdir.z), dtype=np.float64)
    leftvector = leftvector/la.norm(leftvector)
 
    forwardvector = np.array((forwarddir.x, forwarddir.y, forwarddir.z), dtype=np.float64)
@@ -233,7 +237,10 @@ def numpifySessionData(session_data_msgs : list[drmsgs.TimestampedPacketSessionD
       session_data : drmsgs.PacketSessionData = session_data_msgs[packetnumber].udp_packet
       session_times[packetnumber] = session_data.header.session_time
       frame_identifiers[packetnumber] = session_data.header.frame_identifier
-      overall_frame_identifiers[packetnumber] = session_data.header.overall_frame_identifier
+      try:
+         overall_frame_identifiers[packetnumber] = session_data.header.overall_frame_identifier
+      except AttributeError as e:
+         overall_frame_identifiers[packetnumber] = session_data.header.frame_identifier
       track_ids[packetnumber] = session_data.track_id
       game_modes[packetnumber] = session_data.game_mode
       game_paused[packetnumber] = session_data.game_paused
@@ -265,7 +272,10 @@ def numpifyMotionData(motion_data_msgs : list[drmsgs.TimestampedPacketMotionData
       session_times[packetnumber] = motion_data_msgs[packetnumber].udp_packet.header.session_time
       motion_packet = motion_data_msgs[packetnumber].udp_packet
       frame_identifiers[packetnumber] = motion_packet.header.frame_identifier
-      overall_frame_identifiers[packetnumber] = motion_packet.header.overall_frame_identifier
+      try:
+         overall_frame_identifiers[packetnumber] = motion_packet.header.overall_frame_identifier
+      except AttributeError as e:
+         overall_frame_identifiers[packetnumber] = motion_packet.header.frame_identifier
       for carindex in range(numdrivers):
          position, rotation = extractPose(motion_packet, car_index=carindex)
          positions[carindex, packetnumber] = position.astype(float_type)
@@ -305,7 +315,10 @@ def numpifyLapData(lap_data_msgs : list[drmsgs.TimestampedPacketLapData], float_
       session_times[packetnumber] = lap_data_msgs[packetnumber].udp_packet.header.session_time
       lap_packet : drmsgs.PacketLapData = lap_data_msgs[packetnumber].udp_packet
       frame_identifiers[packetnumber] = lap_packet.header.frame_identifier
-      overall_frame_identifiers[packetnumber] = lap_packet.header.overall_frame_identifier
+      try:
+         overall_frame_identifiers[packetnumber] = lap_packet.header.overall_frame_identifier
+      except AttributeError as e:
+         overall_frame_identifiers[packetnumber] = lap_packet.header.frame_identifier
       lap_data_array : List[drmsgs.LapData] = lap_packet.lap_data
       for carindex in range(numdrivers):
          lap_data : drmsgs.LapData = lap_data_array[carindex]
