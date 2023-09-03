@@ -1,14 +1,15 @@
 <launch>
    <arg name="carname" default=""/>
    <arg name="use_sim_time" default="false"/>
-   <arg name="global" default="true"/>
-   <arg name="with_angvel" default="false"/>
+   <arg name="ekf_global" default="true"/>
+   <arg name="ekf_with_angvel" default="false"/>
+   <arg name="ekf_frequency" default="100.0"/>
    <arg name="index" default="-1"/>
-   <group scoped="false" if="$(var with_angvel)">
+   <group scoped="false" if="$(var ekf_with_angvel)">
       <let name="ekf_odom_mask"
       value="[true,true,true,true,true,true,true,true,true,true,true,true,false,false,false]"/>
    </group>
-   <group scoped="false" unless="$(var with_angvel)">
+   <group scoped="false" unless="$(var ekf_with_angvel)">
       <let name="ekf_odom_mask" 
       value="[true,true,true,true,true,true,true,true,true,false,false,false,false,false,false]"/>
    </group>
@@ -19,6 +20,7 @@
         <param name="odom_frame" value="odom_$(var carname)"/>
         <param name="use_sim_time" value="$(var use_sim_time)"/>
         <param name="odom0_config" value="$(var ekf_odom_mask)"/>
+        <param name="frequency" value="$(var ekf_frequency)"/>
         <remap from="odometry/filtered" to="odom/filtered"/>
         <remap from="/diagnostics" to="diagnostics"/>
    </node>
@@ -27,7 +29,7 @@
         <param name="index" value="$(var index)"/>
    </node>
 
-   <group scoped="false" unless="$(var global)">
+   <group scoped="false" unless="$(var ekf_global)">
       <node pkg="robot_localization" exec="ekf_node" name="ekf_localization_node_local" output="screen" namespace="$(var carname)">
          <param from="$(find-pkg-share deepracing_launch)/config/ekf_local.yaml"/>
          <param name="base_link_frame" value="centroid_$(var carname)"/>
@@ -46,7 +48,7 @@
       </node>
    </group>
 
-   <group scoped="false" if="$(var global)">
+   <group scoped="false" if="$(var ekf_global)">
       <node pkg="deepracing_rclcpp" exec="map_to_baselink_transform_exe" name="$(var carname)_maptobl" namespace="$(var carname)">
          <param name="use_sim_time" value="$(var use_sim_time)"/>
       </node>
