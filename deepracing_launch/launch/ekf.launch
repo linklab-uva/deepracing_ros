@@ -37,6 +37,7 @@
          <param name="world_frame" value="odom_$(var carname)"/>
          <param name="use_sim_time" value="$(var use_sim_time)"/>
          <param name="odom0_config" value="$(var ekf_odom_mask)"/>
+         <param name="frequency" value="$(var ekf_frequency)"/>
          <remap from="odometry/filtered" to="localodom/filtered"/>
          <remap from="/diagnostics" to="diagnostics"/>
       </node>
