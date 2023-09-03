@@ -18,11 +18,10 @@ def generate_launch_description():
     carname = DeclareLaunchArgument("carname", default_value="player1")
     index = DeclareLaunchArgument("index", default_value="-1")
     ekf_with_angvel = DeclareLaunchArgument("ekf_with_angvel", default_value="false")
-    ekf_frequency = DeclareLaunchArgument("ekf_frequency", default_value="100.0")
     boundary_pub = DeclareLaunchArgument("boundary_pub", default_value="false")
     use_sim_time = DeclareLaunchArgument("use_sim_time", default_value="false")
     
-    entries = [boundary_pub, carname, index, use_sim_time, with_ekf, ekf_global, ekf_with_angvel, ekf_frequency]
+    entries = [boundary_pub, carname, index, use_sim_time, with_ekf, ekf_global, ekf_with_angvel]
 
 
     
@@ -39,7 +38,6 @@ def generate_launch_description():
     entries.append(IncludeLaunchDescription(FrontendLaunchDescriptionSource(os.path.join(launch_dir,"ekf.launch")),\
       launch_arguments=[("ekf_with_angvel", LaunchConfiguration(ekf_with_angvel.name)), 
                         ("ekf_global", LaunchConfiguration(ekf_global.name)), 
-                        ("ekf_frequency", LaunchConfiguration(ekf_frequency.name)), 
                         (carname.name, LaunchConfiguration(carname.name)), 
                         (use_sim_time.name, LaunchConfiguration(use_sim_time.name)), 
                         (index.name, LaunchConfiguration(index.name))
