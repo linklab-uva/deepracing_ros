@@ -1,0 +1,61 @@
+repositories:
+  RSL:
+    type: git
+    url: https://github.com/PickNikRobotics/RSL.git
+    version: main
+  ackermann_msgs:
+    type: git
+    url: https://github.com/ros-drivers/ackermann_msgs.git
+    version: ros2
+  angles:
+    type: git
+    url: https://github.com/ros/angles.git
+    version: ros2
+  control_msgs:
+    type: git
+    url: https://github.com/ros-controls/control_msgs.git
+    version: humble
+  control_toolbox:
+    type: git
+    url: https://github.com/ros-controls/control_toolbox.git
+    version: ros2-master
+  cpp_polyfills:
+    type: git
+    url: https://github.com/PickNikRobotics/cpp_polyfills.git
+    version: main
+  diagnostics:
+    type: git
+    url: https://github.com/ros/diagnostics.git
+    version: ros2
+  filters:
+    type: git
+    url: https://github.com/ros/filters.git
+    version: ros2
+  generate_parameter_library:
+    type: git
+    url: https://github.com/PickNikRobotics/generate_parameter_library.git
+    version: main
+  geographic_info:
+    type: git
+    url: https://github.com/ros-geographic-info/geographic_info.git
+    version: ros2
+  random_numbers:
+    type: git
+    url: https://github.com/ros-planning/random_numbers.git
+    version: ros2
+  realtime_tools:
+    type: git
+    url: https://github.com/ros-controls/realtime_tools.git
+    version: master
+  robot_localization:
+    type: git
+    url: https://github.com/linklab-uva/robot_localization.git
+    version: set-full-state
+  ros2bag_tools:
+    type: git
+    url: https://github.com/AIT-Assistive-Autonomous-Systems/ros2bag_tools.git
+    version: master
+  udp_msgs:
+    type: git
+    url: https://github.com/flynneva/udp_msgs.git
+    version: main

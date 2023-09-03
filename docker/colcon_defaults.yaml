@@ -1,0 +1,10 @@
+{
+  "build":
+  {
+    "symlink-install": False,
+    "merge-install": True,
+    "cmake-args": [-DCMAKE_BUILD_TYPE=Release, -DCMAKE_CXX_STANDARD=17, -DBUILD_TESTING=OFF],
+    "ament-cmake-args": [-DCMAKE_BUILD_TYPE=Release, -DCMAKE_CXX_STANDARD=17, -DBUILD_TESTING=OFF],
+    "catkin-cmake-args": [-DCMAKE_BUILD_TYPE=Release, -DCMAKE_CXX_STANDARD=17, -DBUILD_TESTING=OFF]
+  }
+}
