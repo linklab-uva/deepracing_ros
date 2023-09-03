@@ -235,9 +235,9 @@ class MeasurementPublisher
 
       Eigen::Vector3d positioneigen_track(positionROS.point.x, positionROS.point.y, positionROS.point.z);
       Eigen::Matrix3d rotmat;
-      rotmat.col(0) = Eigen::Vector3d(leftROS.vector.x, leftROS.vector.y, leftROS.vector.z).normalized();
-      rotmat.col(1) = Eigen::Vector3d(forwardROS.vector.x, forwardROS.vector.y, forwardROS.vector.z).normalized();
-      rotmat.col(2) = Eigen::Vector3d(upROS.vector.x, upROS.vector.y, upROS.vector.z).normalized();
+      rotmat.col(0) = Eigen::Vector3d(forwardROS.vector.x, forwardROS.vector.y, forwardROS.vector.z).normalized();
+      rotmat.col(1) = Eigen::Vector3d(leftROS.vector.x, leftROS.vector.y, leftROS.vector.z).normalized();
+      rotmat.col(2) = rotmat.col(0).cross(rotmat.col(1));
       Eigen::Quaterniond rotationEigen(rotmat);
       rotationEigen.normalize();
     
