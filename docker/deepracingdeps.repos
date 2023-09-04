@@ -39,6 +39,10 @@ repositories:
     type: git
     url: https://github.com/ros-geographic-info/geographic_info.git
     version: ros2
+  pcl:
+    type: git
+    url: https://github.com/PointCloudLibrary/pcl.git
+    version: pcl-1.13.1 
   random_numbers:
     type: git
     url: https://github.com/ros-planning/random_numbers.git
@@ -51,6 +55,10 @@ repositories:
     type: git
     url: https://github.com/linklab-uva/robot_localization.git
     version: set-full-state
+  ros2_numpy:
+    type: git
+    url: https://github.com/Box-Robotics/ros2_numpy.git
+    version: humble
   ros2bag_tools:
     type: git
     url: https://github.com/AIT-Assistive-Autonomous-Systems/ros2bag_tools.git

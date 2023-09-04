@@ -2,7 +2,7 @@
 FROM althack/ros2:humble-dev
 
 # install ros2 packages
-RUN apt update && apt upgrade && apt install -y --no-install-recommends \
+RUN apt update && apt upgrade -y && apt install -y --no-install-recommends \
     wget \
     clang \
     clang-format \
@@ -10,7 +10,7 @@ RUN apt update && apt upgrade && apt install -y --no-install-recommends \
     nano \
     net-tools \
     tmux \
-    libpcl-dev \
+    # libpcl-dev \
     libopencv-dev \
     libgeographic-dev \
     libusb-1.0-0-dev \
@@ -27,6 +27,8 @@ RUN apt update && apt upgrade && apt install -y --no-install-recommends \
     libprotobuf-dev \
     libprotoc-dev \
     protobuf-compiler \
+    libopenmpi-dev \
+    libopenmpi3 \
     python3-setuptools \
     python3-pip \
     python3-numpy \
@@ -37,10 +39,15 @@ RUN apt update && apt upgrade && apt install -y --no-install-recommends \
     python3-matplotlib \
     python3-opencv \
     python3-pandas \
+    python3-requests \
     python3-scipy \
+    python3-skimage \
+    python3-sklearn \
     python3-transforms3d \
     python3-shapely \
     python3-typeguard \
+    python3-lmdb \
+    python3-tqdm \
     dos2unix \
     ros-humble-cv-bridge \
     ros-humble-image-transport \
@@ -49,8 +56,10 @@ RUN apt update && apt upgrade && apt install -y --no-install-recommends \
     ros-humble-robot-state-publisher \
     ros-humble-demo-nodes-cpp \
     ros-humble-demo-nodes-py \
+    ros-humble-rosbag2-storage-mcap \
+    ros-humble-tf-transformations \
     && rm -rf /var/lib/apt/lists/*
-
+RUN python3 -m pip install pkbar easydict torch
 ARG CACHEBUST
 
 RUN sudo update-alternatives --config cc
@@ -64,6 +73,7 @@ WORKDIR /opt/ros/deepracingdeps/src
 RUN vcs import . --input ./deepracingdeps.repos
 RUN chmod +x /opt/ros/humble/setup.sh
 WORKDIR /opt/ros/deepracingdeps
+ADD ./deps.meta /opt/ros/deepracingdeps/colcon.meta
 RUN rm -rf build log install && . /opt/ros/humble/setup.sh && colcon build 
 
 

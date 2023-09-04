@@ -1,0 +1,9 @@
+{
+    "names":
+    {
+        "PCL":
+        {
+            "cmake-args": [-DWITH_VTK=OFF],
+        }
+    }
+}
