@@ -123,6 +123,8 @@ class EKFMonitor(rclpy.node.Node):
             self.prev_motion_data = copy.deepcopy(motion_data)
             self.get_logger().info("First data packet received, initializing EKF state")
             self.publishState(self.prev_motion_data)
+        else:
+            self.prev_motion_data = copy.deepcopy(motion_data)
             self.destroy_subscription(self.motion_data_sub)
             self.motion_data_sub=None
             return        
