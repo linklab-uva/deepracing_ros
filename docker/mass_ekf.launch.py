@@ -16,8 +16,9 @@ def generate_launch_description():
     ekf_global = DeclareLaunchArgument("ekf_global", default_value="true")
     ekf_with_angvel = DeclareLaunchArgument("ekf_with_angvel", default_value="false")
     use_sim_time = DeclareLaunchArgument("use_sim_time", default_value="true")
+    ekf_frequency = DeclareLaunchArgument("ekf_frequency", default_value="50.0")
     
-    entries = [use_sim_time, with_ekf, ekf_global, ekf_with_angvel]
+    entries = [use_sim_time, with_ekf, ekf_global, ekf_with_angvel, ekf_frequency]
 
 
     
@@ -28,6 +29,7 @@ def generate_launch_description():
         launch_arguments=[(ekf_with_angvel.name, LaunchConfiguration(ekf_with_angvel.name)), 
                           (ekf_global.name, LaunchConfiguration(ekf_global.name)),
                           (use_sim_time.name, LaunchConfiguration(use_sim_time.name)),  
+                          (ekf_frequency.name, LaunchConfiguration(ekf_frequency.name)),  
                           ("carname", "car%s" % idx), 
                           ("index", str(idx)), 
                         ]
