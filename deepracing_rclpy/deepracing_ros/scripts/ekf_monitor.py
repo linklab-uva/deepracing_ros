@@ -73,7 +73,7 @@ class EKFMonitor(rclpy.node.Node):
         wallclocknow : rclpy.time.Time = self.get_clock().now()
         dt : rclpy.duration.Duration = wallclocknow - rclpy.time.Time.from_msg(self.prev_motion_data.header.stamp)
         dtfloat : float = float(dt.nanoseconds*1.0E-9)
-        if dtfloat>1.0:
+        if dtfloat>2.0:
             self.get_logger().info("Pause detected (delay time: %f seconds), resetting EKF state" % (dtfloat,))
             self.publishState(self.prev_motion_data)
     def odomCB(self, odom : nav_msgs.msg.Odometry):
