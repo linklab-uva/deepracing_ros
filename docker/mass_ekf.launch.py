@@ -1,4 +1,5 @@
-"""Launch the cpp_code executable in this package"""
+#Add or remove from this list as-needed
+cars = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
 
 import os
 import launch_ros.actions
@@ -22,8 +23,6 @@ def generate_launch_description():
 
 
     
-    #Add or remove from this list as-needed
-    cars = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     for idx in cars:
         entries.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(os.path.join(launch_dir,"utilities.launch.py")),\
         launch_arguments=[(ekf_with_angvel.name, LaunchConfiguration(ekf_with_angvel.name)), 
