@@ -76,7 +76,8 @@ WORKDIR /opt/ros/deepracingdeps
 ADD ./deps.meta /opt/ros/deepracingdeps/colcon.meta
 RUN rm -rf build log install && . /opt/ros/humble/setup.sh && colcon build 
 
-
+run rm -rf /opt/ros/deepracingdeps/build /opt/ros/deepracingdeps/log
+ARG CACHEBUST2
 RUN rm -rf /home/ros/deepracingws/src
 RUN mkdir -p /home/ros/deepracingws/src
 ADD ./deepracing.repos /home/ros/deepracingws/src/deepracing.repos 
