@@ -91,4 +91,7 @@ ADD ./colcon_defaults.yaml /home/ros/.colcon/defaults.yaml
 ADD ./deepracingsetup.bash /home/ros/deepracingsetup.bash
 RUN chmod a+x /home/ros/deepracingsetup.bash
 RUN chown ros:ros -R /opt/ros/deepracingdeps
+
+RUN mkdir -p /home/ros/launchscripts
+ADD ./mass_ekf.launch.py /home/ros/launchscripts/mass_ekf.launch.py
 RUN chown ros:ros -R /home/ros

@@ -73,7 +73,7 @@ class EKFMonitor(rclpy.node.Node):
         wallclocknow : rclpy.time.Time = self.get_clock().now()
         dt : rclpy.duration.Duration = wallclocknow - rclpy.time.Time.from_msg(self.prev_motion_data.header.stamp)
         dtfloat : float = float(dt.nanoseconds*1.0E-9)
-        if dtfloat>1.0:
+        if dtfloat>2.0:
             self.get_logger().info("Pause detected (delay time: %f seconds), resetting EKF state" % (dtfloat,))
             self.publishState(self.prev_motion_data)
     def odomCB(self, odom : nav_msgs.msg.Odometry):
@@ -123,19 +123,20 @@ class EKFMonitor(rclpy.node.Node):
             self.prev_motion_data = copy.deepcopy(motion_data)
             self.get_logger().info("First data packet received, initializing EKF state")
             self.publishState(self.prev_motion_data)
-            return        
-        previous_position : np.ndarray = deepracing_ros.convert.extractPosition(self.prev_motion_data.udp_packet, car_index=self.index)
-        previous_linear_velocity : np.ndarray = deepracing_ros.convert.extractVelocity(self.prev_motion_data.udp_packet, car_index=self.index)
-        tprevious : float = self.prev_motion_data.udp_packet.header.session_time
-        current_position : np.ndarray = deepracing_ros.convert.extractPosition(motion_data.udp_packet, car_index=self.index)
-        tcurrent : float = motion_data.udp_packet.header.session_time
-        dt : float = tcurrent - tprevious
-        predicted_position : np.ndarray = previous_position + dt*previous_linear_velocity
-        delta_pos : np.ndarray =  predicted_position - current_position
-        if np.linalg.norm(delta_pos, ord=2, axis=0)>10.0:
-            self.get_logger().info("Unexpected jump in car position, probably a lap reset.  Resetting EKF state")
-            self.publishState(motion_data)
-        self.prev_motion_data = copy.deepcopy(motion_data)
+        else:
+            self.prev_motion_data = copy.deepcopy(motion_data)
+        # previous_position : np.ndarray = deepracing_ros.convert.extractPosition(self.prev_motion_data.udp_packet, car_index=self.index)
+        # previous_linear_velocity : np.ndarray = deepracing_ros.convert.extractVelocity(self.prev_motion_data.udp_packet, car_index=self.index)
+        # tprevious : float = self.prev_motion_data.udp_packet.header.session_time
+        # current_position : np.ndarray = deepracing_ros.convert.extractPosition(motion_data.udp_packet, car_index=self.index)
+        # tcurrent : float = motion_data.udp_packet.header.session_time
+        # dt : float = tcurrent - tprevious
+        # predicted_position : np.ndarray = previous_position + dt*previous_linear_velocity
+        # delta_pos : np.ndarray =  predicted_position - current_position
+        # if np.linalg.norm(delta_pos, ord=2, axis=0)>10.0:
+        #     self.get_logger().info("Unexpected jump in car position, probably a lap reset.  Resetting EKF state")
+        #     self.publishState(motion_data)
+        # self.prev_motion_data = copy.deepcopy(motion_data)
 
 def main(args=None):
     rclpy.init(args=args)
