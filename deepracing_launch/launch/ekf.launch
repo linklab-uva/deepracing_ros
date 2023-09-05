@@ -24,7 +24,8 @@
         <remap from="odometry/filtered" to="odom/filtered"/>
         <remap from="/diagnostics" to="diagnostics"/>
    </node>
-   <node pkg="deepracing_rclpy" exec="ekf_monitor" namespace="$(var carname)">
+   <!-- <node pkg="deepracing_rclpy" exec="ekf_monitor" namespace="$(var carname)"> -->
+   <node pkg="deepracing_rclcpp" exec="ekf_monitor_exe" namespace="$(var carname)">
         <param name="use_sim_time" value="$(var use_sim_time)"/>
         <param name="index" value="$(var index)"/>
    </node>

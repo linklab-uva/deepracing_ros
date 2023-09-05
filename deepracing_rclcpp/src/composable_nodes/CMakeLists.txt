@@ -3,7 +3,6 @@ find_package(udp_msgs REQUIRED)
 set(deepracing_composable_node_srcs
   car_setup_node.cpp
   car_status_node.cpp
-  ekf_monitor.cpp
   lap_data_node.cpp
   motion_data_node.cpp
   motion_data_ex_node.cpp
@@ -15,6 +14,15 @@ set(deepracing_composable_node_srcs
   measurement_publisher.cpp
 )
 add_library(deepracing_composable_nodes SHARED ${deepracing_composable_node_srcs})
+
+find_package(message_filters)
+find_package(robot_localization)
+if(message_filters_FOUND AND robot_localization_FOUND)
+  target_sources(deepracing_composable_nodes PRIVATE ekf_monitor.cpp)
+  set(with_ekf_monitor_node_ TRUE PARENT_SCOPE)
+  ament_target_dependencies(deepracing_composable_nodes PUBLIC message_filters robot_localization)
+endif()
+
 if(WIN32)
   target_sources(deepracing_composable_nodes PRIVATE gamepad_multiplexer_node.cpp)
   target_link_libraries(deepracing_composable_nodes 
