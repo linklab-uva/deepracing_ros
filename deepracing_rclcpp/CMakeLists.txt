@@ -217,6 +217,10 @@ rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::MeasurementPublisher"
   EXECUTABLE measurement_publisher_exe
 )
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::EkfMonitor"
+  EXECUTABLE ekf_monitor_exe
+)
 if(with_gamepad_multiplexer_)
   rclcpp_components_register_node(deepracing_composable_nodes
     PLUGIN "deepracing::composable_nodes::GamepadMultiplexerNode"

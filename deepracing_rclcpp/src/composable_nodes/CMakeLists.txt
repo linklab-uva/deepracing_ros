@@ -3,6 +3,7 @@ find_package(udp_msgs REQUIRED)
 set(deepracing_composable_node_srcs
   car_setup_node.cpp
   car_status_node.cpp
+  ekf_monitor.cpp
   lap_data_node.cpp
   motion_data_node.cpp
   motion_data_ex_node.cpp
