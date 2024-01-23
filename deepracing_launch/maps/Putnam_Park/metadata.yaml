@@ -1,0 +1,14 @@
+clockwise: true
+name: Putnam Park Road Course
+startingline_pose:
+  position:
+  - 0.0
+  - 0.0
+  - 0.0
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+startinglinewidth: 10.118888478738379
+tracklength: 2853.864
