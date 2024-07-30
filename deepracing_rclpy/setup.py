@@ -34,6 +34,7 @@ setup(
               ])),
     entry_points={
         'console_scripts': [
+            'load_measurement_publisher = %s.scripts.load_measurement_publisher:main' % (python_pkg_name),
             'initialize_lifecycle_node = %s.scripts.initialize_lifecycle_node:main' % (python_pkg_name),
             'initial_raceline_setter = %s.scripts.initial_raceline_setter:main' % (python_pkg_name),
             'admiralnet_path_server = %s.scripts.admiralnet_path_server:main' % (python_pkg_name),
