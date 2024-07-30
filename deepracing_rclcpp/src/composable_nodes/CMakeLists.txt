@@ -1,4 +1,4 @@
-find_package(udp_msgs REQUIRED)
+
 
 set(deepracing_composable_node_srcs
   car_setup_node.cpp
@@ -12,6 +12,7 @@ set(deepracing_composable_node_srcs
   map_to_baselink_transform.cpp
   map_to_odom_transform.cpp
   measurement_publisher.cpp
+  trackmap_publisher.cpp
 )
 add_library(deepracing_composable_nodes SHARED ${deepracing_composable_node_srcs})
 
@@ -45,9 +46,11 @@ ament_target_dependencies(deepracing_composable_nodes
     rclcpp
     rclcpp_components
     ament_index_cpp
+    deepracing_cpp
     deepracing_msgs
     geometry_msgs
     nav_msgs
+    pcl_conversions
     random_numbers
     std_msgs
     tf2_ros
@@ -56,7 +59,8 @@ ament_target_dependencies(deepracing_composable_nodes
     udp_msgs  
 )
 
-target_link_libraries(deepracing_composable_nodes PUBLIC utils)
+target_link_libraries(deepracing_composable_nodes PUBLIC utils ${PCL_LIBRARIES})
+target_include_directories(deepracing_composable_nodes PUBLIC ${PCL_INCLUDE_DIRS})
 
 if(TARGET JsonCpp::JsonCpp)
   target_link_libraries(deepracing_composable_nodes PRIVATE JsonCpp::JsonCpp)

@@ -27,6 +27,8 @@ find_package(Boost REQUIRED COMPONENTS ${boost_components_})
 find_package(control_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(deepracing_cpp REQUIRED)
+message(STATUS "deepracing_cpp_LIBRARIES: ${deepracing_cpp_LIBRARIES}")
+message(STATUS "deepracing_cpp_INCLUDE_DIRS: ${deepracing_cpp_INCLUDE_DIRS}")
 find_package(deepracing_msgs REQUIRED)
 if(NOT TARGET JsonCpp::JsonCpp)
   find_package(jsoncpp CONFIG REQUIRED)
@@ -39,12 +41,14 @@ find_package(rclcpp REQUIRED)
 find_package(rosidl_default_runtime REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(pcl_conversions REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_sensor_msgs REQUIRED)
+find_package(udp_msgs REQUIRED)
 #optional stuff
 find_package(ackermann_msgs)
 find_package(control_msgs)
@@ -216,6 +220,10 @@ rclcpp_components_register_node(deepracing_composable_nodes
 rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::MeasurementPublisher"
   EXECUTABLE measurement_publisher_exe
+)
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::TrackmapPublisher"
+  EXECUTABLE trackmap_publisher
 )
 if(with_ekf_monitor_node_)
   rclcpp_components_register_node(deepracing_composable_nodes
