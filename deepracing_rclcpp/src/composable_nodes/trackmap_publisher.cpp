@@ -20,12 +20,11 @@ namespace deepracing
 {
 namespace composable_nodes
 {
-
     class TrackmapPublisher : public rclcpp::Node
     {
         public:
             DEEPRACING_RCLCPP_PUBLIC TrackmapPublisher(const rclcpp::NodeOptions & options) : 
-                rclcpp::Node("trackmap_publisher", options)
+                rclcpp::Node("trackmap_publisher", options), names_map_(deepracing::Utils::trackNames())
             {
                 map_to_track_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(this);
                 rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(10).durability_volatile();
@@ -39,13 +38,13 @@ namespace composable_nodes
                 ob_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("outer_boundary", qos);
                 raceline_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("optimal_raceline", qos);
                 timer_ = rclcpp::create_timer(this, get_clock(), rclcpp::Duration::from_seconds(1.0), 
-                    std::bind(&TrackmapPublisher::timer_cb, this));
-                
+                    std::bind(&TrackmapPublisher::timer_cb, this));                
             }   
         private:
+            std::map<std::int8_t, std::string> names_map_;
             std::shared_ptr<tf2_ros::StaticTransformBroadcaster> map_to_track_broadcaster_;
             rclcpp::TimerBase::SharedPtr timer_;
-            deepracing::TrackMap::Ptr track_map_;
+            deepracing::TrackMap::ConstPtr track_map_;
             std::vector<std::string> search_dirs_;
             rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr ib_pub_, ob_pub_, raceline_pub_, widthmap_pub_;
             rclcpp::Subscription<deepracing_msgs::msg::TimestampedPacketSessionData>::SharedPtr session_sub_;
@@ -72,15 +71,14 @@ namespace composable_nodes
                 }
                 response->return_code=deepracing_msgs::srv::GetLine::Response::SUCCESS;
             }
-            // void session_cb(const deepracing_msgs::msg::TimestampedPacketSessionData::ConstPtr& session_data)
             void session_cb(deepracing_msgs::msg::TimestampedPacketSessionData::UniquePtr session_data)
             {
                 if((session_data->udp_packet.track_id<0) || (session_data->udp_packet.track_id>34)){
                     return;
                 }
                 std::scoped_lock lock(mutex_);
-                std::map<std::int8_t, std::string> names_map = deepracing::Utils::trackNames();
-                std::string tracknamein = names_map.at(session_data->udp_packet.track_id);
+                
+                std::string tracknamein = names_map_.at(session_data->udp_packet.track_id);
                 if(!track_map_ || track_map_->name()!=tracknamein)
                 {
                     track_map_.reset();
@@ -100,11 +98,9 @@ namespace composable_nodes
                         RCLCPP_FATAL(get_logger(), "%s", ":(");
                     }
                 }
-
             }
             void timer_cb()
             {
-                // RCLCPP_INFO(get_logger(), "%s", ":)");
                 std::scoped_lock lock(mutex_);
                 if(!track_map_)
                 {
@@ -133,9 +129,7 @@ namespace composable_nodes
                     widthmap_msg.header.set__stamp(now);
                     widthmap_pub_->publish(widthmap_msg);
                 }
-            }
-
-            
+            }    
     };
 }
 }
