@@ -19,16 +19,21 @@ import rclpy.exceptions
 from rclpy.node import Node
 import lifecycle_msgs.srv, lifecycle_msgs.msg
 
-class InitializerUDPRecevier(Node):
-    def __init__(self, name="initialize_udp_receiver"):
-        super(InitializerUDPRecevier, self).__init__(name)
+class InitializeLifecycleNode(Node):
+    def __init__(self, name="initialize_lifecycle_node"):
+        super(InitializeLifecycleNode, self).__init__(name)
+        node_to_initialize_param = self.declare_parameter("node_to_initialize")
+        self.node_to_initialize : str = node_to_initialize_param.get_parameter_value().string_value
 
 
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
-    node = InitializerUDPRecevier()
-    serviceclient : rclpy.client.Client = node.create_client(lifecycle_msgs.srv.ChangeState, "/raw_udp_receiver_node/change_state")
+    node = InitializeLifecycleNode()
+    if node.node_to_initialize is None:
+        raise ValueError("node_to_initialize param is not set")
+    service_name = "/%s/change_state" % (node.node_to_initialize,)
+    serviceclient : rclpy.client.Client = node.create_client(lifecycle_msgs.srv.ChangeState, service_name)
     serviceclient.wait_for_service()
     req : lifecycle_msgs.srv.ChangeState.Request = lifecycle_msgs.srv.ChangeState.Request()
 
@@ -38,15 +43,16 @@ def main(args=None):
     rclpy.spin_until_future_complete(node, future)
     response : lifecycle_msgs.srv.ChangeState.Response = future.result()
     if not response.success:
-        node.get_logger().error("Unable to configure the udp receiver")
+        node.get_logger().error("Unable to configure %s" % (node.node_to_initialize,))
         rclpy.shutdown()
         exit(-1)
     req.transition.label="activate"
     req.transition.id = lifecycle_msgs.msg.Transition.TRANSITION_ACTIVATE
     future = serviceclient.call_async(req)
     rclpy.spin_until_future_complete(node, future)
+    response : lifecycle_msgs.srv.ChangeState.Response = future.result()
     if not response.success:
-        node.get_logger().error("Unable to activate the udp receiver")
+        node.get_logger().error("Unable to activate %s" % (node.node_to_initialize,))
         rclpy.shutdown()
         exit(-1)
     exit(0)

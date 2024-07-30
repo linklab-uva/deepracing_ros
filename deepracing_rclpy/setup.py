@@ -34,7 +34,7 @@ setup(
               ])),
     entry_points={
         'console_scripts': [
-            'initialize_udp_receiver = %s.scripts.initialize_udp_receiver:main' % (python_pkg_name),
+            'initialize_lifecycle_node = %s.scripts.initialize_lifecycle_node:main' % (python_pkg_name),
             'initial_raceline_setter = %s.scripts.initial_raceline_setter:main' % (python_pkg_name),
             'admiralnet_path_server = %s.scripts.admiralnet_path_server:main' % (python_pkg_name),
             'oracle_path_server = %s.scripts.oracle_path_server:main' % (python_pkg_name),
