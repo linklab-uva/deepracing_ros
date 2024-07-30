@@ -6,6 +6,7 @@ import launch_ros.actions
 import launch_ros.descriptions
 from ament_index_python import get_package_share_directory
 import os
+import multiprocessing
 
 def generate_launch_description():
     # rebroadcasternode = launch_ros.actions.Node(package='deepracing_rclcpp', node_executable='ros_rebroadcaster', output='screen', node_name="f1_data_broadcaster")
@@ -25,9 +26,14 @@ def generate_launch_description():
     argz.append(use_sim_time)
 
     search_dirs = []
-    search_dirs_env = os.getenv("F1_MAP_DIRS", None)
-    if search_dirs_env is not None:
-        search_dirs.extend(search_dirs_env.split(os.pathsep))
+    map_dirs_env = os.getenv("F1_MAP_DIRS", None)
+    if map_dirs_env is not None:
+        extra_search_dirs = map_dirs_env.split(sep=os.pathsep)
+        try:
+            extra_search_dirs.remove("")
+        except ValueError as e:
+            pass
+        search_dirs.extend(extra_search_dirs)
     search_dirs.append(os.path.join(deepracing_launch_dir,"maps"))
     composable_nodez = [
         launch_ros.descriptions.ComposableNode(
@@ -106,7 +112,7 @@ def generate_launch_description():
         package='rclcpp_components',
         executable='component_container_mt',
         parameters=[{use_sim_time.name : launch.substitutions.LaunchConfiguration(use_sim_time.name), 
-                     "thread_num" : len(composable_nodez)+1}],
+                     "thread_num" : min(multiprocessing.cpu_count(), len(composable_nodez)+4)}], #include some extra threads for measurement publishers to be added
         composable_node_descriptions=composable_nodez,
         output='both'
     )

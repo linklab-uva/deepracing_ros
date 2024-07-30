@@ -18,27 +18,33 @@ import rclpy.parameter
 import rclpy.exceptions
 from rclpy.node import Node
 import lifecycle_msgs.srv, lifecycle_msgs.msg
+import rcl_interfaces.msg
 
 class InitializeLifecycleNode(Node):
     def __init__(self, name="initialize_lifecycle_node"):
         super(InitializeLifecycleNode, self).__init__(name)
-        node_to_initialize_param = self.declare_parameter("node_to_initialize")
+        node_to_initialize_desc : rcl_interfaces.msg.ParameterDescriptor = rcl_interfaces.msg.ParameterDescriptor()
+        node_to_initialize_desc.name = "node_to_initialize"
+        node_to_initialize_desc.type = rcl_interfaces.msg.ParameterType.PARAMETER_STRING
+        node_to_initialize_desc.dynamic_typing=False
+        node_to_initialize_param : rclpy.parameter.Parameter = self.declare_parameter(node_to_initialize_desc.name, descriptor=node_to_initialize_desc, value="")
         self.node_to_initialize : str = node_to_initialize_param.get_parameter_value().string_value
 
 
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
+
     node = InitializeLifecycleNode()
-    if node.node_to_initialize is None:
+    if (node.node_to_initialize is None) or (node.node_to_initialize==""):
         raise ValueError("node_to_initialize param is not set")
     service_name = "/%s/change_state" % (node.node_to_initialize,)
     serviceclient : rclpy.client.Client = node.create_client(lifecycle_msgs.srv.ChangeState, service_name)
     serviceclient.wait_for_service()
     req : lifecycle_msgs.srv.ChangeState.Request = lifecycle_msgs.srv.ChangeState.Request()
-
     req.transition.label="configure"
     req.transition.id = lifecycle_msgs.msg.Transition.TRANSITION_CONFIGURE
+
     future = serviceclient.call_async(req)
     rclpy.spin_until_future_complete(node, future)
     response : lifecycle_msgs.srv.ChangeState.Response = future.result()
