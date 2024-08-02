@@ -1,0 +1,14 @@
+clockwise: false
+name: Lucas Oil Raceway
+startingline_pose:
+  position:
+  - 0.0
+  - 0.0
+  - 0.0
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+startinglinewidth: 12.5
+tracklength: 1062.2
