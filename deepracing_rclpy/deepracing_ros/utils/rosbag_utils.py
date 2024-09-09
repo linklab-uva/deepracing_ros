@@ -80,7 +80,8 @@ def allFromTopic(bag_dir : str, topicname : str) -> list:
 def getAllData(bag_dir : str, with_tqdm=True)\
       -> Tuple[List[deepracing_msgs.msg.TimestampedPacketMotionData],\
                List[deepracing_msgs.msg.TimestampedPacketLapData],\
-               List[deepracing_msgs.msg.TimestampedPacketSessionData]]:
+               List[deepracing_msgs.msg.TimestampedPacketSessionData],\
+               List[deepracing_msgs.msg.TimestampedPacketCarTelemetryData]]:
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
@@ -88,17 +89,7 @@ def getAllData(bag_dir : str, with_tqdm=True)\
     motiondata_topic : str = "/motion_data"
     lapdata_topic : str = "/lap_data"
     sessiondata_topic : str = "/session_data"
-
-    # threadpool : multiprocessing.pool.Pool = multiprocessing.pool.Pool(processes=3)
-    # motion_result : multiprocessing.pool.AsyncResult = threadpool.apply_async(allFromTopic, (bag_dir, motiondata_topic)) 
-    # lap_result : multiprocessing.pool.AsyncResult = threadpool.apply_async(allFromTopic, (bag_dir, lapdata_topic)) 
-    # session_result : multiprocessing.pool.AsyncResult = threadpool.apply_async(allFromTopic, (bag_dir, sessiondata_topic)) 
-    # threadpool.close()
-    # threadpool.join()
-
-    # motion_packets : List[deepracing_msgs.msg.TimestampedPacketMotionData] = motion_result.get()
-    # lap_packets : List[deepracing_msgs.msg.TimestampedPacketLapData] = lap_result.get()
-    # session_packets : List[deepracing_msgs.msg.TimestampedPacketSessionData] = session_result.get()
+    telemetrydata_topic : str = "/telemetry_data"
 
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
@@ -106,7 +97,7 @@ def getAllData(bag_dir : str, with_tqdm=True)\
     _, _, _, reader = open_bagfile(bag_dir)
 
 
-    topics = [lapdata_topic, motiondata_topic, sessiondata_topic]
+    topics = [lapdata_topic, motiondata_topic, sessiondata_topic, telemetrydata_topic]
     count = int(np.sum(np.asarray([topic_count_dict[t] for t in topics], dtype=np.int64)))
     filt = rosbag2_py.StorageFilter(topics)
     reader.set_filter(filt)
@@ -114,10 +105,12 @@ def getAllData(bag_dir : str, with_tqdm=True)\
     motiondata_type = get_message("deepracing_msgs/msg/TimestampedPacketMotionData")
     lapdata_type = get_message("deepracing_msgs/msg/TimestampedPacketLapData")
     session_type = get_message("deepracing_msgs/msg/TimestampedPacketSessionData")
+    telemetry_type = get_message("deepracing_msgs/msg/TimestampedPacketCarTelemetryData")
 
     motion_packets : List[deepracing_msgs.msg.TimestampedPacketMotionData] = []
     lap_packets : List[deepracing_msgs.msg.TimestampedPacketLapData] = []
     session_packets : List[deepracing_msgs.msg.TimestampedPacketSessionData] = []
+    telemetry_packets : List[deepracing_msgs.msg.TimestampedPacketCarTelemetryData] = []
     if with_tqdm:
         tq = tqdm.tqdm(iterable=range(count), desc="Loading data from bag: %s" % (bag_dir,))
     else:
@@ -136,6 +129,9 @@ def getAllData(bag_dir : str, with_tqdm=True)\
         elif topic==sessiondata_topic:
             current_msg : deepracing_msgs.msg.TimestampedPacketSessionData = deserialize_message(data, session_type)
             session_packets.append(current_msg)
+        elif topic==telemetrydata_topic:
+            current_msg : deepracing_msgs.msg.TimestampedPacketCarTelemetryData = deserialize_message(data, telemetry_type)
+            telemetry_packets.append(current_msg)
         
     motion_packets_sorted = sorted(motion_packets, key=sessionTimeKey)
     isearch_motion = 0
@@ -151,6 +147,12 @@ def getAllData(bag_dir : str, with_tqdm=True)\
     if isearch_lap>0:
         isearch_lap-=1
 
+    telemetry_packets_sorted = sorted(telemetry_packets, key=sessionTimeKey)
+    isearch_telemetry = 0
+    while telemetry_packets_sorted[isearch_telemetry].udp_packet.header.session_time<=0.0:
+        isearch_telemetry+=1
+    if isearch_telemetry>0:
+        isearch_telemetry-=1
 
     session_packets_sorted = sorted(session_packets, key=sessionTimeKey)
     isearch_session = 0
@@ -159,5 +161,4 @@ def getAllData(bag_dir : str, with_tqdm=True)\
     if isearch_session>0:
         isearch_session-=1
 
-
-    return motion_packets_sorted[isearch_motion:], lap_packets_sorted[isearch_lap:], session_packets_sorted[isearch_session:]
+    return motion_packets_sorted[isearch_motion:], lap_packets_sorted[isearch_lap:], session_packets_sorted[isearch_session:], telemetry_packets_sorted[isearch_session:]

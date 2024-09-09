@@ -64,12 +64,12 @@ def arrayToPointCloud2(pointsarray : Union[torch.Tensor, np.ndarray], field_name
    pc2out.data = points.flatten().tobytes()
    return pc2out
 
-def extractAcceleration(packet : drmsgs.PacketMotionData , car_index = -1) -> np.ndarray:
-   if car_index ==-1:
+def extractAcceleration(packet : drmsgs.PacketMotionData , car_index : int | str = "player") -> np.ndarray:
+   if car_index == "player":
       idx = packet.header.player_car_index
       if idx<0 or idx>22:
          raise ValueError("cannot extract player car index: %d" % (idx,))
-   elif car_index ==-2:
+   elif car_index == "secondary":
       idx = packet.header.secondary_player_car_index
       if idx<0 or idx>22:
          raise ValueError("cannot extract secondary player car index: %d" % (idx,))
@@ -254,6 +254,57 @@ def numpifySessionData(session_data_msgs : list[drmsgs.TimestampedPacketSessionD
       "session_types": session_types, 
       "game_paused": game_paused 
    }
+def numpifyTelemetryData(telemetry_data_msgs : list[drmsgs.TimestampedPacketCarTelemetryData], float_type=np.float32, int_type=np.int32) -> \
+   dict[str, np.ndarray]:
+   numpackets = len(telemetry_data_msgs)
+   if numpackets<=0:
+      raise ValueError("input list cannot be empty")
+   numdrivers = len(telemetry_data_msgs[0].udp_packet.car_telemetry_data)
+   session_times = np.empty(numpackets, dtype=float_type)
+   frame_identifiers = np.empty(numpackets, dtype=int_type)
+   overall_frame_identifiers = np.empty(numpackets, dtype=int_type)
+   brake = np.empty([numdrivers, numpackets], dtype=float_type)
+   throttle = np.empty([numdrivers, numpackets], dtype=float_type)
+   steering = np.empty([numdrivers, numpackets], dtype=float_type)
+   speed = np.empty([numdrivers, numpackets], dtype=int_type)
+   gear = np.empty([numdrivers, numpackets], dtype=int_type)
+   rev_lights_percent = np.empty([numdrivers, numpackets], dtype=int_type)
+   surface_type = np.empty([numdrivers, numpackets, 4], dtype=np.uint8)
+   tire_inner_temp = np.empty([numdrivers, numpackets, 4], dtype=np.uint8)
+   tire_surface_temp = np.empty([numdrivers, numpackets, 4], dtype=np.uint8)
+   for packetnumber in range(numpackets):
+      session_times[packetnumber] = telemetry_data_msgs[packetnumber].udp_packet.header.session_time
+      telemetry_packet = telemetry_data_msgs[packetnumber].udp_packet
+      frame_identifiers[packetnumber] = telemetry_packet.header.frame_identifier
+      try:
+         overall_frame_identifiers[packetnumber] = telemetry_packet.header.overall_frame_identifier
+      except AttributeError as e:
+         overall_frame_identifiers[packetnumber] = telemetry_packet.header.frame_identifier
+      for carindex in range(numdrivers):
+         current_telemetry : drmsgs.CarTelemetryData = telemetry_packet.car_telemetry_data[carindex]
+         throttle[carindex, packetnumber] = current_telemetry.throttle
+         brake[carindex, packetnumber] = current_telemetry.brake
+         speed[carindex, packetnumber] = current_telemetry.speed
+         steering[carindex, packetnumber] = current_telemetry.steer
+         gear[carindex, packetnumber] = current_telemetry.gear
+         rev_lights_percent[carindex, packetnumber] = current_telemetry.rev_lights_percent
+         surface_type[carindex, packetnumber] = current_telemetry.surface_type
+         tire_inner_temp[carindex, packetnumber] = current_telemetry.tyres_inner_temperature
+         tire_surface_temp[carindex, packetnumber] = current_telemetry.tyres_surface_temperature
+   return { 
+      "session_times": session_times, 
+      "frame_identifiers": frame_identifiers, 
+      "overall_frame_identifiers": overall_frame_identifiers, 
+      "brake" : brake, 
+      "throttle" : throttle, 
+      "steering" : steering, 
+      "speed" : speed, 
+      "gear": gear,
+      "rev_lights_percent": rev_lights_percent, 
+      "tire_inner_temp": tire_inner_temp, 
+      "tire_surface_temp": tire_surface_temp,
+      "surface_type": surface_type
+   }   
 def numpifyMotionData(motion_data_msgs : list[drmsgs.TimestampedPacketMotionData], float_type=np.float32, int_type=np.int32) -> \
    dict[str, np.ndarray]:
    numpackets = len(motion_data_msgs)
@@ -277,11 +328,13 @@ def numpifyMotionData(motion_data_msgs : list[drmsgs.TimestampedPacketMotionData
       except AttributeError as e:
          overall_frame_identifiers[packetnumber] = motion_packet.header.frame_identifier
       for carindex in range(numdrivers):
+         md : drmsgs.CarMotionData = motion_packet.car_motion_data[carindex]
          position, rotation = extractPose(motion_packet, car_index=carindex)
          positions[carindex, packetnumber] = position.astype(float_type)
          quaternions[carindex, packetnumber] = rotation.as_quat().astype(float_type)
          velocities[carindex, packetnumber] = extractVelocity(motion_packet, car_index=carindex)
          accelerations[carindex, packetnumber] = extractAcceleration(motion_packet, car_index=carindex)
+         
    return { 
       "session_times": session_times, 
       "frame_identifiers": frame_identifiers, 
