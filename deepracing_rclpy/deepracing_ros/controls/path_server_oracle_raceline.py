@@ -59,6 +59,7 @@ import builtin_interfaces.msg
 import rclpy.exceptions
 import ament_index_python
 from scipy.spatial.transform import Rotation
+from scipy.spatial import KDTree
 
 class OraclePathServer(PathServerROS):
     def __init__(self):
@@ -77,6 +78,7 @@ class OraclePathServer(PathServerROS):
             self.get_logger().info("Running on the cpu" )
 
         self.raceline = None
+        self.racelinekdtree : KDTree = None
         self.racelinetangents = None
         self.racelinenormals = None
         self.dsfinal = None
@@ -116,6 +118,8 @@ class OraclePathServer(PathServerROS):
 
         longitudinalnoise_param : Parameter = self.declare_parameter("longitudinalnoise", value=0.0)
         self.longitudinalnoise : float = longitudinalnoise_param.get_parameter_value().double_value
+        self.bcurve_pub : Publisher = self.create_publisher(BezierCurve, "oraclebeziercurves", 1)
+
     def rl_as_pathmsg(self) -> Path:
         self.get_logger().info("Getting current raceline from PyTorch tensors")
         normals3d : torch.Tensor = torch.cat([self.racelinenormals, torch.zeros_like(self.racelinenormals[:,0]).unsqueeze(1)], dim=1)
@@ -194,7 +198,7 @@ class OraclePathServer(PathServerROS):
                 racelinenp = racelinenp.T
                 velsquares : np.ndarray = np.square(raceline_speed)
                 racelinet : np.ndarray = np.zeros_like(raceline_speed)
-                for i in range(raceline_r.shape[0]-1):
+                for i in range(0, raceline_r.shape[0]-1):
                     ds : float = raceline_r[i+1] - raceline_r[i]
                     v0 : float = raceline_speed[i]
                     vf : float = raceline_speed[i+1]
@@ -256,6 +260,7 @@ class OraclePathServer(PathServerROS):
                 self.racelinespeeds = torch.as_tensor(raceline_speed, dtype=self.tsamp.dtype, device=self.tsamp.device)
                 self.racelinetangents = torch.as_tensor(tangent_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
                 self.racelinenormals = torch.as_tensor(normal_vectors, dtype=self.tsamp.dtype, device=self.tsamp.device)
+                self.racelinekdtree = KDTree(raceline[:,0:3].cpu().numpy())
                 self.raceline = raceline
             except Exception as e:
                 response.message="Unknown error. Underlying exception: %s" % (str(e),)
@@ -311,6 +316,7 @@ class OraclePathServer(PathServerROS):
             self.racelinespeeds = speeds[:-1]
             self.racelinetangents = tangent_vectors[:-1]
             self.racelinenormals = normal_vectors[:-1]
+            self.racelinekdtree = KDTree(racelineposes[:-1,0:3,3].cpu().numpy())
             self.raceline = racelineposes[:-1,0:3,3]
         self.rlpublisher.publish(self.rl_as_pathmsg())
         response.message="yay"
@@ -319,10 +325,10 @@ class OraclePathServer(PathServerROS):
 
     def getTrajectory(self):
         if (self.racelineframe is None) or (self.raceline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None) or (self.racelinetangents is None) or (self.racelinenormals is None):
-            self.get_logger().debug("Returning None because raceline not yet received")
+            self.get_logger().error("Returning None because raceline not yet received")
             return None
         if self.current_odom is None:
-            self.get_logger().debug("Returning None because odometry not yet received")
+            self.get_logger().error("Returning None because odometry not yet received")
             return None
         posemsg = deepcopy(self.current_odom)
         if not (posemsg.header.frame_id==self.racelineframe):
@@ -336,74 +342,23 @@ class OraclePathServer(PathServerROS):
             pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
         else:
             pose_curr : torch.Tensor = map_to_car
-        pose_curr_inv : torch.Tensor = torch.inverse(pose_curr)
-        Imin = torch.argmin(torch.norm(self.raceline[:,0:3] - pose_curr[0:3,3], p=2, dim=1))
-        t0 = self.racelinetimes[Imin]
+        _, Imin = self.racelinekdtree.query(pose_curr[0:3,3].cpu().numpy())
+        t0 = self.racelinetimes[Imin].item()
         tf = t0+self.dt
         tvec : np.ndarray = np.linspace(t0, tf, num=300)
         rlpiece : torch.Tensor = torch.from_numpy(self.racelinespline(tvec)).type_as(self.tsamp).to(self.tsamp.device)
-        # rlpiecebaselink : torch.Tensor = (torch.matmul(pose_curr_inv[0:3,0:3], rlpiece) + pose_curr_inv[0:3,3,None]).T
-        
-        # if tf<=self.racelinetimes[-1]:
-        #     Imax = torch.argmin(torch.abs(self.racelinetimes - tf))
-        #     tfit = self.racelinetimes[Imin:Imax]
-        #     rlpiecebaselink = raceline_base_link[Imin:Imax]
-        # else:
-        #     dsfinal = torch.norm(self.raceline[0,0:3] - self.raceline[-1,0:3], p=2)
-        #     dtfinal = dsfinal/self.racelinespeeds[-1]
-        #     Imax = torch.argmin(torch.abs(self.racelinetimes - (tf - self.racelinetimes[-1])) )
-        #     tfit = torch.cat([self.racelinetimes[Imin:], self.racelinetimes[:Imax]+self.racelinetimes[-1]+dtfinal], dim=0)
-        #     rlpiecebaselink = torch.cat([raceline_base_link[Imin:], raceline_base_link[:Imax]], dim=0)
-        # rlpiecebaselink[:,2]=0.0
-        # rlpiece = torch.matmul(rlpiecebaselink, pose_curr[0:3].T)
+        poseinv_T = -(pose_curr[0:3,0:3].T @ pose_curr[0:3,[3,]]).squeeze(-1)
+        rlpiece_local = (rlpiece @ pose_curr[0:3,0:3]) + poseinv_T
+
 
         tfit = torch.from_numpy(tvec).type_as(self.tsamp).to(self.tsamp.device)
         tfit = tfit-tfit[0]
         dt = tfit[-1]
         sfit = tfit/dt
         
-        _, bcurve = mu.bezierLsqfit(rlpiece.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
-        # bcurve[0] = torch.matmul(bcurve[0], pose_curr[0:3,0:3].t()) + pose_curr[0:3,3]
+        _, bcurve = mu.bezierLsqfit(rlpiece_local.unsqueeze(0), self.bezier_order, t=sfit.unsqueeze(0))
         bcurve_msg : BezierCurve = C.toBezierCurveMsg(bcurve[0],posemsg.header)
+        bcurve_msg.header.frame_id=self.base_link_id
         fracpart, intpart = math.modf(dt.item())
         bcurve_msg.delta_t = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
-        return bcurve_msg
-
-        # positionsbcurve : torch.Tensor = torch.matmul(self.Msamp, bcurve)[0]
-
-        # _, bcurvderiv = mu.bezierDerivative(bcurve, M=self.Msampderiv)
-        # velocitiesbcurve : torch.Tensor = (bcurvderiv[0]/dt)
-        # speedsbcurve : torch.Tensor = torch.norm(velocitiesbcurve, p=2, dim=1)
-        # unit_tangents : torch.Tensor = velocitiesbcurve/speedsbcurve[:,None]
-        # up : torch.Tensor = torch.zeros_like(unit_tangents)
-        # up[:,2]=1.0
-        # unit_normals : torch.Tensor = torch.cross(up, unit_tangents)
-        # unit_normals = unit_normals/(torch.norm(unit_normals, p=2, dim=1)[:,None])
-        
-
-        # path_msg : Path = Path(header=posemsg.header) 
-        # up : np.ndarray = np.asarray( [0.0, 0.0, 1.0] )
-        # unit_tangents_np : np.ndarray = unit_tangents.cpu().numpy()
-        # unit_normals_np : np.ndarray = unit_normals.cpu().numpy()
-        # for i in range(positionsbcurve.shape[0]):
-        #     pose : PoseStamped = PoseStamped(header=path_msg.header)
-        #     fracpart, intpart = math.modf((dt*self.tsamp[0,i]).item())
-        #     pose.header.stamp = builtin_interfaces.msg.Time(sec=int(intpart), nanosec=int(fracpart*1E9))
-        #     pose.pose.position.x=positionsbcurve[i,0].item()
-        #     pose.pose.position.y=positionsbcurve[i,1].item()
-        #     pose.pose.position.z=positionsbcurve[i,2].item()
-
-        #     Rmat : np.ndarray = np.eye(3)
-        #     Rmat[0:3,0]=unit_tangents_np[i]
-        #     Rmat[0:3,1]=unit_normals_np[i]
-        #     Rmat[0:3,2]=np.cross(Rmat[0:3,0], Rmat[0:3,1])
-        #     rot : Rot = Rot.from_matrix(Rmat)
-        #     quat : np.ndarray = rot.as_quat()
-        #     pose.pose.orientation.x=float(quat[0])
-        #     pose.pose.orientation.y=float(quat[1])
-        #     pose.pose.orientation.z=float(quat[2])
-        #     pose.pose.orientation.w=float(quat[3])
-
-        #     path_msg.poses.append(pose)
-
-        # return bcurve_msg, path_msg
+        self.bcurve_pub.publish(bcurve_msg)

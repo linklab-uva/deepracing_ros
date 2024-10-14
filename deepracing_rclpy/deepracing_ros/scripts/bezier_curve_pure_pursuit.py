@@ -36,16 +36,18 @@ import rclpy.duration
 import threading 
 import deepracing_ros.convert as C
 import std_msgs.msg
-
+import rclpy.qos
 
 class BezierCurvePurePursuit(Node):
     def __init__(self,):
         super(BezierCurvePurePursuit,self).__init__('bezier_pure_pursuit')
-        self.setpoint_pub : Publisher = self.create_publisher(AckermannDriveStamped, "ctrl_cmd", 1)
+        self.setpoint_pub : Publisher = self.create_publisher(AckermannDriveStamped, "ctrl_cmd", 1)# rclpy.qos.qos_profile_sensor_data)
         self.lateral_error_pub : Publisher = self.create_publisher(Float64, "lateral_error", 1)
-        self.local_curve_pub : Publisher = self.create_publisher(BezierCurve, "local_bezier_curves", 1)
+        # self.local_curve_pub : Publisher = self.create_publisher(BezierCurve, "local_bezier_curves", 1)
         self.curve_sub : Subscription = self.create_subscription(BezierCurve, "beziercurves_in", self.curveCB, 1)
+        self.timer = self.create_timer(1.0/100.0, self.timerCB)
 
+        self.current_odom = Odometry()
         self.odom_sub : Subscription = self.create_subscription(Odometry, "odom", self.odomCB, 1)
         self.session_sub : Subscription = self.create_subscription(TimestampedPacketSessionData, "/session_data", self.sessionCB, 1)
         self.current_curve_msg : BezierCurve = None
@@ -79,7 +81,7 @@ class BezierCurvePurePursuit(Node):
             self.device : torch.device = torch.device("cpu")
 
 
-        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 400, dtype=torch.float64, device=self.device).unsqueeze(0)
+        self.tsamp : torch.Tensor = torch.linspace(0.0, 1.0, 60, dtype=torch.float64, device=self.device).unsqueeze(0)
         self.twoL : torch.Tensor = torch.as_tensor(2.0*wheelbase, dtype=self.tsamp.dtype, device=self.tsamp.device)
 
         self.player_car_index : int = 0
@@ -96,43 +98,24 @@ class BezierCurvePurePursuit(Node):
         self.current_curve_msg = curve_msg
         self.current_curve_mutex.release()
 
-    def odomCB(self, odom_msg : Odometry):
+    def odomCB(self, odom):
+        self.current_odom = odom
+
+    def timerCB(self):
         if self.current_curve_msg is None:
             self.get_logger().debug("No bezier curve received yet")
             return
-        if not self.current_curve_mutex.acquire(timeout=0.5):
+        
+        
+        if not self.current_curve_mutex.acquire(timeout=0.1):
             self.get_logger().error("Unable to acquire current_curve_mutex")
             return
-        current_curve : BezierCurve = deepcopy(self.current_curve_msg)
+        current_curve : BezierCurve = self.current_curve_msg
+        bcurve_local : torch.Tensor = torch.zeros(1, len(current_curve.control_points), 2).type_as(self.tsamp)
+        for i in range(bcurve_local.shape[1]):
+            bcurve_local[0, i, 0]=current_curve.control_points[i].x
+            bcurve_local[0, i, 1]=current_curve.control_points[i].y
         self.current_curve_mutex.release()
-        
-        
-        map_to_car : torch.Tensor = C.poseMsgToTorch(odom_msg.pose.pose, dtype=self.tsamp.dtype, device=self.tsamp.device)
-        try:
-            if not odom_msg.child_frame_id==self.base_link_id:
-                car_to_base_link_msg : TransformStamped = self.tf2_buffer.lookup_transform(odom_msg.child_frame_id, self.base_link_id, rclpy.time.Time.from_msg(odom_msg.header.stamp), rclpy.duration.Duration(seconds=2))
-                car_to_base_link : torch.Tensor = C.transformMsgToTorch(car_to_base_link_msg.transform, dtype=map_to_car.dtype, device=map_to_car.device)
-                pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
-            else:
-                pose_curr : torch.Tensor = map_to_car
-        except Exception as e:
-            self.get_logger().error("Unable to lookup TF2 transform for base link frame: %s." % (self.base_link_id,))
-            return
-        
-        # transform : torch.Tensor = torch.eye(4, device=pose_curr.device, dtype=pose_curr.dtype)
-        # transform[0:3] = pose_curr[0:3].t()
-        # transform[0:3,3] = torch.matmul(transform[0:3], -pose_curr[0:3,3])
-        Rinv = pose_curr[0:3,0:3].t()
-        transform : torch.Tensor = torch.cat([Rinv, torch.matmul(Rinv, -pose_curr[0:3,3]).unsqueeze(-1)], dim=1)
-
-        bcurve_global : torch.Tensor = torch.ones(4, len(current_curve.control_points), dtype=transform.dtype, device=transform.device )
-        for i in range(bcurve_global.shape[1]):
-            bcurve_global[0,i]=current_curve.control_points[i].x
-            bcurve_global[1,i]=current_curve.control_points[i].y
-            bcurve_global[2,i]=current_curve.control_points[i].z
-        bcurve_local = torch.matmul(transform, bcurve_global).T.unsqueeze(0)
-        curve_msg : BezierCurve = C.toBezierCurveMsg(bcurve_local[0], std_msgs.msg.Header(frame_id=self.base_link_id, stamp=odom_msg.header.stamp))
-        self.local_curve_pub.publish(curve_msg)
         dt : float = (float(current_curve.delta_t.sec) + float(current_curve.delta_t.nanosec)*1E-9)
         
         Msamp : torch.Tensor = mu.bezierM(self.tsamp, bcurve_local.shape[1]-1)
@@ -140,8 +123,9 @@ class BezierCurvePurePursuit(Node):
         arclengths : torch.Tensor = torch.zeros_like(self.tsamp[0])
         arclengths[1:]=torch.cumsum(torch.norm(Psamp[1:] - Psamp[:-1], p=2, dim=1), 0)
 
-        _, _velocities = mu.bezierDerivative(bcurve_local, t=self.tsamp)
-        velocities : torch.Tensor = _velocities[0]/dt
+        bcurve_local_deriv = float(bcurve_local.shape[-2] - 1)*(bcurve_local[:,1:] - bcurve_local[:,:-1])/dt
+        Msampvel : torch.Tensor = mu.bezierM(self.tsamp, bcurve_local_deriv.shape[-2]-1)
+        velocities : torch.Tensor = torch.matmul(Msampvel[0], bcurve_local_deriv[0])
         speeds : torch.Tensor = torch.norm(velocities, p=2, dim=1)
 
         idx = torch.argmin(torch.norm(Psamp, p=2, dim=1))
@@ -151,12 +135,12 @@ class BezierCurvePurePursuit(Node):
         arclengths = arclengths[idx:]
         arclengths = arclengths - arclengths[0]
 
-        current_speed : float = odom_msg.twist.twist.linear.x
+        current_speed : float = float(self.current_odom.twist.twist.linear.x)
         lookahead_distance = max(self.lookahead_gain*current_speed, 10.0)
-        if current_speed>55.0:
-            lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
-        else:
-            lookahead_distance_vel=0.00
+        # if current_speed>55.0:
+        #     lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
+        # else:
+        #     lookahead_distance_vel=0.00
         lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
 
         lookahead_index = torch.argmin(torch.abs(arclengths-lookahead_distance))
@@ -167,13 +151,14 @@ class BezierCurvePurePursuit(Node):
         lookaheadDirection = lookaheadVector/ld
         alpha = torch.atan2(lookaheadDirection[1],lookaheadDirection[0])
 
-        control_out : AckermannDriveStamped = AckermannDriveStamped(header=odom_msg.header)
+        control_out : AckermannDriveStamped = AckermannDriveStamped()
         control_out.header.frame_id=self.base_link_id
+        control_out.header.stamp = self.get_clock().now().to_msg()
         control_out.drive.steering_angle = torch.atan((self.twoL * torch.sin(alpha)) / ld).item()
         control_out.drive.speed=speeds[lookahead_index_vel].item()
 
         self.setpoint_pub.publish(control_out)
-        self.lateral_error_pub.publish(Float64(data=torch.norm(Psamp[0], p=2).item()))
+        # self.lateral_error_pub.publish(Float64(data=torch.norm(Psamp[0], p=2).item()))
 
         
 
@@ -185,19 +170,18 @@ def main(args=None):
     node = BezierCurvePurePursuit()
     num_threads_param : rclpy.Parameter = node.declare_parameter("num_threads", 0)
     num_threads : int = num_threads_param.get_parameter_value().integer_value
-    if num_threads<=0:
-        node.get_logger().info("Spinning with number of CPU cores")
-        spinner : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor(None)
-    else:
-        node.get_logger().info("Spinning with %d threads" % (num_threads,))
-        spinner : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor(num_threads)
-    spinner.add_node(node)
-    try:
-        spinner.spin()
-    except KeyboardInterrupt:
-        pass
-    node.destroy_node()
-    rclpy.shutdown()
+    # if num_threads<=0:
+    #     node.get_logger().info("Spinning with number of CPU cores")
+    #     spinner : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor(None)
+    # else:
+    #     node.get_logger().info("Spinning with %d threads" % (num_threads,))
+    #     spinner : rclpy.executors.MultiThreadedExecutor = rclpy.executors.MultiThreadedExecutor(num_threads)
+    # spinner.add_node(node)
+    # try:
+    #     spinner.spin()
+    # except KeyboardInterrupt:
+    #     pass
+    rclpy.spin(node)
 
 if __name__ == '__main__':
     main()

@@ -47,7 +47,7 @@ class ControlToXinputNode(Node):
         steering_angles_desc : ParameterDescriptor = ParameterDescriptor()
         steering_angles_desc.name = "steering_angles"
         steering_angles_desc.type = ParameterType.PARAMETER_DOUBLE_ARRAY
-        steering_angles_param : rclpy.Parameter = self.declare_parameter(steering_angles_desc.name, descriptor=steering_angles_desc)
+        steering_angles_param : rclpy.Parameter = self.declare_parameter(steering_angles_desc.name, descriptor=steering_angles_desc, value=[-1.0, 1.0])
         
         steering_angles : List[float] = steering_angles_param.get_parameter_value().double_array_value
         if len(steering_angles)==0:
@@ -58,7 +58,7 @@ class ControlToXinputNode(Node):
         control_values_desc : ParameterDescriptor = ParameterDescriptor()
         control_values_desc.name = "control_values"
         control_values_desc.type = ParameterType.PARAMETER_DOUBLE_ARRAY
-        control_values_param : rclpy.Parameter = self.declare_parameter(control_values_desc.name, descriptor=control_values_desc)
+        control_values_param : rclpy.Parameter = self.declare_parameter(control_values_desc.name, descriptor=control_values_desc, value=[-1.0, 1.0])
         
         control_values : List[float] = control_values_param.get_parameter_value().double_array_value
         if len(control_values)==0:
@@ -106,10 +106,10 @@ class ControlToXinputNode(Node):
         
         steering : float = self.current_ackermann_data.drive.steering_angle
 
-        if steering<self.largest_negative or steering>self.smallest_positive:
-            state.gamepad.thumb_lx = int(np.clip(np.round(self.spline(steering)), -32768.0, 32767.0))
-        else:
-            state.gamepad.thumb_lx = 0
+        # if steering<self.largest_negative or steering>self.smallest_positive:
+        state.gamepad.thumb_lx = int(np.clip(np.round(self.spline(steering)), -32768.0, 32767.0))
+        # else:
+        #     state.gamepad.thumb_lx = 0
         
         self.xinput_publisher.publish(state)
         

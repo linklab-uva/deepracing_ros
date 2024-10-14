@@ -28,24 +28,15 @@ from rclpy.executors import MultiThreadedExecutor
 def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
-    spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor())
     node = OraclePathServer()
-    bcurve_pub : Publisher = node.create_publisher(BezierCurve, "oraclebeziercurves", 1)
-    spinner.add_node(node)
-    node.get_logger().set_level(rclpy.logging.LoggingSeverity.INFO)
-    spinner.spin()
-    frequency_param : rclpy.Parameter = node.declare_parameter("rate", value=10.0)
-    rate : rclpy.timer.Rate = node.create_rate(frequency_param.get_parameter_value().double_value)
-    try:
-        while rclpy.ok():
-            rate.sleep()
-            bcurve_msg = node.getTrajectory()
-            if bcurve_msg is not None:
-                bcurve_pub.publish(bcurve_msg)
-    except KeyboardInterrupt:
-        pass
-    spinner.shutdown()
-    rclpy.shutdown()
+    # spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor())
+    # bcurve_pub : Publisher = node.create_publisher(BezierCurve, "oraclebeziercurves", 1)
+    # spinner.add_node(node)
+    # spinner.spin()
+    frequency_param : rclpy.Parameter = node.declare_parameter("rate", value=100.0)
+    timer : rclpy.timer.Timer = node.create_timer(1.0/frequency_param.get_parameter_value().double_value, node.getTrajectory)
+
+    rclpy.spin(node)
     
 
 

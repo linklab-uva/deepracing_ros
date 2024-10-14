@@ -73,7 +73,7 @@ def main(args=None):
     mapdir : str = os.path.join(ament_index_python.get_package_share_directory("deepracing_launch"), "maps")
     search_dirs.append(mapdir)
 
-    trackmap : deepracing.TrackMap  = deepracing.searchForTrackmap(trackname, search_dirs, align=True)
+    trackmap : deepracing.TrackMap  = deepracing.searchForTrackmap(trackname, search_dirs, align=True, transform_to_map=True)
     if trackmap is None:
         node.get_logger().error("Could not find trackmap for %s in any of %s" % (trackname, str(search_dirs)))
         exit(-1)
