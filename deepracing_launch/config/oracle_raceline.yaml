@@ -2,6 +2,6 @@
 /**:
     ros__parameters:
         bezier_order: 5
-        dt: 2.5
+        dt: 4.5
         gpu: -1
 

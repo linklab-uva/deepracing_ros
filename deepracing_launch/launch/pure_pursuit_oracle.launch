@@ -2,7 +2,7 @@
    <arg name="carname" default=""/>
    <arg name="default_trackfile" default=""/>
    <arg name="use_sim_time" default="false"/>
-   <arg name="rate" default="10.0"/>
+   <arg name="rate" default="100.0"/>
 
    <node pkg="deepracing_rclpy" exec="initial_raceline_setter" name="initial_raceline_setter" output="screen" namespace="$(var carname)">
         <param name="default_trackfile" value="$(var default_trackfile)"/>
@@ -12,6 +12,7 @@
         <param name="carname" value="$(var carname)"/>
         <param name="use_sim_time" value="$(var use_sim_time)"/>
         <remap from="odom" to="odom/filtered"/>
+        <param name="rate" value="$(var rate)"/>
         <param from="$(find-pkg-share deepracing_launch)/config/oracle_raceline.yaml"/>
    </node>
    <node pkg="deepracing_rclpy" exec="bezier_curve_pure_pursuit" name="pure_pursuit_node" output="screen" namespace="$(var carname)">
