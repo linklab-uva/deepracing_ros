@@ -362,6 +362,7 @@ def numpifyLapData(lap_data_msgs : list[drmsgs.TimestampedPacketLapData], float_
    result_status = np.empty([numdrivers, numpackets], dtype=int_type)
    driver_status = np.empty([numdrivers, numpackets], dtype=int_type)
    pit_status = np.empty([numdrivers, numpackets], dtype=int_type)
+   car_positions = np.empty([numdrivers, numpackets], dtype=int_type)
    pit_lane_timer_active = np.empty([numdrivers, numpackets], dtype=bool)
    
    for packetnumber in range(numpackets):
@@ -388,6 +389,7 @@ def numpifyLapData(lap_data_msgs : list[drmsgs.TimestampedPacketLapData], float_
          lap_numbers[carindex, packetnumber] = lap_data.current_lap_num
          result_status[carindex, packetnumber] = lap_data.result_status
          driver_status[carindex, packetnumber] = lap_data.driver_status
+         car_positions[carindex, packetnumber] = lap_data.car_position
          pit_status[carindex, packetnumber] = lap_data.pit_status
          pit_lane_timer_active[carindex, packetnumber] = lap_data.pit_lane_timer_active>0
          
@@ -403,5 +405,6 @@ def numpifyLapData(lap_data_msgs : list[drmsgs.TimestampedPacketLapData], float_
       "result_status" : result_status, 
       "driver_status" : driver_status, 
       "pit_status" : pit_status, 
+      "car_positions" : car_positions, 
       "pit_lane_timer_active" : pit_lane_timer_active
    }
