@@ -15,7 +15,12 @@ set(deepracing_composable_node_srcs
   trackmap_publisher.cpp
 )
 add_library(deepracing_composable_nodes SHARED ${deepracing_composable_node_srcs})
-
+find_package(pcl_conversions QUIET)
+if(pcl_conversions_FOUND)
+  target_sources(deepracing_composable_nodes PRIVATE lateral_error_publisher.cpp)
+  ament_target_dependencies(deepracing_composable_nodes PUBLIC pcl_conversions)
+  set(with_lateral_error_publisher_ TRUE PARENT_SCOPE)
+endif()
 find_package(message_filters)
 find_package(robot_localization)
 if(message_filters_FOUND AND robot_localization_FOUND)

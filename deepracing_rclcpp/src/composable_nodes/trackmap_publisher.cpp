@@ -14,7 +14,8 @@
 #include <deepracing_msgs/srv/get_line.hpp>
 #include <mutex>
 #include <deepracing/utils.hpp>
-
+#include <deepracing_ros/utils/file_utils.h>
+#include <cstdlib>
 
 namespace deepracing
 {
@@ -29,7 +30,12 @@ namespace composable_nodes
 
                 map_to_track_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(this);
                 rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(10).durability_volatile();
-                search_dirs_ = declare_parameter<std::vector<std::string>>("search_dirs");
+                search_dirs_ = declare_parameter<std::vector<std::string>>("search_dirs", std::vector<std::string>());
+                const char* env_val = std::getenv("F1_MAP_DIRS");
+                if(env_val){
+                    std::vector<std::string> env_val_split = deepracing_ros::FileUtils::split(std::string(env_val));
+                    search_dirs_.insert(search_dirs_.end(), env_val_split.begin(), env_val_split.end());
+                }
                 transform_to_map_= declare_parameter<bool>("transform_to_map", true);
                 
                 get_line_srv_ = create_service<deepracing_msgs::srv::GetLine>("get_line", 
@@ -62,9 +68,28 @@ namespace composable_nodes
                     response->return_code=deepracing_msgs::srv::GetLine::Response::TRACKMAP_NOT_INITIALIZED;
                     return false;
                 }
+                std::string key(request->key.data);
                 try{
-                    const pcl::PCLPointCloud2& pc2 = track_map_->getCloud(request->key.data);
-                    pcl_conversions::fromPCL(pc2, response->line);
+                    if (key=="raceline"){
+                        RCLCPP_INFO(get_logger(), "%s", "Returning optimal raceline");
+                        pcl::toROSMsg<deepracing::PointXYZTALS>(*(track_map_->raceline()), response->line);
+                    }
+                    else if (key=="width_map"){
+                        const pcl::PointCloud<deepracing::PointWidthMap>::ConstPtr widthmap = track_map_->widthMap();
+                        if (widthmap){
+                            RCLCPP_INFO(get_logger(), "%s", "Returning width map");
+                            pcl::toROSMsg<deepracing::PointWidthMap>(*widthmap, response->line);
+                        }
+                        else{
+                            RCLCPP_ERROR(get_logger(), "No width map for currently loaded track %s", track_map_->name().c_str());
+                            response->return_code=deepracing_msgs::srv::GetLine::Response::KEY_NOT_FOUND;
+                            return false;
+                        }
+                    }
+                    else{
+                        const pcl::PCLPointCloud2& pc2 = track_map_->getCloud(key);
+                        pcl_conversions::fromPCL(pc2, response->line);
+                    }
                 }catch(std::out_of_range& e){
                     response->return_code=deepracing_msgs::srv::GetLine::Response::KEY_NOT_FOUND;
                     return  false;
@@ -81,7 +106,6 @@ namespace composable_nodes
                     return;
                 }
                 std::scoped_lock lock(mutex_);
-                
                 std::string tracknamein = names_map_.at(session_data->udp_packet.track_id);
                 if(!track_map_ || track_map_->name()!=tracknamein)
                 {
@@ -89,12 +113,10 @@ namespace composable_nodes
                     track_map_ = deepracing::TrackMap::findTrackmap(tracknamein, search_dirs_, transform_to_map_);
                     if(track_map_){
                         RCLCPP_INFO(get_logger(), "Got map for track name %s", track_map_->name().c_str());
-                        if(track_map_->widthMap() && !(widthmap_pub_))
-                        {
+                        if(track_map_->widthMap() && !(widthmap_pub_)){
                             widthmap_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("width_map", rclcpp::SystemDefaultsQoS().keep_last(10).durability_volatile());
                         }
-                        else if(!(track_map_->widthMap()) && widthmap_pub_)
-                        {   
+                        else if(!(track_map_->widthMap()) && widthmap_pub_){   
                             widthmap_pub_.reset();
                         }
                     }
@@ -118,7 +140,7 @@ namespace composable_nodes
                 sensor_msgs::msg::PointCloud2 innerbound_msg, outerbound_msg, racline_msg, asdf;
                 pcl::toROSMsg<deepracing::PointXYZLapdistance>(*track_map_->innerBound(), innerbound_msg);
                 pcl::toROSMsg<deepracing::PointXYZLapdistance>(*track_map_->outerBound(), outerbound_msg);
-                pcl::toROSMsg<deepracing::PointXYZTime>(*track_map_->raceline(), racline_msg);
+                pcl::toROSMsg<deepracing::PointXYZTALS>(*(track_map_->raceline()), racline_msg);
                 innerbound_msg.header.set__stamp(now);
                 outerbound_msg.header.set__stamp(now);
                 racline_msg.header.set__stamp(now);
