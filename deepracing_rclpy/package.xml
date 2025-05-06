@@ -11,7 +11,8 @@
 
   <author>Trent Weiss</author>
   <author email="ttw2xk@virginia.edu">Trent Weiss</author>
-
+  <depend>generate_parameter_library</depend>
+  <depend>generate_parameter_library_py</depend>
   <exec_depend>ackermann_msgs</exec_depend>
   <exec_depend>deepracing_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>

@@ -2,9 +2,19 @@ from setuptools import find_packages
 from setuptools import setup
 import os
 from glob import glob
+import sys
+
 package_name = 'deepracing_rclpy'
 python_pkg_name = "deepracing_ros"
+with open(os.path.join(os.environ["HOME"], "asdf.txt"), "w") as f:
+    f.writelines([l + "\n" for l in sys.argv])
+if len(sys.argv) >= 2 and sys.argv[1] != 'clean':
+    from generate_parameter_library_py.setup_helper import generate_parameter_module
 
+    module_name = 'ghost_parameters'
+    yaml_file = 'ghost_spawner_generate_param/ghost_spawner.yaml'
+    validation_module = 'ghost_spawner_generate_param.custom_validation'
+    generate_parameter_module(module_name, yaml_file, merge_install=True)
 setup(
     name=package_name,
     version='0.0.0',
@@ -46,6 +56,7 @@ setup(
             'xinput_calibration = %s.scripts.xinput_calibration:main' % (python_pkg_name),
             'control_to_xinput = %s.scripts.control_to_xinput:main' % (python_pkg_name),
             'echo_valid_indices = %s.scripts.echo_valid_indices:main' % (python_pkg_name),
+            'ghost_spawner = %s.scripts.ghost_spawner:main' % (python_pkg_name),
         ],
     },
 )

@@ -1,0 +1,9 @@
+ghost_spawner:
+  timescale:
+    type: double
+    default_value: 1.0
+    description: "Timescale"
+  prediction_horizon:
+    type: double
+    default_value: 6.0
+    description: "How far ahead to synthesize a future motion prediction"

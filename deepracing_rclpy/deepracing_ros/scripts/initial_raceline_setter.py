@@ -48,47 +48,68 @@ def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
     node = RacelineSetter()
-    default_trackfile_param : rclpy.Parameter = node.declare_parameter("default_trackfile", value="")
-    default_trackfile : str = default_trackfile_param.get_parameter_value().string_value
-    if default_trackfile=="":
-        node.get_logger().info("default_trackfile parameter not set, exiting")
-        exit(0)
-    f1_track_env = os.getenv("F1_TRACK_DIRS")
-    if f1_track_env is not None:
-        search_dirs = str.split(f1_track_env, os.pathsep)
-    else:
-        search_dirs = []
+    # default_trackfile_param : rclpy.Parameter = node.declare_parameter("default_trackfile", value="")
+    # default_trackfile : str = default_trackfile_param.get_parameter_value().string_value
+    # if default_trackfile=="":
+    #     node.get_logger().info("default_trackfile parameter not set, exiting")
+    #     exit(0)
+    # f1_track_env = os.getenv("F1_TRACK_DIRS")
+    # if f1_track_env is not None:
+    #     search_dirs = str.split(f1_track_env, os.pathsep)
+    # else:
+    #     search_dirs = []
     exec : rclpy.executors.SingleThreadedExecutor = rclpy.executors.SingleThreadedExecutor()
     asynspinner : AsyncSpinner = AsyncSpinner(exec)
     asynspinner.add_node(node)
     asynspinner.spin()
-    rate : rclpy.timer.Rate = node.create_rate(1.0, clock=node.get_clock())
-    while node.current_session_data is None:
-        node.get_logger().info("Waiting for session data")
-        rate.sleep()
+    # rate : rclpy.timer.Rate = node.create_rate(1.0, clock=node.get_clock())
+    # while node.current_session_data is None:
+    #     node.get_logger().info("Waiting for session data")
+    #     rate.sleep()
     
-    trackname = deepracing.trackNames[node.current_session_data.udp_packet.track_id]
-    node.get_logger().info("Got track name: %s" % (trackname,))
+    # trackname = deepracing.trackNames[node.current_session_data.udp_packet.track_id]
+    # node.get_logger().info("Got track name: %s" % (trackname,))
 
-    mapdir : str = os.path.join(ament_index_python.get_package_share_directory("deepracing_launch"), "maps")
-    search_dirs.append(mapdir)
+    # mapdir : str = os.path.join(ament_index_python.get_package_share_directory("deepracing_launch"), "maps")
+    # search_dirs.append(mapdir)
 
-    trackmap : deepracing.TrackMap  = deepracing.searchForTrackmap(trackname, search_dirs, align=True, transform_to_map=True)
-    if trackmap is None:
-        node.get_logger().error("Could not find trackmap for %s in any of %s" % (trackname, str(search_dirs)))
-        exit(-1)
+    # trackmap : deepracing.TrackMap  = deepracing.searchForTrackmap(trackname, search_dirs, align=True, transform_to_map=True)
+    # if trackmap is None:
+    #     node.get_logger().error("Could not find trackmap for %s in any of %s" % (trackname, str(search_dirs)))
+    #     exit(-1)
+    # linedict : dict = trackmap.linemap[default_trackfile]
 
-    linedict : dict = trackmap.linemap[default_trackfile]
-
-    node.get_logger().info("Setting raceline to %s" % (linedict["filepath"],))
-    serviceclient : rclpy.client.Client = node.create_client(deepracing_msgs.srv.SetRaceline, "set_raceline")
-    serviceclient.wait_for_service()
-    req : deepracing_msgs.srv.SetRaceline.Request = deepracing_msgs.srv.SetRaceline.Request()
-    req.filename=linedict["filepath"]
-    req.frame_id="track"
+    node.get_logger().info("Getting raceline from path server")
+    getlineserviceclient : rclpy.client.Client = node.create_client(deepracing_msgs.srv.GetLine, "/get_line")
+    getlineserviceclient.wait_for_service()
+    getlinereq : deepracing_msgs.srv.GetLine.Request = deepracing_msgs.srv.GetLine.Request()
+    getlinereq.key.data="raceline"
     success = False
     while not success:
-        future = serviceclient.call_async(req)
+        future = getlineserviceclient.call_async(getlinereq)
+        rclpy.spin_until_future_complete(node, future)
+        # while not future.done():
+        #     rate.sleep()
+        getlineresponse : deepracing_msgs.srv.GetLine.Response = future.result()
+        if getlineresponse.return_code==deepracing_msgs.srv.GetLine.Response.SUCCESS:
+            success = True
+            node.get_logger().info("Successfully set the raceline")
+        else:
+            node.get_logger().error("Unable to set the raceline. Error code: %d." % (getlineresponse.return_code,))
+            exit(-1)
+
+
+    node.get_logger().info("Setting raceline")
+
+    setlineserviceclient : rclpy.client.Client = node.create_client(deepracing_msgs.srv.SetRaceline, "set_raceline")
+    setlineserviceclient.wait_for_service()
+    req : deepracing_msgs.srv.SetRaceline.Request = deepracing_msgs.srv.SetRaceline.Request()
+    # req.filename=linedict["filepath"]
+    # req.frame_id="track"
+    req.new_raceline = getlineresponse.line
+    success = False
+    while not success:
+        future = setlineserviceclient.call_async(req)
         rclpy.spin_until_future_complete(node, future)
         # while not future.done():
         #     rate.sleep()
