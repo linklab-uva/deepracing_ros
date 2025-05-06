@@ -6,6 +6,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <std_msgs/msg/float64.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include <pcl/point_cloud.h>
 #include <pcl/common/transforms.h>
@@ -14,6 +15,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2_ros/transform_listener.h>
 
 namespace deepracing
 {
@@ -34,8 +36,9 @@ namespace composable_nodes
                     std::bind(&LateralErrorPublisher::odom_cb, this, std::placeholders::_1));
                 m_error_publisher_ = create_publisher<std_msgs::msg::Float64>("lateral_error", qos);
                 m_refpoint_publisher_ = create_publisher<geometry_msgs::msg::PointStamped>("reference_point", qos);
+                m_tfbuffer_.reset(new tf2_ros::Buffer(get_clock(), tf2::durationFromSec(20.0), this));
+                m_tflistener_.reset(new tf2_ros::TransformListener(*m_tfbuffer_));
             
-
             } 
         private:
             inline DEEPRACING_RCLCPP_LOCAL void odom_cb(const nav_msgs::msg::Odometry::ConstPtr& odom_msg)
@@ -47,9 +50,17 @@ namespace composable_nodes
                 }
                 Eigen::Isometry3d odom_eigen_d; 
                 tf2::fromMsg(odom_msg->pose.pose, odom_eigen_d);
-                Eigen::Translation3d offset(-1.925, 0.0, 0.0);
-                odom_eigen_d = odom_eigen_d*Eigen::Translation3d(-1.925, 0.0, 0.0);;
-                Eigen::Isometry3f odom_eigen = odom_eigen_d.cast<float>();
+                std::string target_frame = std::string(odom_msg->child_frame_id);
+                std::string to_replace="centroid";
+                std::string replace_with="base_link";
+                size_t index;
+                while((index = target_frame.find(to_replace,0)) != std::string::npos){
+                    target_frame.replace(index, to_replace.size(), replace_with);
+                }              
+                
+                Eigen::Isometry3f odom_eigen = (odom_eigen_d * 
+                    tf2::transformToEigen(m_tfbuffer_->lookupTransform(
+                        odom_msg->child_frame_id, target_frame, rclcpp::Time(0), rclcpp::Duration::from_seconds(2.0)))).cast<float>();
                 pcl::PointCloud<deepracing::PointXYZTALS> raceline_local;
                 {
                     std::lock_guard<std::mutex> lock(m_mutex_);
@@ -69,12 +80,12 @@ namespace composable_nodes
                 const deepracing::PointXYZTALS& closest_point = raceline_local.at(closest_index);
                 
                 std_msgs::msg::Float64 error_msg;
-                error_msg.data = closest_point.x;
+                error_msg.data = closest_point.y;
                 m_error_publisher_->publish(error_msg);
 
                 geometry_msgs::msg::PointStamped refpoint_msg;
                 refpoint_msg.header.stamp = odom_msg->header.stamp;
-                refpoint_msg.header.frame_id = odom_msg->child_frame_id;
+                refpoint_msg.header.frame_id = target_frame;
                 refpoint_msg.point.x = closest_point.x;
                 refpoint_msg.point.y = closest_point.y;
                 refpoint_msg.point.z = closest_point.z;
@@ -94,6 +105,9 @@ namespace composable_nodes
             rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr m_odom_subscription_;
             rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr m_error_publisher_;
             rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr m_refpoint_publisher_;
+
+            std::shared_ptr<tf2_ros::Buffer> m_tfbuffer_;
+            std::shared_ptr<tf2_ros::TransformListener> m_tflistener_;
 
             std::shared_ptr<pcl::PointCloud<deepracing::PointXYZTALS>> m_raceline_;
             std::mutex m_mutex_;
