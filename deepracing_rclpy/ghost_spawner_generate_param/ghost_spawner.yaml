@@ -7,3 +7,7 @@ ghost_spawner:
     type: double
     default_value: 6.0
     description: "How far ahead to synthesize a future motion prediction"
+  tf_frame:
+    type: string
+    default_value: target_vehicle_centroid
+    description: "What frame id to use for the spawned ghost(s)"

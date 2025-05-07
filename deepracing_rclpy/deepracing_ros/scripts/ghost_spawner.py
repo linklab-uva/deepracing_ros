@@ -29,6 +29,9 @@ import deepracing_models.math_utils as mu
 import torch
 from deepracing_rclpy.ghost_parameters import ghost_spawner
 import functools
+import tf2_ros
+from scipy.spatial.transform import Rotation
+
 
 class GhostSpawner(rclpy.node.Node):
     def __init__(self, name="ghost_spawner"):
@@ -41,6 +44,8 @@ class GhostSpawner(rclpy.node.Node):
         self.frame_id : str | None = None
         self.param_listener = ghost_spawner.ParamListener(self)
         self.params = self.param_listener.get_params()
+
+        self.tf2_broadcaster : tf2_ros.TransformBroadcaster = tf2_ros.TransformBroadcaster(self)
 
     def initialize(self, raceline_np : np.ndarray, frame_id : str):
         racelinepoints = torch.as_tensor(np.stack([raceline_np[k] for k in ["x", "y", "z"]], axis=1), dtype=torch.float64)#, device=torch.device("cuda:0"))
@@ -72,9 +77,31 @@ class GhostSpawner(rclpy.node.Node):
         (controlpoints_fit,), (tswitch,) = mu.compositeBezierFit(tdelta[None], pointssamp[None], 4, Y_0=pointssamp[[0,]], constraint_level=2)
         deltat = tswitch[1:] - tswitch[:-1]
 
+        p0 = controlpoints_fit[0,0]
+        tau0 = controlpoints_fit[0,1] - p0
+        tau0 = tau0/torch.linalg.vector_norm(tau0)
+
+        up = torch.zeros_like(tau0)
+        up[-1] = 1.0
+
+        nu0 = torch.linalg.cross(up, tau0)
+
+        zvec = torch.linalg.cross(tau0, nu0)
+
+        rotmat = torch.stack([tau0, nu0, zvec], dim=-1)
+
+        rot = Rotation.from_matrix(rotmat.cpu().numpy())
+        quat = rot.as_quat()
+
+        transform = geometry_msgs.msg.TransformStamped()
+        transform.header.stamp = now.to_msg()
+        transform.header.frame_id = self.frame_id
+        transform.transform.rotation = geometry_msgs.msg.Quaternion(x=quat[0].item(), y=quat[1].item(), z=quat[2].item(), w=quat[3].item())
+        transform.transform.translation = geometry_msgs.msg.Vector3(x=p0[0].item(), y=p0[1].item(), z=p0[2].item())
+        transform.child_frame_id=self.params.tf_frame
+        
         cbc_msg = deepracing_msgs.msg.CompositeBezierCurve()
-        cbc_msg.header.stamp=now.to_msg()
-        cbc_msg.header.frame_id = self.frame_id
+        cbc_msg.header = transform.header
         cbc_msg.delta_t = deltat.cpu().numpy()#.tolist() 
         cbc_msg.segments = controlpoints_fit.shape[0]
         cbc_msg.order = controlpoints_fit.shape[1]-1
@@ -91,6 +118,7 @@ class GhostSpawner(rclpy.node.Node):
         point_msg.header=cbc_msg.header
         point_msg.point=cbc_msg.control_points_flat[0]
         
+        self.tf2_broadcaster.sendTransform(transform)
         self.ghost_position_pub.publish(point_msg)
         self.ghost_prediction_pub.publish(cbc_msg)
         
