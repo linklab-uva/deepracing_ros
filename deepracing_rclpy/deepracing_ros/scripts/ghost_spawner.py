@@ -10,30 +10,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import copy
-import json
 import numpy as np
-from shapely import points
 
-import ament_index_python
 import rclpy
+import rclpy.qos
 import rclpy.client
-import rclpy.executors
 import rclpy.node 
 import rclpy.publisher  
-import rclpy.subscription  
 import rclpy.logging  
-import rclpy.duration
-import rclpy.parameter
 import rclpy.time
 import rclpy.timer
 import deepracing_msgs.msg 
 import deepracing_msgs.srv as deepracing_srvs   
-import deepracing_ros.utils
-import deepracing_ros.convert
-import deepracing
-import rclpy.executors 
+
 import sensor_msgs_py.point_cloud2
 import geometry_msgs.msg
 import deepracing_models.math_utils as mu
@@ -47,24 +36,23 @@ class GhostSpawner(rclpy.node.Node):
         self.raceline_helper : mu.RacelineHelper = None
         self.srv = None
         self.ghost_timer = None
+        self.ghost_position_pub : rclpy.publisher.Publisher = None
+        self.ghost_prediction_pub : rclpy.publisher.Publisher = None
+        self.frame_id : str | None = None
         self.param_listener = ghost_spawner.ParamListener(self)
         self.params = self.param_listener.get_params()
-        self.ghost_pub : rclpy.publisher.Publisher = None
-        self.frame_id : str | None = None
+
     def initialize(self, raceline_np : np.ndarray, frame_id : str):
         racelinepoints = torch.as_tensor(np.stack([raceline_np[k] for k in ["x", "y", "z"]], axis=1), dtype=torch.float64)#, device=torch.device("cuda:0"))
         racelinespeeds = self.params.timescale*torch.as_tensor(raceline_np["speed"]).type_as(racelinepoints)
         self.get_logger().info("Building raceline helper")
-        self.raceline_helper = mu.RacelineHelper.from_closed_path(racelinepoints, racelinespeeds)
+        self.raceline_helper = mu.RacelineHelper.from_closed_path(racelinepoints, racelinespeeds, 1.0)
         self.get_logger().info("Built raceline helper")
         self.frame_id = frame_id
-        self.ghost_pub : rclpy.publisher.Publisher = self.create_publisher(geometry_msgs.msg.PointStamped, "ghost_position", 1)
+        self.ghost_position_pub : rclpy.publisher.Publisher = self.create_publisher(geometry_msgs.msg.PointStamped, "target_position", rclpy.qos.qos_profile_sensor_data)
+        self.ghost_prediction_pub : rclpy.publisher.Publisher = self.create_publisher(deepracing_msgs.msg.CompositeBezierCurve, "target_prediction", rclpy.qos.qos_profile_sensor_data)
         self.srv = self.create_service(deepracing_srvs.SpawnGhost, 'spawn_ghost', self.spawn_ghost_cb)
-        # tsamp = torch.linspace(0.0, self.params.prediction_horizon, steps=60).type_as(racelinepoints)
-        # rsamp, pointssamp, velssamp, _ = self.raceline_helper(t=tsamp)
-        # print(pointssamp)
-        # print(torch.norm(velssamp, p=2.0, dim=-1))
-        # print(rsamp)
+
     def spawn_ghost_cb(self, request : deepracing_srvs.SpawnGhost.Request, response : deepracing_srvs.SpawnGhost.Response):
         self.get_logger().info("Spawning ghost starting at time %f" % (request.raceline_tstart,))
         response.return_code=deepracing_srvs.SpawnGhost.Response.UNKNOWN
@@ -79,16 +67,33 @@ class GhostSpawner(rclpy.node.Node):
         delta = now - tstart_global
         delta_float = 1E-9*float(delta.nanoseconds)
         t0 = (tstart_rl + delta_float)%self.raceline_helper.__r_of_t__.xend_vec[-1].item()
-        tsamp = torch.linspace(t0, t0 + self.params.prediction_horizon, steps=30).type_as(self.raceline_helper.__arclengths_in__)
-        rsamp, pointssamp, velssamp, _ = self.raceline_helper(t=tsamp)
-        controlpoints_fit, tswitch = mu.compositeBezierFit(tsamp[None] - tsamp[0], pointssamp[None], 4, Y_0=pointssamp[[0,]])
-        pointstamped = geometry_msgs.msg.PointStamped()
-        pointstamped.header.stamp = now.to_msg()
-        pointstamped.header.frame_id = self.frame_id
-        pointstamped.point.x = controlpoints_fit[0,0,0,0].item()
-        pointstamped.point.y = controlpoints_fit[0,0,0,1].item()
-        pointstamped.point.z = controlpoints_fit[0,0,0,2].item()
-        self.ghost_pub.publish(pointstamped)
+        tdelta = torch.linspace(0.0, self.params.prediction_horizon, steps=30).type_as(self.raceline_helper.__arclengths_in__)
+        rsamp, pointssamp, velssamp, _ = self.raceline_helper(t=tdelta+t0)
+        (controlpoints_fit,), (tswitch,) = mu.compositeBezierFit(tdelta[None], pointssamp[None], 4, Y_0=pointssamp[[0,]], constraint_level=2)
+        deltat = tswitch[1:] - tswitch[:-1]
+
+        cbc_msg = deepracing_msgs.msg.CompositeBezierCurve()
+        cbc_msg.header.stamp=now.to_msg()
+        cbc_msg.header.frame_id = self.frame_id
+        cbc_msg.delta_t = deltat.cpu().numpy()#.tolist() 
+        cbc_msg.segments = controlpoints_fit.shape[0]
+        cbc_msg.order = controlpoints_fit.shape[1]-1
+        cbc_msg.two_d=False
+        controlpoints_flat = controlpoints_fit.view(-1, 3)
+        for i in range(controlpoints_flat.shape[0]):
+            point = geometry_msgs.msg.Point()
+            point.x = controlpoints_flat[i,0].item()
+            point.y = controlpoints_flat[i,1].item()
+            point.z = controlpoints_flat[i,2].item()
+            cbc_msg.control_points_flat.append(point)
+
+        point_msg = geometry_msgs.msg.PointStamped()
+        point_msg.header=cbc_msg.header
+        point_msg.point=cbc_msg.control_points_flat[0]
+        
+        self.ghost_position_pub.publish(point_msg)
+        self.ghost_prediction_pub.publish(cbc_msg)
+        
         # print(pointssamp[0])
         
 

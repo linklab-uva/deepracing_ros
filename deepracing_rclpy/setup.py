@@ -57,6 +57,7 @@ setup(
             'control_to_xinput = %s.scripts.control_to_xinput:main' % (python_pkg_name),
             'echo_valid_indices = %s.scripts.echo_valid_indices:main' % (python_pkg_name),
             'ghost_spawner = %s.scripts.ghost_spawner:main' % (python_pkg_name),
+            'cbc_visualizer = %s.scripts.cbc_visualizer:main' % (python_pkg_name),
         ],
     },
 )
