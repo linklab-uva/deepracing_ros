@@ -33,6 +33,7 @@ import torch
 from deepracing_rclpy.ghost_parameters import ghost_spawner
 import matplotlib.pyplot as plt
 import matplotlib, matplotlib.colors, matplotlib.cm
+from deepracing_rclpy.cbc_viz import cbc_visualizer
 
 
 class CBCVisualizer(rclpy.node.Node):
@@ -43,7 +44,9 @@ class CBCVisualizer(rclpy.node.Node):
         self.matrix_factories = dict()
         prop_cycle = plt.rcParams['axes.prop_cycle']
         self.colorcycle = list(prop_cycle.by_key()['color'])
-        self.cm = matplotlib.cm.get_cmap(name="RdYlGn")
+        self.param_listener = cbc_visualizer.ParamListener(self)
+        self.params = self.param_listener.get_params()
+        self.cm = matplotlib.cm.get_cmap(name=self.params.color_map)
 
     def cbc_cb(self, cbc_msg : deepracing_msgs.msg.CompositeBezierCurve):
         control_points_flat = torch.zeros([len(cbc_msg.control_points_flat), 2 + int(not cbc_msg.two_d)], dtype=torch.float64)
@@ -55,8 +58,7 @@ class CBCVisualizer(rclpy.node.Node):
         control_points = control_points_flat.reshape(cbc_msg.segments, cbc_msg.order+1, control_points_flat.shape[-1])
         delta_t = torch.as_tensor(cbc_msg.delta_t).type_as(control_points)
         tstart = torch.cumsum(delta_t, 0) - delta_t[0]
-        dT = tstart[-1] + delta_t[-1]
-        tsamp = torch.linspace(0.0, dT.item(), steps=60).type_as(control_points)
+        tsamp = torch.linspace(0.0, tstart[-1] + delta_t[-1], steps=self.params.num_sample_points).type_as(control_points)
 
         if cbc_msg.order not in self.matrix_factories:
             self.matrix_factories[cbc_msg.order] = mu.BezierMatrixFactory(cbc_msg.order)
@@ -67,23 +69,22 @@ class CBCVisualizer(rclpy.node.Node):
         points_marker.header=cbc_msg.header
         points_marker.action=visualization_msgs.msg.Marker.ADD
         points_marker.type=visualization_msgs.msg.Marker.POINTS
-        points_marker.ns="target_vehicle"
+        points_marker.ns=self.params.namespace
         points_marker.id=1
         points_marker.lifetime=rclpy.duration.Duration(seconds=0, nanoseconds=int(.5E9)).to_msg()
         points_marker.pose=geometry_msgs.msg.Pose()
         points_marker.points=cbc_msg.control_points_flat
-        points_marker.scale=geometry_msgs.msg.Vector3(x=5.0, y=5.0, z=5.0)
+        points_marker.scale=geometry_msgs.msg.Vector3(x=self.params.control_point_scale, y=self.params.control_point_scale, z=self.params.control_point_scale)
         points_marker.colors=[]
         for i in range(len(points_marker.points)):
             idx = i//cbc_msg.segments
             rgb = matplotlib.colors.to_rgb(self.colorcycle[idx%len(self.colorcycle)])
             points_marker.colors.append(std_msgs.msg.ColorRGBA(r=rgb[0], g=rgb[1], b=rgb[2], a=1.0))
-        # points_marker.colors=[std_msgs.msg.ColorRGBA(r=1.0, g=0.0, b=0.0, a=1.0) for _ in points_marker.points]
 
         (curve_points_samp,), idxbuckets = mu.compositeBezierEval(tstart[None], delta_t[None], control_points[None], tsamp[None], self.matrix_factories[cbc_msg.order])
         control_points_deriv = cbc_msg.order*torch.diff(control_points, dim=-2)/delta_t[:,None,None]
         (curve_vels_samp,), _ = mu.compositeBezierEval(tstart[None], delta_t[None], control_points_deriv[None], tsamp[None], self.matrix_factories[cbc_msg.order-1], idxbuckets=idxbuckets)
-        curve_speeds_samp = torch.clamp(2.2369*torch.norm(curve_vels_samp, p=2.0, dim=-1), min=0.0, max=200.0)
+        curve_speeds_samp = torch.norm(curve_vels_samp, p=2.0, dim=-1)
 
         curve_marker = visualization_msgs.msg.Marker()
         curve_marker.header=cbc_msg.header
@@ -92,18 +93,19 @@ class CBCVisualizer(rclpy.node.Node):
         curve_marker.ns=points_marker.ns
         curve_marker.id=2
         curve_marker.lifetime=points_marker.lifetime
-        curve_marker.scale=geometry_msgs.msg.Vector3(x=3.0)
+        curve_marker.scale=geometry_msgs.msg.Vector3(x=self.params.curve_scale)
         curve_marker.color=std_msgs.msg.ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0)
-        
+        speed_factor_delta = self.params.speed_max-self.params.speed_min
         for i in range(curve_speeds_samp.shape[0]):
-            rgb = matplotlib.colors.to_rgb(self.cm(((curve_speeds_samp[i])/200.0).item()))
+            speed_factor = torch.clip((curve_speeds_samp[i] - self.params.speed_min)/speed_factor_delta, min=0.0, max=1.0)
+            rgb = matplotlib.colors.to_rgb(self.cm(speed_factor.item()))
             curve_marker.colors.append(std_msgs.msg.ColorRGBA(r=rgb[0], g=rgb[1], b=rgb[2], a=1.0))
 
         curve_marker.pose=geometry_msgs.msg.Pose()
         curve_marker.points=[
             geometry_msgs.msg.Point(x=curve_points_samp[i,0].item(),
                                     y=curve_points_samp[i,1].item(),
-                                    z=curve_points_samp[i,2].item())
+                                    z=0.0 if cbc_msg.two_d else curve_points_samp[i,2].item())
         for i in range(curve_points_samp.shape[0])]
         
         arrow_marker = visualization_msgs.msg.Marker()
@@ -115,7 +117,7 @@ class CBCVisualizer(rclpy.node.Node):
         arrow_marker.id=3
         arrow_marker.lifetime=points_marker.lifetime
         arrow_marker.points=[cbc_msg.control_points_flat[0], cbc_msg.control_points_flat[1]]
-        arrow_marker.scale=geometry_msgs.msg.Vector3(x=2.0, y=3.0)
+        arrow_marker.scale=geometry_msgs.msg.Vector3(x=self.params.arrow_scale, y=1.5*self.params.arrow_scale)
 
         self.marker_pub.publish(visualization_msgs.msg.MarkerArray(markers=[points_marker, curve_marker, arrow_marker]))
         

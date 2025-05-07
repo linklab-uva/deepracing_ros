@@ -11,10 +11,8 @@ with open(os.path.join(os.environ["HOME"], "asdf.txt"), "w") as f:
 if len(sys.argv) >= 2 and sys.argv[1] != 'clean':
     from generate_parameter_library_py.setup_helper import generate_parameter_module
 
-    module_name = 'ghost_parameters'
-    yaml_file = 'ghost_spawner_generate_param/ghost_spawner.yaml'
-    validation_module = 'ghost_spawner_generate_param.custom_validation'
-    generate_parameter_module(module_name, yaml_file, merge_install=True)
+    generate_parameter_module('ghost_parameters', 'ghost_spawner_generate_param/ghost_spawner.yaml', merge_install=True)
+    generate_parameter_module('cbc_viz', 'cbc_viz_generate_param/cbc_viz.yaml', merge_install=True)
 setup(
     name=package_name,
     version='0.0.0',

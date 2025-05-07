@@ -1,0 +1,33 @@
+cbc_visualizer:
+  num_sample_points:
+    type: int
+    default_value: 30
+    description: "How many points to uniformly sample the CBC for visualization"
+  control_point_scale:
+    type: double
+    default_value: 5.0
+    description: "Scale of the point list for the control points"
+  curve_scale:
+    type: double
+    default_value: 5.0
+    description: "Scale of the point list for the curve line"
+  arrow_scale:
+    type: double
+    default_value: 2.0
+    description: "Scale of the point list for the current position arrow"
+  speed_min:
+    type: double
+    default_value: 20.0
+    description: "Minimum point for the normilization of the speed to color mapping"
+  speed_max:
+    type: double
+    default_value: 90.0
+    description: "Maximum point for the normilization of the speed to color mapping"
+  color_map:
+    type: string
+    default_value: RdYlGn
+    description: "String ID for the matplotlib colormap to color the curve with"
+  namespace:
+    type: string
+    default_value: target_vehicle
+    description: "Namespace for the marker arrays to generate"
