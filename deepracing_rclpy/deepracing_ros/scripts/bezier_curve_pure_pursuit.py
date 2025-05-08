@@ -30,6 +30,7 @@ import deepracing_ros, deepracing_ros.convert as C
 from typing import List
 import torch
 import deepracing_models.math_utils as mu
+import deepracing_models.math_utils.bezier as bezier
 import tf2_ros
 import rclpy.time
 import rclpy.duration
@@ -73,7 +74,7 @@ class BezierCurvePurePursuit(Node):
         gpu_param : Parameter = self.declare_parameter("gpu", value=-1)
         gpu : int = gpu_param.get_parameter_value().integer_value
 
-        if torch.has_cuda and gpu>=0:
+        if torch.backends.cuda.is_built() and gpu>=0:
             self.get_logger().info("Running on GPU %d" %(gpu,))
             self.device : torch.device = torch.device("cuda:%d" % (gpu,))
         else:
