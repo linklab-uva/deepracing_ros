@@ -1,4 +1,8 @@
 ghost_spawner:
+  gpu:
+    type: int
+    default_value: -1
+    description: "Which gpu index to use. negative means cpu"
   timescale:
     type: double
     default_value: 1.0
