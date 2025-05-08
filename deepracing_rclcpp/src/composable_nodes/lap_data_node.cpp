@@ -20,6 +20,7 @@ namespace composable_nodes
             DEEPRACING_RCLCPP_PUBLIC ReceiveLapData(const rclcpp::NodeOptions & options) : 
                 rclcpp::Node("receive_lap_data", options)
             {
+                get_parameter<bool>("use_sim_time", m_use_sim_time_);
                 rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(10).durability_volatile();
                 m_publisher_ = create_publisher<deepracing_msgs::msg::TimestampedPacketLapData>("lap_data", qos);
                 m_valid_indices_publisher_ = create_publisher<std_msgs::msg::UInt8MultiArray>("valid_indices", qos);
@@ -51,6 +52,9 @@ namespace composable_nodes
                     }
                 }
                 rosdata.header.set__stamp(udp_packet->header.stamp).set__frame_id(deepracing_ros::F1MsgUtils2023::world_coordinate_name);
+                if(m_use_sim_time_){
+                    rosdata.header.stamp = rclcpp::Time(std::int64_t(double(udp_data->header.sessionTime)*1E9),rcl_clock_type_t::RCL_ROS_TIME);
+                }
                 m_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketLapData>(rosdata));
                 m_valid_indices_publisher_->publish(std::make_unique<std_msgs::msg::UInt8MultiArray>(valid_indices));
             }
@@ -60,7 +64,7 @@ namespace composable_nodes
             rclcpp::Publisher<std_msgs::msg::UInt8MultiArray>::SharedPtr m_valid_indices_publisher_;
 
             rclcpp::Time m_time_start_;
-            bool m_all_cars_param_;
+            bool m_all_cars_param_, m_use_sim_time_;
     };
     
 }

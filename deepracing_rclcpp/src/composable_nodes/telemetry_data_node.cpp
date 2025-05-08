@@ -19,6 +19,7 @@ namespace composable_nodes
             DEEPRACING_RCLCPP_PUBLIC ReceiveTelemetryData(const rclcpp::NodeOptions & options) : 
                 rclcpp::Node("receive_telemetry_data", options)
             {
+                get_parameter<bool>("use_sim_time", m_use_sim_time_);
                 rclcpp::QoS qos = rclcpp::SystemDefaultsQoS().keep_last(10).durability_volatile();
                 m_publisher_ = create_publisher<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>("telemetry_data", qos);
                 m_udp_subscription_ = create_subscription<udp_msgs::msg::UdpPacket>("_telemetry_data/raw_udp", qos, 
@@ -33,6 +34,9 @@ namespace composable_nodes
                 deepracing_msgs::msg::TimestampedPacketCarTelemetryData rosdata;
                 rosdata.udp_packet = deepracing_ros::F1MsgUtils2023::toROS(*udp_data, m_all_cars_param_); 
                 rosdata.header.set__stamp(udp_packet->header.stamp).set__frame_id(deepracing_ros::F1MsgUtils2023::world_coordinate_name);
+                if(m_use_sim_time_){
+                    rosdata.header.stamp = rclcpp::Time(std::int64_t(double(udp_data->header.sessionTime)*1E9),rcl_clock_type_t::RCL_ROS_TIME);
+                }
                 m_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>(rosdata));
             }
             
@@ -40,7 +44,7 @@ namespace composable_nodes
             rclcpp::Publisher<deepracing_msgs::msg::TimestampedPacketCarTelemetryData>::SharedPtr m_publisher_;
 
             rclcpp::Time m_time_start_;
-            bool m_all_cars_param_;
+            bool m_all_cars_param_, m_use_sim_time_;
     };
     
 }

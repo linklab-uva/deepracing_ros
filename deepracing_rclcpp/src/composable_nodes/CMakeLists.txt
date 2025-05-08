@@ -57,6 +57,7 @@ ament_target_dependencies(deepracing_composable_nodes
     nav_msgs
     pcl_conversions
     random_numbers
+    rosgraph_msgs
     std_msgs
     tf2_ros
     tf2_eigen

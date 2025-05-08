@@ -7,6 +7,10 @@
 #include <deepracing_msgs/msg/timestamped_packet_motion_data.hpp>
 #include <f1_datalogger/car_data/f1_2023/timestamped_car_data.h>
 #include <deepracing_ros/utils/f1_msg_utils_2023.h>
+#include <rosgraph_msgs/msg/clock.hpp>
+#include <cmath>
+#include <iomanip>
+
 
 namespace deepracing
 {
@@ -25,6 +29,10 @@ namespace composable_nodes
                     std::bind(&ReceiveMotionData::udp_cb, this, std::placeholders::_1));
                 m_time_start_ = get_clock()->now();
                 m_all_cars_param_ = declare_parameter<bool>("all_cars", false);
+                bool publish_clock = declare_parameter<bool>("publish_clock", false);
+                if(publish_clock){
+                    m_clock_publisher_ = create_publisher<rosgraph_msgs::msg::Clock>("/clock", qos);
+                }
                 // std::string secondary_carname = declare_parameter<std::string>("secondary_carname", "");
                 // if(!(secondary_carname.size()==0))
                 // {
@@ -59,10 +67,17 @@ namespace composable_nodes
                         motion_data.world_velocity.header.stamp = rosdata.header.stamp;
                     }
                 }
+                if(m_clock_publisher_){
+                    rosgraph_msgs::msg::Clock clock_msg;
+                    clock_msg.clock = rclcpp::Time(std::int64_t(double(udp_data->header.sessionTime)*1E9),rcl_clock_type_t::RCL_ROS_TIME);
+                    m_clock_publisher_->publish(clock_msg);
+                    rosdata.header.stamp = clock_msg.clock;
+                }
                 m_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketMotionData>(rosdata));
             }
             
             rclcpp::Subscription<udp_msgs::msg::UdpPacket>::SharedPtr m_udp_subscription_;
+            rclcpp::Publisher<rosgraph_msgs::msg::Clock>::SharedPtr m_clock_publisher_;
             rclcpp::Publisher<deepracing_msgs::msg::TimestampedPacketMotionData>::SharedPtr m_publisher_;
 
             rclcpp::Time m_time_start_;

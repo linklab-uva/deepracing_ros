@@ -16,6 +16,10 @@
 #include <deepracing/utils.hpp>
 #include <deepracing_ros/utils/file_utils.h>
 #include <cstdlib>
+#include <filesystem>
+#include <rclcpp/exceptions.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <ament_index_cpp/get_package_prefix.hpp>
 
 namespace deepracing
 {
@@ -35,6 +39,13 @@ namespace composable_nodes
                 if(env_val){
                     std::vector<std::string> env_val_split = deepracing_ros::FileUtils::split(std::string(env_val));
                     search_dirs_.insert(search_dirs_.end(), env_val_split.begin(), env_val_split.end());
+                }
+                try{
+                    std::string deepracing_launch_sharedir = ament_index_cpp::get_package_share_directory("deepracing_launch");
+                    std::filesystem::path mapspath = std::filesystem::path(deepracing_launch_sharedir) / std::filesystem::path("maps");
+                    search_dirs_.push_back(mapspath.string());
+                }catch(const ament_index_cpp::PackageNotFoundError& exception){
+
                 }
                 transform_to_map_= declare_parameter<bool>("transform_to_map", true);
                 
