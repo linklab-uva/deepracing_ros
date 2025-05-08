@@ -40,6 +40,5 @@ def generate_launch_description():
                     ,launch_arguments=list({rate.name: LaunchConfiguration(rate.name), default_trackfile.name: LaunchConfiguration(default_trackfile.name), carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name)}.items())))
     includez.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(PathJoinSubstitution([deepracing_launch_launch_dir, "controllers.launch.py"]))\
                     ,launch_arguments=list({carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name)}.items())))
-    
     return LaunchDescription(argz + includez + nodez)
     

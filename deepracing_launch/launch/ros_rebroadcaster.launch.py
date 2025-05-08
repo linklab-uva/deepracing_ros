@@ -7,6 +7,7 @@ import launch_ros.descriptions
 from ament_index_python import get_package_share_directory
 import os
 import multiprocessing
+from launch.launch_description_sources import PythonLaunchDescriptionSource, FrontendLaunchDescriptionSource
 
 def generate_launch_description():
     # rebroadcasternode = launch_ros.actions.Node(package='deepracing_rclcpp', node_executable='ros_rebroadcaster', output='screen', node_name="f1_data_broadcaster")
@@ -24,6 +25,20 @@ def generate_launch_description():
     argz.append(allcars)
     use_sim_time = launch.actions.DeclareLaunchArgument("use_sim_time", default_value="false")
     argz.append(use_sim_time)
+    publish_clock = launch.actions.DeclareLaunchArgument("publish_clock", default_value="false")
+    argz.append(publish_clock)
+    includez = []
+        # ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
+    # try:
+    #     foxglove_bridge_dir = get_package_share_directory("foxglove_bridge")
+    #     includez.append(launch.actions.IncludeLaunchDescription(FrontendLaunchDescriptionSource(
+    #                 os.path.join(foxglove_bridge_dir, "launch", "foxglove_bridge_launch.xml")
+    #             ),
+    #         launch_arguments=[("port", "8765"), ("address", launch.substitutions.LaunchConfiguration(ip.name))]
+    #         )
+    #     )
+    # except:
+    #     pass
 
     search_dirs = []
     map_dirs_env = os.getenv("F1_MAP_DIRS", None)
@@ -76,7 +91,8 @@ def generate_launch_description():
             package='deepracing_rclcpp',
             plugin='deepracing::composable_nodes::ReceiveMotionData',
             name='motion_data_node',
-            parameters=[{use_sim_time.name : launch.substitutions.LaunchConfiguration(use_sim_time.name), 
+            parameters=[{publish_clock.name : launch.substitutions.LaunchConfiguration(publish_clock.name),
+                          use_sim_time.name : launch.substitutions.LaunchConfiguration(use_sim_time.name), 
                          'all_cars': launch.substitutions.LaunchConfiguration(allcars.name)}],
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
@@ -125,4 +141,4 @@ def generate_launch_description():
                                                       "node_to_initialize" : "raw_udp_receiver_node"}],
                                          output='screen'))
     
-    return launch.LaunchDescription(argz + nodez + [container,])
+    return launch.LaunchDescription(argz + includez + nodez + [container,])
