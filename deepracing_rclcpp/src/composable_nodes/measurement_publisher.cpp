@@ -55,7 +55,7 @@ class MeasurementPublisher
      Json::Value root;
      Json::CharReaderBuilder builder;
      builder["collectComments"] = true;
-     JSONCPP_STRING errs;
+     Json::String errs;
      std::ifstream ifs;
      std::ifstream covariance_file;
      covariance_file.open(covariance_file_path.string().c_str());

@@ -46,7 +46,7 @@ namespace composable_nodes
                 deepf1::twenty_twentythree::PacketMotionData* udp_data = reinterpret_cast<deepf1::twenty_twentythree::PacketMotionData*>((void*)&(udp_packet->data.at(0)));
                 deepracing_msgs::msg::TimestampedPacketMotionData rosdata;
                 rosdata.udp_packet = deepracing_ros::F1MsgUtils2023::toROS(*udp_data, m_all_cars_param_); 
-                rosdata.header.set__stamp(udp_packet->header.stamp).set__frame_id(deepracing_ros::F1MsgUtils2023::world_coordinate_name);
+                rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils2023::world_coordinate_name);
                 if (rosdata.udp_packet.header.player_car_index<rosdata.udp_packet.car_motion_data.size())
                 {
                     deepracing_msgs::msg::CarMotionData& ego_motion_data = rosdata.udp_packet.car_motion_data.at(rosdata.udp_packet.header.player_car_index);
@@ -71,7 +71,9 @@ namespace composable_nodes
                     rosgraph_msgs::msg::Clock clock_msg;
                     clock_msg.clock = rclcpp::Time(std::int64_t(double(udp_data->header.sessionTime)*1E9),rcl_clock_type_t::RCL_ROS_TIME);
                     m_clock_publisher_->publish(clock_msg);
-                    rosdata.header.stamp = clock_msg.clock;
+                    rosdata.header.set__stamp(clock_msg.clock);
+                }else{
+                    rosdata.header.set__stamp(udp_packet->header.stamp);
                 }
                 m_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketMotionData>(rosdata));
             }

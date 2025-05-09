@@ -51,9 +51,12 @@ namespace composable_nodes
                        valid_indices.data.push_back(i);
                     }
                 }
-                rosdata.header.set__stamp(udp_packet->header.stamp).set__frame_id(deepracing_ros::F1MsgUtils2023::world_coordinate_name);
+                rosdata.header.set__frame_id(deepracing_ros::F1MsgUtils2023::world_coordinate_name);
                 if(m_use_sim_time_){
-                    rosdata.header.stamp = rclcpp::Time(std::int64_t(double(udp_data->header.sessionTime)*1E9),rcl_clock_type_t::RCL_ROS_TIME);
+                    rosdata.header.set__stamp(rclcpp::Time(std::int64_t(double(udp_data->header.sessionTime)*1E9),rcl_clock_type_t::RCL_ROS_TIME));
+                }
+                else{
+                    rosdata.header.set__stamp(udp_packet->header.stamp);
                 }
                 m_publisher_->publish(std::make_unique<deepracing_msgs::msg::TimestampedPacketLapData>(rosdata));
                 m_valid_indices_publisher_->publish(std::make_unique<std_msgs::msg::UInt8MultiArray>(valid_indices));
