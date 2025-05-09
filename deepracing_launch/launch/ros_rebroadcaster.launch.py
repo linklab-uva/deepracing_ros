@@ -1,6 +1,7 @@
 
 import launch
 import launch.actions
+import launch.conditions
 import launch.substitutions
 import launch_ros.actions
 import launch_ros.descriptions
@@ -21,6 +22,8 @@ def generate_launch_description():
     argz.append(ip)
     port = launch.actions.DeclareLaunchArgument("port", default_value="20777")
     argz.append(port)
+    with_receiver = launch.actions.DeclareLaunchArgument("with_receiver", default_value="true")
+    argz.append(with_receiver)
     allcars = launch.actions.DeclareLaunchArgument("publish_all_cars", default_value="false")
     argz.append(allcars)
     use_sim_time = launch.actions.DeclareLaunchArgument("use_sim_time", default_value="false")
@@ -28,17 +31,6 @@ def generate_launch_description():
     publish_clock = launch.actions.DeclareLaunchArgument("publish_clock", default_value="false")
     argz.append(publish_clock)
     includez = []
-        # ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
-    # try:
-    #     foxglove_bridge_dir = get_package_share_directory("foxglove_bridge")
-    #     includez.append(launch.actions.IncludeLaunchDescription(FrontendLaunchDescriptionSource(
-    #                 os.path.join(foxglove_bridge_dir, "launch", "foxglove_bridge_launch.xml")
-    #             ),
-    #         launch_arguments=[("port", "8765"), ("address", launch.substitutions.LaunchConfiguration(ip.name))]
-    #         )
-    #     )
-    # except:
-    #     pass
 
     search_dirs = []
     map_dirs_env = os.getenv("F1_MAP_DIRS", None)
@@ -59,6 +51,7 @@ def generate_launch_description():
             parameters=[{use_sim_time.name : launch.substitutions.LaunchConfiguration(use_sim_time.name), 
                          ip.name : launch.substitutions.LaunchConfiguration(ip.name), 
                          port.name : launch.substitutions.LaunchConfiguration(port.name)}],
+            condition=launch.conditions.IfCondition(launch.substitutions.LaunchConfiguration(with_receiver.name)),
             extra_arguments=[{'use_intra_process_comms': use_intra_process_comms}]),
         launch_ros.descriptions.ComposableNode(
             package='deepracing_rclcpp',
