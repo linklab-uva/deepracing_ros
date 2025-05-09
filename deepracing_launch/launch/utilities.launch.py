@@ -24,10 +24,12 @@ def generate_launch_description():
     entries = [boundary_pub, carname, index, use_sim_time, with_ekf, ekf_global, ekf_with_angvel]
 
 
-    # entries.append(launch_ros.actions.Node(
-    #     package='deepracing_rclcpp', name='trackmap_publisher', executable='trackmap_publisher', output='screen',
-    #     # parameters=list({"search_dirs" : str(os.getenv("F1_MAP_DIRS", "").split(os.pathsep))}.items())
-    #     )) 
+    entries.append(launch_ros.actions.Node(
+        package='deepracing_rclcpp', name='lateral_error_publisher', executable='lateral_error_publisher_exe',
+        output='screen',
+        parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name),}],
+        namespace=LaunchConfiguration(carname.name)
+        )) 
     entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='measurement_publisher', executable='measurement_publisher_exe', output='screen', 
                                            parameters=[os.path.join(config_dir, "measurement_publisher.yaml"), 
                                                        {carname.name: LaunchConfiguration(carname.name), 
