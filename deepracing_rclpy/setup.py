@@ -11,6 +11,7 @@ with open(os.path.join(os.environ["HOME"], "asdf.txt"), "w") as f:
 if len(sys.argv) >= 2 and sys.argv[1] != 'clean':
     from generate_parameter_library_py.setup_helper import generate_parameter_module
 
+    generate_parameter_module('dbf_overtaking', 'paramgen/dbf_overtaking/dbf_overtaking.yaml', merge_install=True)
     generate_parameter_module('ghost_parameters', 'paramgen/ghost_spawner/ghost_spawner.yaml', merge_install=True)
     generate_parameter_module('cbc_viz', 'paramgen/cbc_viz/cbc_viz.yaml', merge_install=True)
 setup(
