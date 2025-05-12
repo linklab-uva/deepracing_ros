@@ -22,14 +22,14 @@ def generate_launch_description():
     argz.append(ip)
     port = launch.actions.DeclareLaunchArgument("port", default_value="20777")
     argz.append(port)
-    with_receiver = launch.actions.DeclareLaunchArgument("with_receiver", default_value="true")
-    argz.append(with_receiver)
     allcars = launch.actions.DeclareLaunchArgument("publish_all_cars", default_value="false")
     argz.append(allcars)
     use_sim_time = launch.actions.DeclareLaunchArgument("use_sim_time", default_value="false")
     argz.append(use_sim_time)
     publish_clock = launch.actions.DeclareLaunchArgument("publish_clock", default_value="false")
     argz.append(publish_clock)
+    with_receiver = launch.actions.DeclareLaunchArgument("with_receiver", default_value="true")
+    argz.append(with_receiver)
     includez = []
 
     search_dirs = []
