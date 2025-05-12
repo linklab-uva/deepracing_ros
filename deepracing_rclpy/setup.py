@@ -42,6 +42,7 @@ setup(
               ])),
     entry_points={
         'console_scripts': [
+            'lateral_error_publisher = %s.scripts.lateral_error_publisher:main' % (python_pkg_name),
             'load_measurement_publisher = %s.scripts.load_measurement_publisher:main' % (python_pkg_name),
             'initialize_lifecycle_node = %s.scripts.initialize_lifecycle_node:main' % (python_pkg_name),
             'initial_raceline_setter = %s.scripts.initial_raceline_setter:main' % (python_pkg_name),
