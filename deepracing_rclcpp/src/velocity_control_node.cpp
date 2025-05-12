@@ -161,13 +161,15 @@ class VelocityControlNode : public rclcpp::Node
     inline void synchCallback(const nav_msgs::msg::Odometry::ConstSharedPtr& new_odom, const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr& new_accel)
     {
       RCLCPP_DEBUG(get_logger(),"Got a synchronized pair of odom and acceleration");
-      m_current_speed_=new_odom->twist.twist.linear.x;
+      Eigen::Vector3d velvec(new_odom->twist.twist.linear.x, new_odom->twist.twist.linear.y, new_odom->twist.twist.linear.z);
+      m_current_speed_=velvec.norm();
       m_current_accel_=new_accel->accel.accel.linear.x;
     }
     inline void odomCallback(const nav_msgs::msg::Odometry::SharedPtr new_odom)
     {
       RCLCPP_DEBUG(get_logger(),"Got some odom");
-      m_current_speed_=new_odom->twist.twist.linear.x;
+      Eigen::Vector3d velvec(new_odom->twist.twist.linear.x, new_odom->twist.twist.linear.y, new_odom->twist.twist.linear.z);
+      m_current_speed_=velvec.norm();
     }
     inline void setpointCallback(const ackermann_msgs::msg::AckermannDriveStamped::SharedPtr new_setpoint)
     {
