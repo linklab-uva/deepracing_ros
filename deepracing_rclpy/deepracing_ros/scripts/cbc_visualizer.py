@@ -24,7 +24,7 @@ import rclpy.node
 import rclpy.publisher  
 import rclpy.subscription  
 import deepracing_msgs.msg 
-
+import deepracing_ros.convert as C
 import std_msgs.msg
 import visualization_msgs.msg
 import geometry_msgs.msg
@@ -49,14 +49,8 @@ class CBCVisualizer(rclpy.node.Node):
         self.cm = matplotlib.cm.get_cmap(name=self.params.color_map)
 
     def cbc_cb(self, cbc_msg : deepracing_msgs.msg.CompositeBezierCurve):
-        control_points_flat = torch.zeros([len(cbc_msg.control_points_flat), 2 + int(not cbc_msg.two_d)], dtype=torch.float64)
-        for i in range(control_points_flat.shape[0]):
-            control_points_flat[i,0] = cbc_msg.control_points_flat[i].x
-            control_points_flat[i,1] = cbc_msg.control_points_flat[i].y
-            if not cbc_msg.two_d:
-                control_points_flat[i,2] = cbc_msg.control_points_flat[i].z
-        control_points = control_points_flat.reshape(cbc_msg.segments, cbc_msg.order+1, control_points_flat.shape[-1])
-        delta_t = torch.as_tensor(cbc_msg.delta_t).type_as(control_points)
+
+        delta_t, control_points = C.fromCompositeBezierCurveMsg(cbc_msg, dtype=torch.float64)
         tstart = torch.cumsum(delta_t, 0) - delta_t[0]
         tsamp = torch.linspace(0.0, tstart[-1] + delta_t[-1], steps=self.params.num_sample_points).type_as(control_points)
 
@@ -73,13 +67,25 @@ class CBCVisualizer(rclpy.node.Node):
         points_marker.id=1
         points_marker.lifetime=rclpy.duration.Duration(seconds=0, nanoseconds=int(.5E9)).to_msg()
         points_marker.pose=geometry_msgs.msg.Pose()
-        points_marker.points=cbc_msg.control_points_flat
         points_marker.scale=geometry_msgs.msg.Vector3(x=self.params.control_point_scale, y=self.params.control_point_scale, z=self.params.control_point_scale)
         points_marker.colors=[]
-        for i in range(len(points_marker.points)):
-            idx = i//cbc_msg.segments
-            rgb = matplotlib.colors.to_rgb(self.colorcycle[idx%len(self.colorcycle)])
-            points_marker.colors.append(std_msgs.msg.ColorRGBA(r=rgb[0], g=rgb[1], b=rgb[2], a=1.0))
+        points_marker.points=[]
+        pps = cbc_msg.order+1
+        rgb0=matplotlib.colors.to_rgb(self.colorcycle[0])
+        for i in range(pps-1):
+            points_marker.colors.append(std_msgs.msg.ColorRGBA(r=rgb0[0], g=rgb0[1], b=rgb0[2], a=1.0))
+            points_marker.points.append(cbc_msg.control_points_flat[i])
+        for segment_idx in range(1, cbc_msg.segments):
+            rgbprev = np.asarray(matplotlib.colors.to_rgb(self.colorcycle[(segment_idx-1)%len(self.colorcycle)]))
+            rgbcurr = np.asarray(matplotlib.colors.to_rgb(self.colorcycle[segment_idx%len(self.colorcycle)]))
+            rbgmixed = 0.5*(rgbprev+rgbcurr)
+            i = segment_idx*pps
+            points_marker.colors.append(std_msgs.msg.ColorRGBA(r=rbgmixed[0], g=rbgmixed[1], b=rbgmixed[2], a=1.0))
+            points_marker.points.append(cbc_msg.control_points_flat[i])
+            for point_idx in range(1, pps):
+                i = segment_idx*pps + point_idx
+                points_marker.colors.append(std_msgs.msg.ColorRGBA(r=rgbcurr[0], g=rgbcurr[1], b=rgbcurr[2], a=1.0))
+                points_marker.points.append(cbc_msg.control_points_flat[i])
 
         (curve_points_samp,), idxbuckets = mu.compositeBezierEval(tstart[None], delta_t[None], control_points[None], tsamp[None], self.matrix_factories[cbc_msg.order])
         control_points_deriv = cbc_msg.order*torch.diff(control_points, dim=-2)/delta_t[:,None,None]
