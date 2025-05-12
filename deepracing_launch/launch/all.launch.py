@@ -28,7 +28,7 @@ def generate_launch_description():
     argz.append(index)
     default_trackfile = DeclareLaunchArgument("default_trackfile", default_value="")
     argz.append(default_trackfile)
-    rate = DeclareLaunchArgument("rate", default_value="10.0")
+    rate = DeclareLaunchArgument("rate", default_value="100.0")
     argz.append(rate)
     ekf_global = DeclareLaunchArgument("ekf_global", default_value="true")
     argz.append(ekf_global)
