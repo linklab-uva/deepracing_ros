@@ -1,12 +1,13 @@
 """Launch the cpp_code executable in this package"""
 
 import os
+
 import launch_ros.actions
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import FrontendLaunchDescriptionSource
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, Command
+from launch.substitutions import LaunchConfiguration, Command, PathJoinSubstitution
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
@@ -23,12 +24,21 @@ def generate_launch_description():
     
     entries = [boundary_pub, carname, index, use_sim_time, with_ekf, ekf_global, ekf_with_angvel]
 
-
+    ghost_ns = "ghost"
+    ego_odom_topic = PathJoinSubstitution(["/", LaunchConfiguration(carname.name), "odom", "filtered"])
     entries.append(launch_ros.actions.Node(
-        package='deepracing_rclcpp', name='lateral_error_publisher', executable='lateral_error_publisher_exe',
+        package='deepracing_rclpy', name='ghost_spawner', executable='ghost_spawner',
         output='screen',
-        parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name),}],
-        namespace=LaunchConfiguration(carname.name)
+        parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name), "gpu" : 0}],
+        namespace=ghost_ns,
+        remappings=[("ego_odom", ego_odom_topic)]
+        )) 
+    entries.append(launch_ros.actions.Node(
+        package='deepracing_rclpy', name='ghost_curve_viz', executable='cbc_visualizer',
+        output='screen',
+        parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name)}],
+        namespace=ghost_ns,
+        remappings=[("curve_in", "target_prediction"), ("marker_out", "target_prediction/markers")]
         )) 
     entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='measurement_publisher', executable='measurement_publisher_exe', output='screen', 
                                            parameters=[os.path.join(config_dir, "measurement_publisher.yaml"), 
