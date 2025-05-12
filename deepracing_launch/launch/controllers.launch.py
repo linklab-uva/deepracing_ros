@@ -23,15 +23,15 @@ def generate_launch_description():
         remappings=[("pid_state", "velocity_pid_state"), ("accel_in", "accel/filtered"), ("odom_in", "odom/filtered")])\
         )
     
-    with open(os.path.join(deepracing_launch_data_dir, "vigem_calibration.json"), "r") as f:
-        vigem_dict : dict = json.load(f)
-    xinput_vals = list(vigem_dict["xinput_values"])
-    steering_wheel_angles = list(vigem_dict["steering_wheel_angles"])
-    entries.append(launch_ros.actions.Node(package='deepracing_rclpy',
-                                           name='control_to_xinput', 
-                                           executable='control_to_xinput', 
-                                           output='screen', 
-                                           parameters=[{"control_values" : xinput_vals, "steering_angles" : steering_wheel_angles, use_sim_time.name : LaunchConfiguration(use_sim_time.name)}], 
-                                           namespace=LaunchConfiguration(carname.name)))
+    # with open(os.path.join(deepracing_launch_data_dir, "vigem_calibration.json"), "r") as f:
+    #     vigem_dict : dict = json.load(f)
+    # xinput_vals = list(vigem_dict["xinput_values"])
+    # steering_wheel_angles = list(vigem_dict["steering_wheel_angles"])
+    # entries.append(launch_ros.actions.Node(package='deepracing_rclpy',
+    #                                        name='control_to_xinput', 
+    #                                        executable='control_to_xinput', 
+    #                                        output='screen', 
+    #                                        parameters=[{"control_values" : xinput_vals, "steering_angles" : steering_wheel_angles, use_sim_time.name : LaunchConfiguration(use_sim_time.name)}], 
+    #                                        namespace=LaunchConfiguration(carname.name)))
     
     return LaunchDescription(entries)
