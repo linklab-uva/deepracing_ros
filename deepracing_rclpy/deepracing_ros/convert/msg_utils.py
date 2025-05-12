@@ -1,3 +1,4 @@
+import std_msgs
 from torch.functional import Tensor
 import deepracing_msgs.msg as drmsgs # BezierCurve, TimestampedPacketMotionData, PacketMotionData, CarMotionData, PacketHeader
 import geometry_msgs.msg as geo_msgs#  Point, PointStamped, Vector3, Vector3Stamped
@@ -188,6 +189,29 @@ def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, devi
    else:
       covariances = None
    return torch.as_tensor(ptsnp.copy(), device=device, dtype=dtype), covariances
+def toCompositeBezierCurveMsg(delta_t : torch.Tensor, control_points : torch.Tensor, header = Header()) -> drmsgs.CompositeBezierCurve:
+   cbc_msg = drmsgs.CompositeBezierCurve(header=header)
+   cbc_msg.delta_t = delta_t.cpu().numpy()#.tolist() 
+   cbc_msg.segments = control_points.shape[0]
+   cbc_msg.order = control_points.shape[1]-1
+   cbc_msg.two_d = control_points.shape[2]<3
+   controlpoints_flat = control_points.view(-1, control_points.shape[2])
+   for i in range(controlpoints_flat.shape[0]):
+      point = geo_msgs.Point(z=0.0)
+      point.x = controlpoints_flat[i,0].item()
+      point.y = controlpoints_flat[i,1].item()
+      if (not cbc_msg.two_d): point.z = controlpoints_flat[i,2].item()
+      cbc_msg.control_points_flat.append(point)
+   return cbc_msg
+def fromCompositeBezierCurveMsg(cbc_msg : drmsgs.CompositeBezierCurve, dtype=torch.float32, device=torch.device("cpu")) ->  tuple[torch.Tensor, torch.Tensor]:
+   control_points_flat = torch.zeros([len(cbc_msg.control_points_flat), 2 + int(not cbc_msg.two_d)], dtype=dtype, device=device)
+   for i in range(control_points_flat.shape[0]):
+      control_points_flat[i,0] = cbc_msg.control_points_flat[i].x
+      control_points_flat[i,1] = cbc_msg.control_points_flat[i].y
+      if (not cbc_msg.two_d): control_points_flat[i,2] = cbc_msg.control_points_flat[i].z
+   control_points = control_points_flat.reshape(cbc_msg.segments, cbc_msg.order+1, control_points_flat.shape[-1])
+   delta_t = torch.as_tensor(cbc_msg.delta_t).type_as(control_points)
+   return delta_t, control_points
    
 def transformMsgToTorch(transform_msg: geo_msgs.Transform, dtype=torch.float32, device=torch.device("cpu"), requires_grad=False):
    rtn = torch.eye(4, dtype=dtype, device=device, requires_grad=requires_grad)
