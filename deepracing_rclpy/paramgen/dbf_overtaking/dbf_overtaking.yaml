@@ -1,15 +1,9 @@
-
-# 'bounds_gauss_params' : {"order": 32, "stdev" : 0.75, "dr_samp": 1.0, "alpha" : 0.1},
-# 'bounds_newton_params' : dict(newton_stepsize=1.0, newton_iterations=2, max_step=0.75),
-
-# 'dynamics_newton_params' : dict(newton_stepsize=1.0, newton_iterations=6, max_step=5.0*np.pi/180.0)
-# 'dynamics_gauss_params' : {"order": 36, "stdev" : 0.25, "alpha" : 0.1},
 dbf_overtaking:
   gpu:
     type: int
     default_value: -1
     description: "Which gpu index to use. negative means cpu"
-    
+
   dynamics_gauss:
     order:
       type: int
@@ -149,46 +143,3 @@ dbf_overtaking:
     type: double
     default_value: 0.000001
     description: "Force all particles to have at least this likelihood"
-
-
-    
-
-
-# 'long_stdev_range': [0.1, 1.0], 
-# 'lat_stdev_range': [0.1, 0.75], 
-
-
-
-
-# 'collision_gauss_params' : {"order_time" : 32, "order_space" : 10, "alpha" : 0.1},
-# 'kbezier' : 3,
-# 'Nsegments' : 3,
-# 'compile_backend' : None,
-# 'Nparticles': int(2**8), 
-# 'car_width' : 2.0,
-# 'car_length' : 5.4,
-# 'long_stdev_range': [0.1, 1.0], 
-# 'lat_stdev_range': [0.1, 0.75], 
-# 'long_buffer_factor': 0.6, 
-# 'lat_buffer_factor': 0.6, 
-# 'dT_desired': 7.0, 
-# 'raceline_scaledown' : 0.875,
-# 'lateral_controlpoint_noise': 1.875, 
-# 'longitudinal_controlpoint_noise': None, 
-# 'final_controlpoint_noise': None, 
-# 'min_particle_likelihood': 1E-6, 
-
-
-# DEFAULT_ARGS = {
-# 's0' : None,
-# 'savedir': None, 
-# 'long_accel_factor' : 1.0,
-# 'lat_accel_factor' : 1.0,
-# 'brake_factor' : 1.0,
-# 'raceline_offset' : 0.0,
-# 'target_raceline_offset' : 0.0,
-# 'target_timescale': 0.9, 
-# 'initial_time_ahead': 0.4, 
-# 'min_particle_likelihood': 1E-6, 
-
-# }
