@@ -249,13 +249,22 @@ class MeasurementPublisher
       transformMsg.set__header(motion_data_packet->header);
       transformMsg.set__child_frame_id(deepracing_ros::F1MsgUtils2023::car_coordinate_name+"_"+carname);
 
+      Eigen::Isometry3d mapToBaseLinkEigen = mapToCarEigen*carToBaseLinkEigen;
+      Eigen::Isometry3d trackToBaseLinkEigen = trackToCarEigen*carToBaseLinkEigen;
       Eigen::Vector3d centroidVelEigenGlobal(velocityROS.vector.x, velocityROS.vector.y, velocityROS.vector.z);
-      Eigen::Vector3d centroidVelEigenLocal = trackToCarEigen.rotation().inverse()*centroidVelEigenGlobal;    
+      Eigen::Vector3d centroidVelEigenLocal;
 
       odom_msg_.header.set__frame_id("map");
       odom_msg_.header.set__stamp(transformMsg.header.stamp);
-      odom_msg_.set__child_frame_id(transformMsg.child_frame_id);
-      odom_msg_.pose.pose = tf2::toMsg(mapToCarEigen);
+      if (m_with_ekf_){
+        odom_msg_.set__child_frame_id(transformMsg.child_frame_id);
+        odom_msg_.pose.pose = tf2::toMsg(mapToCarEigen);
+        centroidVelEigenLocal = trackToCarEigen.rotation().inverse()*centroidVelEigenGlobal;    
+      }else{
+        odom_msg_.set__child_frame_id(carToBaseLink.child_frame_id);
+        odom_msg_.pose.pose = tf2::toMsg(mapToBaseLinkEigen); 
+        centroidVelEigenLocal = trackToBaseLinkEigen.rotation().inverse()*centroidVelEigenGlobal;    
+      }
       odom_msg_.twist.twist.linear.x=centroidVelEigenLocal.x();
       odom_msg_.twist.twist.linear.y=centroidVelEigenLocal.y();
       odom_msg_.twist.twist.linear.z=centroidVelEigenLocal.z();
