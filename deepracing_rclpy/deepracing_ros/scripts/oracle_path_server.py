@@ -29,10 +29,7 @@ def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
     node = OraclePathServer()
-    # spinner : AsyncSpinner = AsyncSpinner(MultiThreadedExecutor())
-    # bcurve_pub : Publisher = node.create_publisher(BezierCurve, "oraclebeziercurves", 1)
-    # spinner.add_node(node)
-    # spinner.spin()
+
     frequency_param : rclpy.Parameter = node.declare_parameter("rate", value=100.0)
     timer : rclpy.timer.Timer = node.create_timer(1.0/frequency_param.get_parameter_value().double_value, node.getTrajectory)
 

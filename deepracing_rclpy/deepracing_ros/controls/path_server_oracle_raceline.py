@@ -1,6 +1,7 @@
 import argparse
 from ctypes import ArgumentError
 from typing import Generator, Sequence
+from regex import T
 import skimage
 import skimage.io as io
 import os
@@ -48,7 +49,7 @@ from typing import List
 import json
 import torch, torch.distributions
 import geometry_msgs.msg
-from deepracing_msgs.msg import BezierCurve
+from deepracing_msgs.msg import BezierCurve, CompositeBezierCurve
 import deepracing.path_utils
 import deepracing_ros.convert as C
 import deepracing.raceline_utils as raceline_utils
@@ -101,6 +102,15 @@ class OraclePathServer(PathServerROS):
         sample_indices_descriptor.description="How many points to sample on the optimal line"
         sample_indices_param : Parameter = self.declare_parameter(sample_indices_descriptor.name, value=100)
         self.sample_indices : int = sample_indices_param.get_parameter_value().integer_value
+
+        segments_descriptor : ParameterDescriptor = ParameterDescriptor()
+        segments_descriptor.name="segments"
+        segments_descriptor.read_only=True
+        segments_descriptor.description="How many segments to use in the CBC fit"
+        segments_param : Parameter = self.declare_parameter(segments_descriptor.name, value=4)
+        self.segments : int = segments_param.get_parameter_value().integer_value
+
+        
         
         bezier_order_param : Parameter = self.declare_parameter("bezier_order", value=7)
         self.bezier_order : int = bezier_order_param.get_parameter_value().integer_value
@@ -119,7 +129,8 @@ class OraclePathServer(PathServerROS):
 
         longitudinalnoise_param : Parameter = self.declare_parameter("longitudinalnoise", value=0.0)
         self.longitudinalnoise : float = longitudinalnoise_param.get_parameter_value().double_value
-        self.bcurve_pub : Publisher = self.create_publisher(BezierCurve, "oraclebeziercurves", 1)
+        # self.bcurve_pub : Publisher = self.create_publisher(BezierCurve, "oraclebeziercurves", 1)
+        self.composite_bcurve_pub : Publisher = self.create_publisher(CompositeBezierCurve, "oraclecompositebeziercurves", 1)
 
     def rl_as_pathmsg(self) -> Path:
         self.get_logger().info("Getting current raceline from PyTorch tensors")
@@ -358,16 +369,22 @@ class OraclePathServer(PathServerROS):
         tf = t0+self.dt
         tvec : np.ndarray = np.linspace(t0, tf, num=150)
         rlpiece : torch.Tensor = torch.from_numpy(self.racelinespline(tvec)).type_as(self.tsamp).to(self.tsamp.device)
-        poseinv_T = -(pose_curr[0:3,0:3].T @ pose_curr[0:3,[3,]]).squeeze(-1)
-        rlpiece_local = (rlpiece @ pose_curr[0:3,0:3]) + poseinv_T
+        rlpiece_local = rlpiece
+        # poseinv_T = -(pose_curr[0:3,0:3].T @ pose_curr[0:3,[3,]]).squeeze(-1)
+        # rlpiece_local = (rlpiece @ pose_curr[0:3,0:3]) + poseinv_T
 
-        tfit = (torch.as_tensor(tvec).type_as(rlpiece_local) - t0)*0.98
-        P0 = torch.zeros_like(rlpiece_local[0])
-        # V0 = torch.as_tensor(self.racelinespline(tvec[0], nu=1))[None].type_as(tfit) @ pose_curr[0:3,0:3]
+        tfit = (torch.as_tensor(tvec).type_as(rlpiece_local) - t0)
+        P0 = (pose_curr[0:3,3])
+        # P0 = torch.zeros_like(rlpiece_local[0])
+        V0 = torch.as_tensor(self.racelinespline(tvec[0], nu=1))[None].type_as(tfit)# @ pose_curr[0:3,0:3]
         # Vf = torch.as_tensor(self.racelinespline(tvec[-1], nu=1))[None].type_as(tfit) @ pose_curr[0:3,0:3]
-        _, bcurve = bezier.bezierLsqfit(rlpiece_local.unsqueeze(0), self.bezier_order, t=tfit.unsqueeze(0))#, P0=P0.unsqueeze(0))#,  V0=V0,  Vf=Vf)
-        bcurve_msg : BezierCurve = C.toBezierCurveMsg(bcurve[0],posemsg.header)
-        bcurve_msg.header.frame_id=self.base_link_id
-        fracpart, intpart = math.modf(self.dt)
-        bcurve_msg.delta_t = builtin_interfaces.msg.Duration(sec=int(intpart), nanosec=int(fracpart*1E9))
-        self.bcurve_pub.publish(bcurve_msg)
+        # dYdT_0=V0, 
+        (controlpoints_fit,), (tswitch,)  = mu.compositeBezierFit(tfit[None], rlpiece_local[None], self.segments, Y_0=P0[None], constraint_level=2)
+        delta_t = (tswitch[1:] - tswitch[:-1])#*0.975
+
+        cbc_msg = C.toCompositeBezierCurveMsg(delta_t, controlpoints_fit, header=posemsg.header)
+        # cbc_msg.header.frame_id = self.base_link_id
+        # cbc_msg.header.frame_id = self.base_link_id
+        # cbc_msg.header.stamp = posemsg.header.stamp
+        self.composite_bcurve_pub.publish(cbc_msg)
+

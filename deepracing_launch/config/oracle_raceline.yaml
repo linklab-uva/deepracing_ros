@@ -1,7 +1,8 @@
 ### pure pursuit controller config file ###
 /**:
     ros__parameters:
-        bezier_order: 3
-        dt: 2.0
-        gpu: 0
+        bezier_order : 3
+        dt : 3.0
+        gpu : 0
+        segments : 4
 

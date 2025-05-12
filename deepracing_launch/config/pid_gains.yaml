@@ -1,8 +1,8 @@
 ### pid config file ###
 /**:
   ros__parameters:
-    p: 50.15
-    i: 0.0000
+    p: 1.15
+    i: 0.001
     d: 0.0
     i_clamp_max: 0.75
     i_clamp_min: -0.75
