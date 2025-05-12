@@ -1,0 +1,17 @@
+ghost_spawner:
+  gpu:
+    type: int
+    default_value: -1
+    description: "Which gpu index to use. negative means cpu"
+  timescale:
+    type: double
+    default_value: 1.0
+    description: "Timescale"
+  prediction_horizon:
+    type: double
+    default_value: 6.0
+    description: "How far ahead to synthesize a future motion prediction"
+  tf_frame:
+    type: string
+    default_value: target_vehicle_centroid
+    description: "What frame id to use for the spawned ghost(s)"

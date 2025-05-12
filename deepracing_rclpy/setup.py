@@ -11,8 +11,8 @@ with open(os.path.join(os.environ["HOME"], "asdf.txt"), "w") as f:
 if len(sys.argv) >= 2 and sys.argv[1] != 'clean':
     from generate_parameter_library_py.setup_helper import generate_parameter_module
 
-    generate_parameter_module('ghost_parameters', 'ghost_spawner_generate_param/ghost_spawner.yaml', merge_install=True)
-    generate_parameter_module('cbc_viz', 'cbc_viz_generate_param/cbc_viz.yaml', merge_install=True)
+    generate_parameter_module('ghost_parameters', 'paramgen/ghost_spawner/ghost_spawner.yaml', merge_install=True)
+    generate_parameter_module('cbc_viz', 'paramgen/cbc_viz/cbc_viz.yaml', merge_install=True)
 setup(
     name=package_name,
     version='0.0.0',
@@ -42,6 +42,7 @@ setup(
               ])),
     entry_points={
         'console_scripts': [
+            'dbf_path_server = %s.scripts.dbf_path_server:main' % (python_pkg_name),
             'lateral_error_publisher = %s.scripts.lateral_error_publisher:main' % (python_pkg_name),
             'load_measurement_publisher = %s.scripts.load_measurement_publisher:main' % (python_pkg_name),
             'initialize_lifecycle_node = %s.scripts.initialize_lifecycle_node:main' % (python_pkg_name),
