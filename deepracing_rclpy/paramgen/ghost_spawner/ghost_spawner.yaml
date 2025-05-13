@@ -5,11 +5,11 @@ ghost_spawner:
     description: "Which gpu index to use. negative means cpu"
   timescale:
     type: double
-    default_value: 1.0
+    default_value: 0.8
     description: "Timescale"
   prediction_horizon:
     type: double
-    default_value: 6.0
+    default_value: 7.0
     description: "How far ahead to synthesize a future motion prediction"
   tf_frame:
     type: string

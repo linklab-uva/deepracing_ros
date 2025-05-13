@@ -209,7 +209,7 @@ def main(args=None):
             node.get_logger().info("Successfully got the raceline")
         else:
             node.get_logger().error("Unable to get the raceline. Error code: %d." % (getlineresponse.return_code,))
-            exit(-1)
+            # exit(-1)
     racelinenp = sensor_msgs_py.point_cloud2.read_points(getlineresponse.line)
     node.initialize(racelinenp, getlineresponse.line.header.frame_id)
     rclpy.spin(node)#, rclpy.executors.MultiThreadedExecutor(num_threads=3))

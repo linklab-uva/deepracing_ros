@@ -29,7 +29,7 @@ def generate_launch_description():
     entries.append(launch_ros.actions.Node(
         package='deepracing_rclpy', name='ghost_spawner', executable='ghost_spawner',
         output='screen',
-        parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name), "gpu" : 0}],
+        parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name),}],
         namespace=ghost_ns,
         remappings=[("ego_odom", ego_odom_topic)]
         )) 
@@ -40,16 +40,22 @@ def generate_launch_description():
         namespace=ghost_ns,
         remappings=[("curve_in", "target_prediction"), ("marker_out", "target_prediction/markers")]
         )) 
-    entries.append(launch_ros.actions.Node(package='deepracing_rclcpp', name='measurement_publisher', executable='measurement_publisher_exe', output='screen', 
-                                           parameters=[os.path.join(config_dir, "measurement_publisher.yaml"), 
-                                                       {carname.name: LaunchConfiguration(carname.name), 
-                                                        use_sim_time.name : LaunchConfiguration(use_sim_time.name), 
-                                                        with_ekf.name : LaunchConfiguration(with_ekf.name), 
-                                                        index.name : LaunchConfiguration(index.name)
-                                                        }], 
-                                                        namespace=LaunchConfiguration(carname.name)))
-    
-
+    entries.append(launch_ros.actions.Node(
+        package='deepracing_rclcpp', name='measurement_publisher', executable='measurement_publisher_exe', output='screen', 
+        parameters=[os.path.join(config_dir, "measurement_publisher.yaml"), 
+                    {carname.name: LaunchConfiguration(carname.name), 
+                    use_sim_time.name : LaunchConfiguration(use_sim_time.name), 
+                    with_ekf.name : LaunchConfiguration(with_ekf.name), 
+                    index.name : LaunchConfiguration(index.name)
+                    }], 
+        namespace=LaunchConfiguration(carname.name)))
+    entries.append(launch_ros.actions.Node(
+        package='deepracing_rclpy', name='ego_lateral_error_pub', executable='lateral_error_publisher',
+        output='screen',
+        parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name), "newton_iterations" : 3, "gpu" : -1}],
+        namespace=LaunchConfiguration(carname.name),
+        remappings=[("odom", "odom/filtered"),]
+        )) 
     entries.append(IncludeLaunchDescription(FrontendLaunchDescriptionSource(os.path.join(launch_dir,"ekf.launch")),\
       launch_arguments=[("ekf_with_angvel", LaunchConfiguration(ekf_with_angvel.name)), 
                         ("ekf_global", LaunchConfiguration(ekf_global.name)), 

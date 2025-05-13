@@ -81,7 +81,7 @@ dbf_overtaking:
     description: "What torch.compile backend to use. Default (empty string) means do not use compiled modules"
   Nparticles:
     type: int
-    default_value: 256
+    default_value: 512
     description: "How many particles in the dbf algorithm to use"
   kbezier:
     type: int
@@ -129,7 +129,7 @@ dbf_overtaking:
   controlpoint_noise:
     lateral:
       type: double
-      default_value: 1.875
+      default_value: 0.875
       description: "Noise factor to apply to particles in the lateral direction"
     longitudinal:
       type: double

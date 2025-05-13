@@ -97,6 +97,14 @@ namespace composable_nodes
                             return false;
                         }
                     }
+                    else if (key=="inner_bound"){
+                        RCLCPP_INFO(get_logger(), "%s", "Returning inner boundary");
+                        pcl::toROSMsg<deepracing::PointXYZLapdistance>(*(track_map_->innerBound()), response->line);
+                    }
+                    else if (key=="outer_bound"){
+                        RCLCPP_INFO(get_logger(), "%s", "Returning outer boundary");
+                        pcl::toROSMsg<deepracing::PointXYZLapdistance>(*(track_map_->outerBound()), response->line);
+                    }
                     else{
                         const pcl::PCLPointCloud2& pc2 = track_map_->getCloud(key);
                         pcl_conversions::fromPCL(pc2, response->line);

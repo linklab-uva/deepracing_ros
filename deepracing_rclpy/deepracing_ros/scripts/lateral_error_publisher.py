@@ -31,7 +31,6 @@ import nav_msgs.msg
 import std_msgs.msg
 import deepracing_models.math_utils as mu
 import torch
-from deepracing_rclpy.ghost_parameters import ghost_spawner
 import functools
 import tf2_ros
 from scipy.spatial.transform import Rotation
@@ -48,24 +47,21 @@ class LateralErrorPublisher(rclpy.node.Node):
 
         gpu_param = self.declare_parameter("gpu", value=-1)
         self.gpu : int = gpu_param.get_parameter_value().integer_value
+
+        newton_iterations_param = self.declare_parameter("newton_iterations", value=-1)
+        self.newton_iterations : int = newton_iterations_param.get_parameter_value().integer_value
     def odom_cb(self, odom : nav_msgs.msg.Odometry):
         position = odom.pose.pose.position
         quaternion = odom.pose.pose.orientation
         position = torch.as_tensor([position.x, position.y, position.z]).type_as(self.raceline_helper.__arclengths_in__)
-        
         rotmat = torch.as_tensor(Rotation.from_quat([quaternion.x, quaternion.y, quaternion.z, quaternion.w]).as_matrix()).type_as(self.raceline_helper.__arclengths_in__)
-        rintersect = self.raceline_helper.__curve_of_r__.y_axis_intersection(position[None], rotmat[None])
-        _, (pintersect,), _, _ = self.raceline_helper(r=rintersect)
         
-        # (rintersect,), (pclosest,), (tangentclosest,), (deltaclosest,) = self.raceline_helper.closest_point_approximate(position[None], newton_iterations=3)#, newton_stepsize=0.5, max_step=0.5)
-        # up = torch.zeros_like(tangentclosest)
-        # up[-1]=1.0
-        # tangentclosest = tangentclosest/torch.linalg.vector_norm(tangentclosest)
-        # normalclosest = torch.linalg.cross(up, tangentclosest)
-        # normalclosest = normalclosest/torch.linalg.vector_norm(normalclosest)
-        # rotmat = torch.stack([tangentclosest, normalclosest, torch.linalg.cross(tangentclosest, normalclosest)], dim=1)
-        #r, points, tangents*speeds, idxbuckets
-        # _, (pintersect,), _, _ = self.raceline_helper(rintersect)
+        if self.newton_iterations>0:
+            _, (pintersect,), _, _ = self.raceline_helper.__curve_of_r__.y_axis_intersection_approximate(position[None], rotmat[None], newton_iterations=self.newton_iterations)
+        else:
+            rintersect = self.raceline_helper.__curve_of_r__.y_axis_intersection(position[None], rotmat[None])
+            _, (pintersect,), _, _ = self.raceline_helper(r=rintersect)
+        
 
         pclosest_local : torch.Tensor = ((pintersect - position)[None] @ rotmat)[0]
 
@@ -80,11 +76,18 @@ class LateralErrorPublisher(rclpy.node.Node):
 
     def initialize(self, raceline_np : np.ndarray, frame_id : str):
         racelinepoints = torch.as_tensor(np.stack([raceline_np[k] for k in ["x", "y", "z"]], axis=1), dtype=torch.float64)#, device=torch.device("cuda:0"))
-        if self.gpu>=0: racelinepoints = racelinepoints.cuda(self.gpu)
+        
         racelinespeeds = torch.as_tensor(raceline_np["speed"]).type_as(racelinepoints)
         self.get_logger().info("Building raceline helper")
         self.raceline_helper = mu.RacelineHelper.from_closed_path(racelinepoints, racelinespeeds, 1.5).to(tensor=racelinepoints)
         self.frame_id = frame_id
+
+        if self.gpu>=0: self.raceline_helper = self.raceline_helper.cuda(self.gpu)
+        if self.newton_iterations>0:
+            quat = torch.as_tensor([0.0, 0.0, 0.0, 1.0], dtype=torch.float64)
+            Rquery = torch.as_tensor(Rotation.from_quat((quat + 0.05*torch.rand_like(quat)).numpy()).as_matrix())[None].type_as(self.raceline_helper.__arclengths_in__)
+            Pquery = torch.randn_like(Rquery[:,0])
+            self.raceline_helper.__curve_of_r__.y_axis_intersection_approximate(Pquery, Rquery, newton_iterations=self.newton_iterations)
 
         self.lateral_error_pub = self.create_publisher(std_msgs.msg.Float64, "lateral_error", 1)
         self.refpoint_pub = self.create_publisher(geometry_msgs.msg.PointStamped, "reference_point", 1)
@@ -116,7 +119,7 @@ def main(args=None):
             node.get_logger().info("Successfully got the raceline")
         else:
             node.get_logger().error("Unable to get the raceline. Error code: %d." % (getlineresponse.return_code,))
-            exit(-1)
+            # exit(-1)
     racelinenp = sensor_msgs_py.point_cloud2.read_points(getlineresponse.line)
     node.initialize(racelinenp, getlineresponse.line.header.frame_id)
     rclpy.spin(node)#, rclpy.executors.MultiThreadedExecutor(num_threads=3))

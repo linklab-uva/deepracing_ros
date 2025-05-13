@@ -98,7 +98,7 @@ class CBCVisualizer(rclpy.node.Node):
         curve_marker.type=visualization_msgs.msg.Marker.LINE_STRIP
         curve_marker.ns=points_marker.ns
         curve_marker.id=2
-        # curve_marker.lifetime=points_marker.lifetime
+        curve_marker.lifetime=points_marker.lifetime
         curve_marker.scale=geometry_msgs.msg.Vector3(x=self.params.curve_scale)
         curve_marker.color=std_msgs.msg.ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0)
         speed_factor_delta = self.params.speed_max-self.params.speed_min
