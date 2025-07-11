@@ -1,8 +1,12 @@
 /velocity_control_node:
   ros__parameters:
-    p: 0.1
-    i: 0.00075
-    d: 0.005
-    i_clamp_max: 0.1
-    i_clamp_min: -0.1
+    p: 2.0
+    i: 3.0
+    d: -0.001
+    i_clamp_max: 5.0
+    i_clamp_min: -5.0
     antiwindup: True
+    u_max: 1.0
+    u_min: -1.0
+
+#(p, i, d, i_max, i_min, u_max, u_min)
