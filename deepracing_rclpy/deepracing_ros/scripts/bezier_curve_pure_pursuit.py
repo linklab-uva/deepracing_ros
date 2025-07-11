@@ -12,8 +12,10 @@
 
 from copy import deepcopy
 from multiprocessing import Semaphore
+import rcl_interfaces
 import rclpy
 from rclpy.parameter import Parameter
+import rclpy.parameter
 from rclpy.subscription import Subscription
 from rclpy.publisher import Publisher
 from rclpy.node import Node
@@ -38,6 +40,7 @@ import threading
 import deepracing_ros.convert as C
 import std_msgs.msg
 import rclpy.qos
+import rcl_interfaces.msg
 
 class BezierCurvePurePursuit(Node):
     def __init__(self,):
@@ -75,7 +78,8 @@ class BezierCurvePurePursuit(Node):
         rate_param : Parameter = self.declare_parameter("rate", value=100.0)
 
         self.curve_sub : Subscription = self.create_subscription(CompositeBezierCurve, "compositebeziercurves_in", self.curveCB, 1)
-        self.timer = self.create_timer(1.0/rate_param.get_parameter_value().double_value, self.timerCB)
+
+        self.overtaking_curve_sub : Subscription = self.create_subscription(CompositeBezierCurve, "overtakingcurves_in", self.overtakingCurveCB, 1)
 
         self.current_odom = Odometry()
         self.odom_sub : Subscription = self.create_subscription(Odometry, "odom", self.odomCB, 1)
@@ -84,12 +88,14 @@ class BezierCurvePurePursuit(Node):
         self.current_curve_mutex : threading.Semaphore = threading.Semaphore()
         self.current_odom_mutex : threading.Semaphore = threading.Semaphore()
 
+        self.current_overtaking_curve_msg : CompositeBezierCurve = None
+        self.current_overtaking_curve_mutex : threading.Semaphore = threading.Semaphore()
+
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = rclpy.duration.Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
 
         carname_param : Parameter = self.declare_parameter("carname", value="")
         self.carname : str = carname_param.get_parameter_value().string_value
-
         self.base_link_id : str = "base_link_%s" % (self.carname,)
 
         lookahead_gain_param : Parameter = self.declare_parameter("lookahead_gain", value=0.4)
@@ -107,10 +113,38 @@ class BezierCurvePurePursuit(Node):
 
         self.player_car_index : int = 0
 
+        self.add_on_set_parameters_callback(self.paramsCB)
+        self.timer = self.create_timer(1.0/rate_param.get_parameter_value().double_value, self.timerCB)
 
-
+    def paramsCB(self, params : list[rclpy.parameter.Parameter]) -> rcl_interfaces.msg.SetParametersResult:
+        self.get_logger().info("Yay")
+        # self.get_logger().info(params[0].name)
+        # self.get_logger().info(str(params[0].get_parameter_value().double_value))
+        for param in params:
+            paramval = param.get_parameter_value()
+            if param.name=="lookahead_gain":
+                self.lookahead_gain = paramval.double_value
+            elif param.name=="velocity_lookahead_gain":
+                self.velocity_lookahead_gain = paramval.double_value
+            elif param.name=="wheelbase":
+                self.twoL : torch.Tensor = torch.as_tensor(2.0*paramval.double_value, dtype=self.tsamp.dtype, device=self.tsamp.device)
+            elif param.name=="carname":
+                carname = paramval.string_value
+                self.carname, self.base_link_id =  carname, "base_link_%s" % (carname,)
+ 
+        rtn = rcl_interfaces.msg.SetParametersResult()
+        rtn.reason="You"
+        rtn.successful=True
+        return rtn
     def sessionCB(self, session_msg : TimestampedPacketSessionData):
         self.player_car_index = session_msg.udp_packet.header.player_car_index
+
+    def overtakingCurveCB(self, curve_msg : CompositeBezierCurve):
+        if not self.current_overtaking_curve_mutex.acquire(timeout=0.5):
+            self.get_logger().error("Unable to acquire current_overtaking_curve_mutex")
+            return
+        self.current_overtaking_curve_msg = curve_msg
+        self.current_overtaking_curve_mutex.release()
 
     def curveCB(self, curve_msg : CompositeBezierCurve):
         if not self.current_curve_mutex.acquire(timeout=0.5):
@@ -127,17 +161,28 @@ class BezierCurvePurePursuit(Node):
         self.current_odom_mutex.release()
 
     def timerCB(self):
-        if self.current_curve_msg is None:
+        if (self.current_curve_msg is None) and (self.current_overtaking_curve_msg is None):
             self.get_logger().debug("No bezier curve received yet")
             return
         
-        
-        if not self.current_curve_mutex.acquire(timeout=0.1):
-            self.get_logger().error("Unable to acquire current_curve_mutex")
-            return
-        # curveheader = deepcopy(self.current_curve_msg.header)
-        delta_t, control_points_global = C.fromCompositeBezierCurveMsg(self.current_curve_msg, dtype=self.tsamp.dtype, device=self.tsamp.device)
-        self.current_curve_mutex.release()
+        if self.current_overtaking_curve_msg is not None:
+            if not self.current_overtaking_curve_mutex.acquire(timeout=0.1):
+                self.get_logger().error("Unable to acquire current_overtaking_curve_mutex")
+                return
+            # curveheader = deepcopy(self.current_curve_msg.header)
+            delta_t, control_points_global = C.fromCompositeBezierCurveMsg(self.current_overtaking_curve_msg, dtype=self.tsamp.dtype, device=self.tsamp.device)
+            self.current_overtaking_curve_mutex.release()
+        else:
+            if not self.current_curve_mutex.acquire(timeout=0.1):
+                self.get_logger().error("Unable to acquire current_curve_mutex")
+                return
+            # curveheader = deepcopy(self.current_curve_msg.header)
+            delta_t, control_points_global = C.fromCompositeBezierCurveMsg(self.current_curve_msg, dtype=self.tsamp.dtype, device=self.tsamp.device)
+            self.current_curve_mutex.release()
+        tend = torch.cumsum(delta_t, 0)
+        tstart = tend - delta_t[0]
+        steps = int(round(tend[-1].item()/0.025))
+        tsamp = torch.linspace(0.0, tend[-1], steps=steps).type_as(tend).unsqueeze(0)
 
         if not self.current_odom_mutex.acquire(timeout=0.1):
             self.get_logger().error("Unable to acquire current_odom_mutex")
@@ -159,9 +204,6 @@ class BezierCurvePurePursuit(Node):
         # if not (curveheader.frame_id==posechildframe)
 
 
-        tend = torch.cumsum(delta_t, 0)
-        tstart = tend - delta_t[0]
-        tsamp = tend[-1]*self.tsamp
         kbezier = int(control_points.shape[1]) - 1
         control_points_deriv = kbezier*torch.diff(control_points, dim=1)/delta_t[:,None,None]
         # if kbezier not in self.matrix_factories:
@@ -174,7 +216,7 @@ class BezierCurvePurePursuit(Node):
         (velocities,), _ = mu.compositeBezierEval(tstart[None], delta_t[None], control_points_deriv[None], tsamp, self.matrix_factories[kbezier-1], idxbuckets=idxbuckets)
 
 
-        arclengths : torch.Tensor = torch.zeros_like(self.tsamp[0])
+        arclengths : torch.Tensor = torch.zeros_like(tsamp[0])
         arclengths[1:]=torch.cumsum(torch.norm(Psamp[1:] - Psamp[:-1], p=2, dim=1), 0)
 
         speeds : torch.Tensor = torch.norm(velocities, p=2, dim=1)
@@ -187,7 +229,7 @@ class BezierCurvePurePursuit(Node):
         arclengths = arclengths - arclengths[0]
 
         current_speed : float = float(self.current_odom.twist.twist.linear.x)
-        lookahead_distance = max(self.lookahead_gain*current_speed, 10.0)
+        lookahead_distance = max(self.lookahead_gain*current_speed, (0.5*self.twoL).item())
         # if current_speed>55.0:
         #     lookahead_distance_vel = self.velocity_lookahead_gain*current_speed
         # else:
