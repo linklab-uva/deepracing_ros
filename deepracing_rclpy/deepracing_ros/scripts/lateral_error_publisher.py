@@ -41,6 +41,7 @@ import threading
 class LateralErrorPublisher(rclpy.node.Node):
     def __init__(self, name="lateral_error_publisher"):
         super(LateralErrorPublisher, self).__init__(name)
+        self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(nav_msgs.msg.Odometry, "odom", self.odom_cb, 1)
         self.raceline_helper : mu.RacelineHelper = None
         self.lateral_error_pub : rclpy.publisher.Publisher = None
         self.refpoint_pub : rclpy.publisher.Publisher = None 
@@ -51,6 +52,8 @@ class LateralErrorPublisher(rclpy.node.Node):
         newton_iterations_param = self.declare_parameter("newton_iterations", value=-1)
         self.newton_iterations : int = newton_iterations_param.get_parameter_value().integer_value
     def odom_cb(self, odom : nav_msgs.msg.Odometry):
+        if self.raceline_helper is None:
+            return
         position = odom.pose.pose.position
         quaternion = odom.pose.pose.orientation
         position = torch.as_tensor([position.x, position.y, position.z]).type_as(self.raceline_helper.__arclengths_in__)
@@ -91,7 +94,6 @@ class LateralErrorPublisher(rclpy.node.Node):
 
         self.lateral_error_pub = self.create_publisher(std_msgs.msg.Float64, "lateral_error", 1)
         self.refpoint_pub = self.create_publisher(geometry_msgs.msg.PointStamped, "reference_point", 1)
-        self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(nav_msgs.msg.Odometry, "odom", self.odom_cb, 1)
         self.get_logger().info("Built raceline helper")
 
         # print(pointssamp[0])
