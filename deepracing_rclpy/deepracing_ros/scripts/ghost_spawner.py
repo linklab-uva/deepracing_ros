@@ -107,6 +107,7 @@ class GhostSpawner(rclpy.node.Node):
         self.frame_id = frame_id
         self.ghost_position_pub : rclpy.publisher.Publisher = self.create_publisher(geometry_msgs.msg.PointStamped, "target_position", rclpy.qos.qos_profile_sensor_data)
         self.ghost_prediction_pub : rclpy.publisher.Publisher = self.create_publisher(deepracing_msgs.msg.CompositeBezierCurve, "target_prediction", rclpy.qos.qos_profile_sensor_data)
+        self.ghost_polygon_pub : rclpy.publisher.Publisher = self.create_publisher(geometry_msgs.msg.PolygonStamped, "polygon", rclpy.qos.qos_profile_sensor_data)
         self.ghost_t_pub : rclpy.publisher.Publisher = self.create_publisher(std_msgs.msg.Float64, "target_time", rclpy.qos.qos_profile_sensor_data)
         self.ghost_r_pub : rclpy.publisher.Publisher = self.create_publisher(std_msgs.msg.Float64, "target_arclength", rclpy.qos.qos_profile_sensor_data)
         self.srv = self.create_service(deepracing_srvs.SpawnGhost, 'spawn_ghost', self.spawn_ghost_cb)
@@ -178,11 +179,20 @@ class GhostSpawner(rclpy.node.Node):
         point_msg = geometry_msgs.msg.PointStamped(header=cbc_msg.header)
         point_msg.point=cbc_msg.control_points_flat[0]
         
+        car_length, car_width = 5.2, 2.0
+        polygon_msg = geometry_msgs.msg.PolygonStamped()
+        polygon_msg.header.stamp = transform.header.stamp
+        polygon_msg.header.frame_id = transform.child_frame_id
+        polygon_msg.polygon.points.append(geometry_msgs.msg.Point32(x=-0.5*car_length, y=-0.5*car_width))
+        polygon_msg.polygon.points.append(geometry_msgs.msg.Point32(x=0.5*car_length, y=-0.5*car_width))
+        polygon_msg.polygon.points.append(geometry_msgs.msg.Point32(x=0.5*car_length, y=0.5*car_width))
+        polygon_msg.polygon.points.append(geometry_msgs.msg.Point32(x=-0.5*car_length, y=0.5*car_width))
         self.tf2_broadcaster.sendTransform(transform)
         self.ghost_t_pub.publish(std_msgs.msg.Float64(data=t0))
         self.ghost_r_pub.publish(std_msgs.msg.Float64(data=rsamp[0].item()))        
         self.ghost_position_pub.publish(point_msg)
         self.ghost_prediction_pub.publish(cbc_msg)
+        self.ghost_polygon_pub.publish(polygon_msg)
         
         # print(pointssamp[0])
         
