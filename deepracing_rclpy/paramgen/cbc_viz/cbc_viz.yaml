@@ -1,15 +1,15 @@
 cbc_visualizer:
   num_sample_points:
     type: int
-    default_value: 30
+    default_value: 120
     description: "How many points to uniformly sample the CBC for visualization"
   control_point_scale:
     type: double
-    default_value: 5.0
+    default_value: 4.0
     description: "Scale of the point list for the control points"
   curve_scale:
     type: double
-    default_value: 5.0
+    default_value: 2.0
     description: "Scale of the point list for the curve line"
   arrow_scale:
     type: double
@@ -27,7 +27,7 @@ cbc_visualizer:
     type: string
     default_value: RdYlGn
     description: "String ID for the matplotlib colormap to color the curve with"
-  namespace:
+  marker_namespace:
     type: string
     default_value: target_vehicle
     description: "Namespace for the marker arrays to generate"
