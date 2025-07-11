@@ -231,6 +231,10 @@ if(with_lateral_error_publisher_)
     PLUGIN "deepracing::composable_nodes::LateralErrorPublisher"
     EXECUTABLE lateral_error_publisher_exe
   )
+  rclcpp_components_register_node(deepracing_composable_nodes
+    PLUGIN "deepracing::composable_nodes::LocalLinePublisher"
+    EXECUTABLE local_line_publisher_exe
+  )
 endif()
 if(with_ekf_monitor_node_)
   rclcpp_components_register_node(deepracing_composable_nodes
