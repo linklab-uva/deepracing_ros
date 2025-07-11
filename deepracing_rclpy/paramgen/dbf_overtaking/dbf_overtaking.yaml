@@ -69,7 +69,7 @@ dbf_overtaking:
       description: "Gauss-Legendre order across space for collision probability computation"
     order_time:
       type: int
-      default_value: 32
+      default_value: 36
       description: "Gauss-Legendre order across time for collision probability computation"
     alpha:
       type: double
@@ -81,7 +81,7 @@ dbf_overtaking:
     description: "What torch.compile backend to use. Default (empty string) means do not use compiled modules"
   Nparticles:
     type: int
-    default_value: 512
+    default_value: 1024
     description: "How many particles in the dbf algorithm to use"
   kbezier:
     type: int
@@ -98,38 +98,38 @@ dbf_overtaking:
       description: "Assumed width of both vehicles"
     length:
       type: double
-      default_value: 5.4 
+      default_value: 5.2
       description: "Assumed length of both vehicles"
   stdev_range:
     longitudinal:
       type: double_array
-      default_value: [0.1, 1.0]
+      default_value: [0.75, 1.875]
       description: "Range of longitudinal standard deviations to use for TV prediction. Eventually replace this with probabilitic prediction module"
     lateral:
       type: double_array
-      default_value: [0.1, 0.75]
+      default_value: [0.25, 1.0]
       description: "Range of lateral standard deviations to use for TV prediction. Eventually replace this with probabilitic prediction module"
   buffer_factor:
     longitudinal:
       type: double
-      default_value: 0.6
+      default_value: 0.875
       description: "Buffer factor to apply for collision avoidance in the longitudinal direction (0.5 is no extra buffer)"
     lateral:
       type: double
-      default_value: 0.6
+      default_value: 0.65
       description: "Buffer factor to apply for collision avoidance in the lateral direction (0.5 is no extra buffer)"
   time_horizon:
     type: double
     default_value: 7.0
     description: "Time horizon to use in planning"
-  raceline_scale:
+  timescale:
     type: double
-    default_value: 0.875
+    default_value: 0.8
     description: "Scale the speeds on the optimal raceline by this value"
   controlpoint_noise:
     lateral:
       type: double
-      default_value: 0.875
+      default_value: 1.25
       description: "Noise factor to apply to particles in the lateral direction"
     longitudinal:
       type: double
