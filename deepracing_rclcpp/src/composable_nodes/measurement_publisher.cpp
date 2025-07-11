@@ -13,6 +13,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
+#include <geometry_msgs/msg/polygon_stamped.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include "deepracing_ros/utils/f1_msg_utils_2023.h"
@@ -77,6 +78,7 @@ class MeasurementPublisher
      {
         this->odom_publisher = this->node->create_publisher<nav_msgs::msg::Odometry>("odom", qos);
      }  
+     this->polygon_publisher = this->node->create_publisher<geometry_msgs::msg::PolygonStamped>("polygon", qos);
      this->imu_publisher = this->node->create_publisher<sensor_msgs::msg::Imu>("imu", qos);
 
 
@@ -152,7 +154,8 @@ class MeasurementPublisher
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher;
     rclcpp::Publisher<geometry_msgs::msg::AccelWithCovarianceStamped>::SharedPtr accel_publisher;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
-
+    rclcpp::Publisher<geometry_msgs::msg::PolygonStamped>::SharedPtr polygon_publisher;
+ 
     std::shared_ptr<rclcpp::Node> node;
     std::shared_ptr<tf2_ros::Buffer> tfbuffer;
     std::shared_ptr<tf2_ros::TransformListener> tflistener;
@@ -276,13 +279,23 @@ class MeasurementPublisher
       imu_msg_.linear_acceleration.set__x(centroidLinearAccel.x());
       imu_msg_.linear_acceleration.set__y(centroidLinearAccel.y());
       imu_msg_.linear_acceleration.set__z(centroidLinearAccel.z());    
-
+      double car_length = 5.2, car_width = 2.0;
       if (!m_with_ekf_)
       {
         this->tfbroadcaster->sendTransform(transformMsg);
         accel_msg_.header.set__stamp(odom_msg_.header.stamp).set__frame_id(transformMsg.child_frame_id);
         accel_msg_.accel.accel.set__linear(imu_msg_.linear_acceleration);
         this->accel_publisher->publish(std::make_unique<geometry_msgs::msg::AccelWithCovarianceStamped>(accel_msg_));
+
+        geometry_msgs::msg::PolygonStamped polygon_msg;
+        polygon_msg.header.stamp = odom_msg_.header.stamp;
+        polygon_msg.header.frame_id=  transformMsg.child_frame_id;
+        polygon_msg.polygon.points.push_back(geometry_msgs::msg::Point32().set__x(-0.5*car_length).set__y(-0.5*car_width));
+        polygon_msg.polygon.points.push_back(geometry_msgs::msg::Point32().set__x(0.5*car_length).set__y(-0.5*car_width));
+        polygon_msg.polygon.points.push_back(geometry_msgs::msg::Point32().set__x(0.5*car_length).set__y(0.5*car_width));
+        polygon_msg.polygon.points.push_back(geometry_msgs::msg::Point32().set__x(-0.5*car_length).set__y(0.5*car_width));
+        this->polygon_publisher->publish(polygon_msg);
+
       }
       this->odom_publisher->publish(std::make_unique<nav_msgs::msg::Odometry>(odom_msg_));
       this->imu_publisher->publish(std::make_unique<sensor_msgs::msg::Imu>(imu_msg_));
