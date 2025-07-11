@@ -9,6 +9,8 @@ import time
 from concurrent import futures
 import logging
 import argparse
+
+from torch import as_tensor
 import sensor_msgs
 import sensor_msgs_py.point_cloud2
 import torch
@@ -79,15 +81,8 @@ class OraclePathServer(PathServerROS):
             self.device = torch.device("cpu")
             self.get_logger().info("Running on the cpu" )
 
-        self.raceline = None
-        self.racelinekdtree : KDTree = None
-        self.racelinetangents = None
-        self.racelinenormals = None
-        self.dsfinal = None
+        self.raceline_helper : mu.RacelineHelper | None = None
         self.racelineframe = None
-        self.racelinespeeds = None
-        self.racelinedists = None
-        self.racelinetimes = None
 
 
         plot_param : Parameter = self.declare_parameter("plot", value=False)
@@ -109,6 +104,13 @@ class OraclePathServer(PathServerROS):
         segments_descriptor.description="How many segments to use in the CBC fit"
         segments_param : Parameter = self.declare_parameter(segments_descriptor.name, value=4)
         self.segments : int = segments_param.get_parameter_value().integer_value
+
+        speed_factor_descriptor : ParameterDescriptor = ParameterDescriptor()
+        speed_factor_descriptor.name="timescale"
+        speed_factor_descriptor.read_only=True
+        speed_factor_descriptor.description="By how much to scale the speed on the raceline"
+        speed_factor_param : Parameter = self.declare_parameter(speed_factor_descriptor.name, value=1.0)
+        self.speed_factor : float = speed_factor_param.get_parameter_value().double_value
 
         
         
@@ -313,39 +315,32 @@ class OraclePathServer(PathServerROS):
             cloud_xyz_in[:,2]  = np.squeeze(structured_cloud_in["z"])
             cloud_xyz : np.ndarray = transform_Rot.apply(cloud_xyz_in) + transform_T
             cloud_time : np.ndarray = np.squeeze(structured_cloud_in["time"])
-            self.racelinespline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(cloud_time, cloud_xyz, k=3, bc_type='periodic')
-            self.racelinesplineder : scipy.interpolate.BSpline = self.racelinespline.derivative()
-            velocity_vectors = self.racelinesplineder(cloud_time)
-            tangent_vectors = velocity_vectors/np.linalg.norm(velocity_vectors, ord=2.0, axis=-1, keepdims=True)
-            up = np.zeros_like(tangent_vectors)
-            up[:,-1] = 1.0
-            normal_vectors = np.cross(up, tangent_vectors)
-            normal_vectors /= np.linalg.norm(normal_vectors, ord=2.0, axis=-1, keepdims=True)
-            if "speed" in field_names:
-                self.get_logger().info("Using speeds contained in the point cloud")
-                self.racelinespeeds = np.squeeze(structured_cloud_in["speed"])
-            else:
-                self.get_logger().info("Computing speed by spline interpolation")
-                cloud_arclength : np.ndarray = np.squeeze(structured_cloud_in["arclength"])
-                arclengthspline = scipy.interpolate.make_interp_spline(cloud_time, cloud_arclength, k=2)
-                self.racelinespeeds = arclengthspline(cloud_time, nu=1)
+            #self.params.raceline_scale*
+            interp_spline : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(cloud_time, cloud_xyz, k=2, bc_type='periodic')
+            interp_times = np.linspace(cloud_time[0], cloud_time[-1], num=int(round(cloud_time[-1].item()/0.075)))
+            interp_spline_points = interp_spline(interp_times)
+            interp_spline_speeds = np.linalg.norm(interp_spline(interp_times, nu=1), ord=2.0, axis=1)
+            line_all_speeds = torch.as_tensor(interp_spline_speeds).double()
+            backend="inductor"
+            mode="max-autotune-no-cudagraphs" if backend=="inductor" else None
+            raceline_helper = mu.RacelineHelper.from_closed_path(
+                torch.as_tensor(interp_spline_points).type_as(line_all_speeds), self.speed_factor*line_all_speeds,
+                0.5
+            ).to(tensor=self.tsamp)
+            raceline_helper.compile(backend=backend, mode=mode, fullgraph=True, dynamic=True)
+            tdummy = self.dt*self.tsamp + 5.0
+            rdummy, pdummy, vdummy, _ = raceline_helper(t=tdummy)
+            tback = raceline_helper.t_of_r(rdummy[[0,]])
+            pquery = pdummy[[0,]]
+            closest_point = raceline_helper.closest_point_approximate(pquery + 5.0*torch.randn_like(pquery), newton_iterations=3)
             self.racelineframe = str(transform_msg.header.frame_id)
-            self.racelinetangents = tangent_vectors
-            self.racelinenormals = normal_vectors
-
-            # dt = 0.01
-            # Nsamp = int(round(cloud_time[-1]/dt))
-            # self.racelinetimes = np.linspace(0.0, cloud_time[-1], num=Nsamp)
-            self.racelinetimes = torch.as_tensor(cloud_time, dtype=torch.float64)
-            self.raceline = self.racelinespline(self.racelinetimes.cpu().numpy())
-            self.racelinekdtree = KDTree(self.raceline)
-        # self.rlpublisher.publish(self.rl_as_pathmsg())
+            self.raceline_helper=raceline_helper
         response.message="yay"
         response.error_code=SetRaceline.Response.SUCCESS
         return response
 
     def getTrajectory(self):
-        if (self.racelineframe is None) or (self.raceline is None) or (self.racelinetimes is None) or (self.racelinespeeds is None) or (self.racelinetangents is None) or (self.racelinenormals is None):
+        if self.raceline_helper is None:
             self.get_logger().error("Returning None because raceline not yet received")
             return None
         if self.current_odom is None:
@@ -363,24 +358,21 @@ class OraclePathServer(PathServerROS):
             pose_curr : torch.Tensor = torch.matmul(map_to_car, car_to_base_link)
         else:
             pose_curr : torch.Tensor = map_to_car
-            
-        _, Imin = self.racelinekdtree.query(pose_curr[0:3,3].cpu().numpy())
-        t0 = self.racelinetimes[Imin].item()
-        tf = t0+self.dt
-        tvec : np.ndarray = np.linspace(t0, tf, num=150)
-        rlpiece : torch.Tensor = torch.from_numpy(self.racelinespline(tvec)).type_as(self.tsamp).to(self.tsamp.device)
-        rlpiece_local = rlpiece
+        current_vel_msg = posemsg.twist.twist.linear
+        current_vel = (pose_curr[0:3,0:3]@torch.as_tensor([current_vel_msg.x, current_vel_msg.y, current_vel_msg.z]).type_as(self.tsamp)[:,None])[:,0]
+        P0 = pose_curr[0:3,3]    
+        rclosest, _, _, _ = self.raceline_helper.closest_point_approximate(P0.unsqueeze(0), newton_iterations=3)
+        tclosest = self.raceline_helper.t_of_r(rclosest)#.item()
         # poseinv_T = -(pose_curr[0:3,0:3].T @ pose_curr[0:3,[3,]]).squeeze(-1)
         # rlpiece_local = (rlpiece @ pose_curr[0:3,0:3]) + poseinv_T
 
-        tfit = (torch.as_tensor(tvec).type_as(rlpiece_local) - t0)
-        P0 = (pose_curr[0:3,3])
-        # P0 = torch.zeros_like(rlpiece_local[0])
-        V0 = torch.as_tensor(self.racelinespline(tvec[0], nu=1))[None].type_as(tfit)# @ pose_curr[0:3,0:3]
-        # Vf = torch.as_tensor(self.racelinespline(tvec[-1], nu=1))[None].type_as(tfit) @ pose_curr[0:3,0:3]
-        # dYdT_0=V0, 
-        (controlpoints_fit,), (tswitch,)  = mu.compositeBezierFit(tfit[None], rlpiece_local[None], self.segments, Y_0=P0[None], constraint_level=2)
-        delta_t = (tswitch[1:] - tswitch[:-1])#*0.975
+        tfit = self.dt*self.tsamp
+        _, rlpiece, rlvels, _ = self.raceline_helper(t=tfit + tclosest[0])
+        V0 = rlvels[:,0]
+        # dYdT_0=V0,
+         
+        (controlpoints_fit,), (tswitch,)  = mu.compositeBezierFit(tfit, rlpiece, self.segments, Y_0=P0[None], dYdT_0=current_vel[None], constraint_level=2)
+        delta_t = (tswitch[1:] - tswitch[:-1])
 
         cbc_msg = C.toCompositeBezierCurveMsg(delta_t, controlpoints_fit, header=posemsg.header)
         # cbc_msg.header.frame_id = self.base_link_id
