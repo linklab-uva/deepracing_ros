@@ -5,9 +5,12 @@ import torch
 from scipy.spatial.transform import Rotation
 from deepracing_msgs.msg import CompositeBezierCurve
 import rclpy
+import rclpy.client
 import rclpy.qos
 import rclpy.publisher
 import rclpy.subscription
+import rclpy.client
+import rosbag2_interfaces.srv, rosbag2_interfaces.msg
 
 import deepracing_models.math_utils as mu, deepracing_ros.convert as C
 from deepracing_models.math_utils.bayesian_filtering import BayesianFilter, ParticleNoiser
@@ -26,13 +29,14 @@ class DBFOvertakingPathServer(PathServerROS):
 
         
         self.param_listener = dbf_overtaking.ParamListener(self)
+        # dbf_overtaking.ParamListener.update()
         self.params = self.param_listener.get_params()
         
         self.opponent_curve_mutex = threading.Semaphore()
         self.opponent_curve_msg : CompositeBezierCurve | None = None
         self.opponent_bcurve_sub : rclpy.subscription.Subscription = self.create_subscription(CompositeBezierCurve, "opponent_curve", self.opponent_curve_CB, rclpy.qos.qos_profile_sensor_data)
         self.composite_bcurve_pub : rclpy.publisher.Publisher = None #self.create_publisher(CompositeBezierCurve, "oraclecompositebeziercurves", 1)
-
+        self.unpause_service : rclpy.client.Client = self.create_client(rosbag2_interfaces.srv.Resume, "/rosbag2_recorder/resume")
     def opponent_curve_CB(self, msg : CompositeBezierCurve):
         if not self.opponent_curve_mutex.acquire(timeout=0.1):
             raise ValueError("Unable to acquire opponent_curve_mutex")
@@ -40,25 +44,31 @@ class DBFOvertakingPathServer(PathServerROS):
         self.opponent_curve_mutex.release()
 
     def initialize(self, raceline_structured : np.ndarray, widthmap_structured : np.ndarray, innerbound_structured : np.ndarray, outerbound_structured : np.ndarray):
-        
+        torch.set_float32_matmul_precision("high")
         device = torch.device("cuda:%d" % self.params.gpu if self.params.gpu>=0 else "cpu")
-        self.get_logger().info("Building Raceline Helper")
+        self.get_logger().info("Building Raceline Helpers")
         line_all_points = torch.as_tensor(np.stack([raceline_structured["x"], raceline_structured["y"]], axis=1), dtype=torch.float32, device=device)
         times_in = raceline_structured["time"].astype(np.float64)
         interp_spline : scipy.interpolate.BSpline = \
-            scipy.interpolate.make_interp_spline(times_in, line_all_points.cpu().numpy(), k=3, bc_type="periodic")
-        interp_spline_speeds = np.linalg.norm(interp_spline(times_in, nu=1), ord=2.0, axis=1)
-        line_all_speeds = self.params.raceline_scale*torch.as_tensor(interp_spline_speeds).double()
+            scipy.interpolate.make_interp_spline(times_in, line_all_points.cpu().numpy(), k=2, bc_type="periodic")
+        interp_times = np.linspace(times_in[0], times_in[-1], num=int(round(times_in[-1].item()/0.075)))
+        interp_spline_points = interp_spline(interp_times)
+        interp_spline_speeds = np.linalg.norm(interp_spline(interp_times, nu=1), ord=2.0, axis=1)
+        line_all_speeds = torch.as_tensor(interp_spline_speeds).double()
         _raceline_helper_ : mu.RacelineHelper = mu.RacelineHelper.from_closed_path(
-            line_all_points.cpu().double(), line_all_speeds,
+            torch.as_tensor(interp_spline_points).type_as(line_all_speeds), self.params.timescale*line_all_speeds,
             0.5
         ).to(tensor=line_all_points)
-        self.get_logger().info("Built Raceline Helper")
+        # self.fullspeed_raceline_helper : mu.RacelineHelper = mu.RacelineHelper.from_closed_path(
+        #     line_all_points.cpu().double(), line_all_speeds,
+        #     0.5
+        # ).to(tensor=line_all_points)
+        self.get_logger().info("Built Raceline Helpers")
         self.get_logger().info("Building Bounds Checker")
         shrink_factor = 1.0
         centerline_dense = torch.as_tensor(np.stack([widthmap_structured[k] for k in ["x", "y"]], axis=1)).type_as(line_all_speeds)
-        left_widths = shrink_factor*torch.as_tensor(widthmap_structured["ob_distance"]).type_as(line_all_speeds) + 0.1*self.params.car_dims.width
-        right_widths = shrink_factor*torch.as_tensor(widthmap_structured["ib_distance"]).type_as(line_all_speeds) - 0.1*self.params.car_dims.width
+        left_widths = shrink_factor*torch.as_tensor(widthmap_structured["ob_distance"]).type_as(line_all_speeds) - 0.2*self.params.car_dims.width
+        right_widths = shrink_factor*torch.as_tensor(widthmap_structured["ib_distance"]).type_as(line_all_speeds) + 0.2*self.params.car_dims.width
         _bounds_checker_ = BoundsChecker(gauss_order=self.params.bounds_gauss.order, dT=self.params.time_horizon, stdev=self.params.bounds_gauss.stdev,
             dr_samp=self.params.bounds_gauss.dr_samp, alpha=self.params.bounds_gauss.alpha,
             left_widths=left_widths, right_widths=right_widths, refline_points=centerline_dense,
@@ -184,10 +194,10 @@ class DBFOvertakingPathServer(PathServerROS):
                                                                         constraint_level=2)
         Curveparticles = Curveparticles.expand(self.params.Nparticles, *Curveparticles.shape[1:]).clone()
         rfinal = rego[:,-1].tile(self.params.Nparticles)
-        rfinal_min = (rtarget[0,-1] + 1.5*car_length)
+        rfinal_min = (rtarget[0,-1] + 2.5*car_length)
         self.get_logger().info("Built Overall Filter")
         compile_backend = self.params.compile_backend
-        compile_modules = len(compile_backend)>0
+        compile_modules = (len(compile_backend)>0) and (not compile_backend=="none")
         backend = compile_backend if compile_modules else "inductor"
         mode="max-autotune-no-cudagraphs" if backend=="inductor" else None
         self.get_logger().info("Compiling Overall Filter")
@@ -226,30 +236,35 @@ class DBFOvertakingPathServer(PathServerROS):
         warmup_times = torch.as_tensor(warmup_times, dtype=torch.float64)
         self.get_logger().info("Compiled Overall Filter")
         self.get_logger().info("warmup_times: " + str(warmup_times))
+        self.state="PLANNING"
         self.composite_bcurve_pub : rclpy.publisher.Publisher = self.create_publisher(CompositeBezierCurve, "bcurvesout", 1)
+
     
     def getTrajectory(self):
         if self.current_odom is None:
             self.get_logger().error("No odom yet")
             return
-        # current_pose_msg = deepcopy(self.current_odom.pose.pose)
-        # current_vel_msg = deepcopy(self.current_odom.twist.twist)
-        # current_rot = Rotation.from_quat([0.0, 0.0, current_pose_msg.orientation.z, current_pose_msg.orientation.w])
-        # current_rotmat = torch.as_tensor(current_rot.as_matrix()[0:2,0:2]).type_as(self.Curveparticle_tstart)
-        # current_position_msg = current_pose_msg.position
-        # current_position = torch.as_tensor([current_position_msg.x, current_position_msg.y]).type_as(self.Curveparticle_tstart)
-        # current_velocity = (current_rotmat@torch.as_tensor([[current_vel_msg.linear.x,], [current_vel_msg.linear.y,]]).type_as(self.Curveparticle_tstart))[:,0]
-        # rclosest, _, _, _ = self.raceline_helper.closest_point_approximate(current_position[None], newton_iterations=3)
-        # tclosest = self.raceline_helper.t_of_r(rclosest).item()
-        # if self.Curveparticles is None:
-            # tfit = torch.linspace(tclosest, tclosest + self.params.time_horizon, steps=40).type_as(self.Curveparticle_tstart)
-        # rfit, pfit, vfit, _ = self.raceline_helper(t=self.tfit + tclosest)
-        # Curveparticles, _ = mu.compositeBezierFit(self.tfit[None], pfit[None], numsegments=self.params.Nsegments, kbezier=self.params.kbezier,
-        #                                             Y_0=current_position[None], dYdT_0=vfit[[0,],], 
-        #                                             Y_f=pfit[[-1,]], dYdT_f=vfit[[-1],],
-        #                                             constraint_level=2 )
-        # rfinal = rfit[[-1,]].expand(self.params.Nparticles).clone()
-        # self.Curveparticles = Curveparticles.expand(self.params.Nparticles, *Curveparticles.shape[1:]).clone()
+        if not self.state=="PLANNING":
+            return
+        current_pose_msg = deepcopy(self.current_odom.pose.pose)
+        current_vel_msg = deepcopy(self.current_odom.twist.twist)
+        current_rot = Rotation.from_quat([0.0, 0.0, current_pose_msg.orientation.z, current_pose_msg.orientation.w])
+        current_rotmat = torch.as_tensor(current_rot.as_matrix()[0:2,0:2]).type_as(self.Curveparticle_tstart)
+        current_position_msg = current_pose_msg.position
+        current_position = torch.as_tensor([current_position_msg.x, current_position_msg.y]).type_as(self.Curveparticle_tstart)
+        current_velocity = (current_rotmat@torch.as_tensor([[current_vel_msg.linear.x,], [current_vel_msg.linear.y,]]).type_as(self.Curveparticle_tstart))[:,0]
+        
+        rclosest, _, _, _ = self.raceline_helper.closest_point_approximate(current_position[None], newton_iterations=3)
+        tclosest = self.raceline_helper.t_of_r(rclosest).item()
+        if self.Curveparticles is None:
+            tfit = torch.linspace(tclosest, tclosest + self.params.time_horizon, steps=40).type_as(self.Curveparticle_tstart)
+        rfit, pfit, vfit, _ = self.raceline_helper(t=1.075*self.tfit + tclosest)
+        Curveparticles, _ = mu.compositeBezierFit(self.tfit[None], pfit[None], numsegments=self.params.Nsegments, kbezier=self.params.kbezier,
+                                                    Y_0=current_position[None], dYdT_0=current_velocity[None], 
+                                                    Y_f=pfit[[-1,]], dYdT_f=vfit[[-1],],
+                                                    constraint_level=2 )
+        rfinal = rfit[[-1,]].expand(self.params.Nparticles).clone()
+        self.Curveparticles = Curveparticles.expand(self.params.Nparticles, *Curveparticles.shape[1:]).clone()
         if self.opponent_curve_msg is not None:
             if not self.opponent_curve_mutex.acquire(timeout=0.1):
                 raise ValueError("Unable to acquire opponent_curve_mutex")
@@ -264,16 +279,20 @@ class DBFOvertakingPathServer(PathServerROS):
             tnodes = self.overall_filter.collision_probability_estimator.gl1d.eta
             # print(tnodes.shape)
             TV_positions, _ = mu.compositeBezierEval(TV_curve_tstart, TV_curve_dT, Targetvehicle_curve, tnodes, self.overall_filter.matrix_factory) 
-            TV_rfinal, _, _, _ = self.raceline_helper.closest_point_approximate(Targetvehicle_curve[-1,[-1,]], newton_iterations=3)
             TV_rinitial, _, _, _ = self.raceline_helper.closest_point_approximate(Targetvehicle_curve[0,[0,]], newton_iterations=3)
-            TV_tinitial = self.raceline_helper.t_of_r(TV_rinitial)
-            rfit, pfit, vfit, _ = self.raceline_helper(t=self.tfit + TV_tinitial.item() - 0.5)
-            Curveparticles, _ = mu.compositeBezierFit(self.tfit[None], pfit[None], numsegments=self.params.Nsegments, kbezier=self.params.kbezier,
-                                                        Y_0=pfit[[0,]], dYdT_0=vfit[[0,],], 
-                                                        Y_f=pfit[[-1,]], dYdT_f=vfit[[-1],],
-                                                        constraint_level=2 )
-            rfinal = rfit[[-1,]].expand(self.params.Nparticles).clone()
-            self.Curveparticles = Curveparticles.expand(self.params.Nparticles, *Curveparticles.shape[1:]).clone()
+            TV_rfinal, _, _, _ = self.raceline_helper.closest_point_approximate(Targetvehicle_curve[-1,[-1,]], newton_iterations=3)
+            if TV_rinitial[0]>TV_rfinal[0]:
+                TV_rfinal+=self.raceline_helper.__arclengths_in__[-1]
+                rfinal[rfinal<(0.25*self.raceline_helper.__arclengths_in__[-1])]+=self.raceline_helper.__arclengths_in__[-1]
+            # TV_tinitial = self.raceline_helper.t_of_r(TV_rinitial)
+            #
+            # rfit, pfit, vfit, _ = self.raceline_helper(t=self.tfit + TV_tinitial.item() - 0.5)
+            # Curveparticles, _ = mu.compositeBezierFit(self.tfit[None], pfit[None], numsegments=self.params.Nsegments, kbezier=self.params.kbezier,
+            #                                             Y_0=pfit[[0,]], dYdT_0=vfit[[0,],], 
+            #                                             Y_f=pfit[[-1,]], dYdT_f=vfit[[-1],],
+            #                                             constraint_level=2 )
+            # rfinal = rfit[[-1,]].expand(self.params.Nparticles).clone()
+            # self.Curveparticles = Curveparticles.expand(self.params.Nparticles, *Curveparticles.shape[1:]).clone()
             rfinal_min = TV_rfinal[0] + 2.0*self.params.car_dims.length
             TV_velocities, _ = mu.compositeBezierEval(TV_curve_tstart, TV_curve_dT, Targetvehicle_curve_deriv, tnodes, self.overall_filter.derivative_matrix_factory) 
             TV_tangents : torch.Tensor = TV_velocities/torch.linalg.vector_norm(TV_velocities, dim=-1, keepdim=True)
@@ -288,62 +307,85 @@ class DBFOvertakingPathServer(PathServerROS):
             # print(rfinal[0])
             # print(rfinal_min)
             tick = time.time()
-            dbf_curve = self.attempt_dbf(
+            dbf_curve, dbf_rfinal = self.attempt_dbf(
                 self.Curveparticles, self.Curveparticle_tstart, self.Curveparticle_dT, rfinal, rfinal_min,
                     TV_box_positions, TV_stdev_inv_matrix
             )
             tock = time.time()
-            if dbf_curve is not None:
-                msgout = C.toCompositeBezierCurveMsg(self.Curveparticle_dT[0], dbf_curve)
+            if (dbf_curve is not None) and (dbf_rfinal is not None):
+                Vfinal = self.params.kbezier*(dbf_curve[-1,-1] - dbf_curve[-1,-2])/self.Curveparticle_dT[0,-1]
+                tsplice = self.raceline_helper.t_of_r(dbf_rfinal[None]).item()
+                
+                textra = torch.linspace(tsplice, tsplice+self.params.time_horizon, steps=10*self.params.Nsegments).type_as(dbf_rfinal)
+                _, pextra, _, _ = self.raceline_helper(t=textra)
+                curve_extra, curve_extra_tswitch = mu.compositeBezierFit(textra-textra[0], pextra, self.params.Nsegments, Y_0=dbf_curve[-1,-1], dYdT_0=Vfinal, kbezier=self.params.kbezier, constraint_level=2)
+                curve_extra_dT = torch.diff(curve_extra_tswitch, dim=0)
+                # curve_extra[0] = dbf_curve[-1,-1]
+                augmented_curve = torch.cat([dbf_curve, curve_extra], dim=0)
+                augmented_dT = torch.cat([self.Curveparticle_dT[0], curve_extra_dT], dim=0)
+
+                msgout = C.toCompositeBezierCurveMsg(augmented_dT, augmented_curve)
                 msgout.header.frame_id="map"
-                self.get_logger().info("YAY! DBF algorithm converged in %f seconds" % (tock-tick,))
+                msgout.two_d=False
+                for j in range(len(msgout.control_points_flat)):
+                    msgout.control_points_flat[j].z = current_pose_msg.position.z
+                # self.get_logger().info("YAY! DBF algorithm converged in %f seconds" % (tock-tick,))
+                self.state="OVERTAKING"
+                req = rosbag2_interfaces.srv.Resume.Request()
+                self.unpause_service.call_async(req)
                 self.composite_bcurve_pub.publish(msgout)
             else:
+                # pass
                 self.get_logger().error("DBF algorithm did not converge in %f seconds" % (tock-tick,))
-
+    def unpause_CB(self, result : rosbag2_interfaces.srv.Resume.Response):
+        pass
     def attempt_dbf(self, Curveparticles : torch.Tensor, Curveparticle_tstart : torch.Tensor, Curveparticle_dT : torch.Tensor, rfinal : torch.Tensor, rfinal_min,
                     TV_box_positions : torch.Tensor, TV_stdev_inv_matrix : torch.Tensor):
         
-        for i in range(16):
-            idx_resample = torch.arange(0, Curveparticles.shape[0], step=1, dtype=torch.int64, device=Curveparticles.device)
-            particle_likelihoods : torch.Tensor = torch.ones(idx_resample.shape[0]).type_as(Curveparticles)/self.params.Nparticles
-            success = (particle_likelihoods[0]<0.0)
-            Curveparticles[:] = Curveparticles[idx_resample]#.clone()\
-            rfinal[:] = rfinal[idx_resample]
+        idx_resample = torch.empty_like(rfinal).long()
+        particle_likelihoods = torch.empty_like(rfinal)
+        success = torch.as_tensor(0).to(dtype=bool, device=idx_resample.device)
+        for i in range(12):
+            # minrfinal, maxrfinal = torch.min(rfinal), torch.max(rfinal)
+            # self.get_logger().debug("minrfinal: " + str(minrfinal) + " maxrfinal: " + str(maxrfinal) + " rfinal_min: " + str(rfinal_min))
+            if i > 0:
+                idx_resample_cpu = idx_resample.cpu()
+                Curveparticles = Curveparticles[idx_resample_cpu].clone()
+                rfinal = rfinal[idx_resample_cpu].clone()
             Curveparticles, rfinal = self.particle_noiser(Curveparticles, Curveparticle_dT, rfinal, rfinal_min)
 
             (
                 (
-                    closest_point_r,
-                    bounds_check_positions,
-                    closest_point_values,
-                    closest_point_tangents,
-                    closest_point_normals,
-                    deltas,
-                    signed_distances,
-                    left_width_vals,
-                    right_width_vals,
-                    specific_left_bound_violation_probs,
-                    specific_right_bound_violation_probs,
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
                     no_left_bound_violation_probs,
                     no_right_bound_violation_probs,
                 ),
                 (
-                    gauss_pts,
-                    gaussian_pdf_vals,
-                    collision_check_positions,
-                    collision_probs,
-                    overall_lambdas,
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
                     overall_collision_free_probs
                 ),
                 (
-                    ellipse_points,
-                    ellipse_normals,
-                    origin,
-                    lat_radii,
-                    long_radii,
-                    signed_distances,
-                    specific_dynamic_violation_probs,
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
                     overall_within_limits_probs
                 ),
             ) = self.overall_filter(Curveparticles, Curveparticle_tstart, Curveparticle_dT, 
@@ -355,6 +397,9 @@ class DBFOvertakingPathServer(PathServerROS):
             torch.gt(torch.max(particle_likelihoods), 0.999, out=success)
             if success.item():
                 idx_max = torch.argmax(particle_likelihoods)
-                return Curveparticles[idx_max]
-            torch.multinomial(particle_likelihoods, self.params.Nparticles, replacement=True)
-        return None
+                return Curveparticles[idx_max], rfinal[idx_max]
+            torch.multinomial(particle_likelihoods, self.params.Nparticles, replacement=True, out=idx_resample)
+            if torch.any(idx_resample<0) or torch.any(idx_resample>(idx_resample.shape[0]-1)):
+                self.get_logger().error("Invalid indices: " + str(idx_resample))
+                return None, None
+        return None, None
