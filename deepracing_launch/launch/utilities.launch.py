@@ -18,18 +18,19 @@ def generate_launch_description():
     ekf_global = DeclareLaunchArgument("ekf_global", default_value="true")
     carname = DeclareLaunchArgument("carname", default_value="player1")
     index = DeclareLaunchArgument("index", default_value="-1")
+    ghost_timescale = DeclareLaunchArgument("ghost_timescale", default_value="1.0")
     ekf_with_angvel = DeclareLaunchArgument("ekf_with_angvel", default_value="false")
     boundary_pub = DeclareLaunchArgument("boundary_pub", default_value="false")
     use_sim_time = DeclareLaunchArgument("use_sim_time", default_value="false")
     
-    entries = [boundary_pub, carname, index, use_sim_time, with_ekf, ekf_global, ekf_with_angvel]
+    entries = [boundary_pub, carname, index, use_sim_time, with_ekf, ekf_global, ekf_with_angvel, ghost_timescale]
 
     ghost_ns = "ghost"
     ego_odom_topic = PathJoinSubstitution(["/", LaunchConfiguration(carname.name), "odom", "filtered"])
     entries.append(launch_ros.actions.Node(
         package='deepracing_rclpy', name='ghost_spawner', executable='ghost_spawner',
         output='screen',
-        parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name),}],
+        parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name), "timescale" : LaunchConfiguration(ghost_timescale.name)}],
         namespace=ghost_ns,
         remappings=[("ego_odom", ego_odom_topic)]
         )) 
@@ -38,7 +39,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{use_sim_time.name : LaunchConfiguration(use_sim_time.name)}],
         namespace=ghost_ns,
-        remappings=[("curve_in", "target_prediction"), ("marker_out", "target_prediction/markers")]
+        remappings=[("curve_in", "target_prediction"), ("marker_out", "target_prediction/markers"), ("pc2_out", "target_prediction/pc2")]
         )) 
     entries.append(launch_ros.actions.Node(
         package='deepracing_rclcpp', name='measurement_publisher', executable='measurement_publisher_exe', output='screen', 

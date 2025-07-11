@@ -1,0 +1,29 @@
+<launch>
+   <arg name="use_sim_time" default="false"/>
+   <arg name="carname" default="player1"/>
+   <arg name="gpu" default="1"/>
+   <arg name="timescale" default="0.975"/>
+   <arg name="rate" default="50.0"/>
+   <arg name="compile_backend" default="inductor"/>
+   <arg name="opponent_curve_topic" default="/ghost/target_prediction"/>
+
+   <node pkg="deepracing_rclpy" exec="dbf_path_server" name="dbf_path_server" output="screen" namespace="$(var carname)">
+        <param name="carname" value="$(var carname)"/>
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="rate" value="$(var rate)"/>
+        <param name="gpu" value="$(var gpu)"/>
+        <param name="compile_backend" value="$(var compile_backend)"/>
+        <param name="timescale" value="$(var timescale)"/>
+        <remap from="odom" to="odom/filtered"/>
+        <remap from="bcurvesout" to="dbfcurves"/>
+        <remap from="opponent_curve" to="$(var opponent_curve_topic)"/>
+   </node>
+   <node pkg="deepracing_rclpy" exec="cbc_visualizer" name="dbf_curve_viz" output="screen" namespace="$(var carname)">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="marker_namespace" value="ego_vehicle"/>
+        <remap from="curve_in" to="dbfcurves"/>
+        <remap from="marker_out" to="dbfcurves/markers"/>
+        <remap from="pc2_out" to="dbfcurves/pc2"/>
+   </node>
+   
+</launch>

@@ -30,14 +30,18 @@ def generate_launch_description():
     argz.append(default_trackfile)
     rate = DeclareLaunchArgument("rate", default_value="100.0")
     argz.append(rate)
+    ghost_timescale = DeclareLaunchArgument("ghost_timescale", default_value="0.8")
+    argz.append(ghost_timescale)
+    timescale = DeclareLaunchArgument("timescale", default_value="1.0")
+    argz.append(timescale)
     ekf_global = DeclareLaunchArgument("ekf_global", default_value="true")
     argz.append(ekf_global)
     ekf_with_angvel = DeclareLaunchArgument("ekf_with_angvel", default_value="false")
     argz.append(ekf_with_angvel)
     includez.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(PathJoinSubstitution([deepracing_launch_launch_dir, "utilities.launch.py"]))\
-                    ,launch_arguments=list({index.name: LaunchConfiguration(index.name), ekf_with_angvel.name: LaunchConfiguration(ekf_with_angvel.name), ekf_global.name: LaunchConfiguration(ekf_global.name), boundary_pub.name: LaunchConfiguration(boundary_pub.name), carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), with_ekf.name : LaunchConfiguration(with_ekf.name)}.items())))
+                    ,launch_arguments=list({ghost_timescale.name: LaunchConfiguration(ghost_timescale.name), index.name: LaunchConfiguration(index.name), ekf_with_angvel.name: LaunchConfiguration(ekf_with_angvel.name), ekf_global.name: LaunchConfiguration(ekf_global.name), boundary_pub.name: LaunchConfiguration(boundary_pub.name), carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name), with_ekf.name : LaunchConfiguration(with_ekf.name)}.items())))
     includez.append(IncludeLaunchDescription(FrontendLaunchDescriptionSource(PathJoinSubstitution([deepracing_launch_launch_dir, "pure_pursuit_oracle.launch"]))\
-                    ,launch_arguments=list({rate.name: LaunchConfiguration(rate.name), default_trackfile.name: LaunchConfiguration(default_trackfile.name), carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name)}.items())))
+                    ,launch_arguments=list({timescale.name: LaunchConfiguration(timescale.name), rate.name: LaunchConfiguration(rate.name), default_trackfile.name: LaunchConfiguration(default_trackfile.name), carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name)}.items())))
     includez.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(PathJoinSubstitution([deepracing_launch_launch_dir, "controllers.launch.py"]))\
                     ,launch_arguments=list({carname.name: LaunchConfiguration(carname.name), use_sim_time.name : LaunchConfiguration(use_sim_time.name)}.items())))
     return LaunchDescription(argz + includez + nodez)
