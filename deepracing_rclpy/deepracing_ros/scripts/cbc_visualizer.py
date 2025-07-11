@@ -10,13 +10,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import copy
-import json
-import numpy as np
-from regex import D
 
-import ament_index_python
+import numpy as np
+
 import rclpy
 import rclpy.qos
 import rclpy.duration
@@ -27,6 +23,7 @@ import deepracing_msgs.msg
 import deepracing_ros.convert as C
 import std_msgs.msg
 import visualization_msgs.msg
+import sensor_msgs.msg
 import geometry_msgs.msg
 import deepracing_models.math_utils as mu
 import torch
@@ -34,13 +31,14 @@ from deepracing_rclpy.ghost_parameters import ghost_spawner
 import matplotlib.pyplot as plt
 import matplotlib, matplotlib.colors, matplotlib.cm
 from deepracing_rclpy.cbc_viz import cbc_visualizer
-
+import sensor_msgs_py.point_cloud2
 
 class CBCVisualizer(rclpy.node.Node):
     def __init__(self, name="cbc_viz"):
         super(CBCVisualizer, self).__init__(name)
         self.cbc_sub : rclpy.subscription.Subscription = self.create_subscription(deepracing_msgs.msg.CompositeBezierCurve, "curve_in", self.cbc_cb, rclpy.qos.qos_profile_sensor_data)
         self.marker_pub : rclpy.publisher.Publisher = self.create_publisher(visualization_msgs.msg.MarkerArray, "marker_out", rclpy.qos.qos_profile_sensor_data)
+        
         self.matrix_factories = dict()
         prop_cycle = plt.rcParams['axes.prop_cycle']
         self.colorcycle = list(prop_cycle.by_key()['color'])
@@ -58,14 +56,16 @@ class CBCVisualizer(rclpy.node.Node):
             self.matrix_factories[cbc_msg.order] = mu.BezierMatrixFactory(cbc_msg.order)
         if (cbc_msg.order-1) not in self.matrix_factories:
             self.matrix_factories[cbc_msg.order-1] = mu.BezierMatrixFactory(cbc_msg.order-1)
+        if (cbc_msg.order-2) not in self.matrix_factories:
+            self.matrix_factories[cbc_msg.order-2] = mu.BezierMatrixFactory(cbc_msg.order-2)
 
         points_marker = visualization_msgs.msg.Marker()
         points_marker.header=cbc_msg.header
         points_marker.action=visualization_msgs.msg.Marker.ADD
         points_marker.type=visualization_msgs.msg.Marker.POINTS
-        points_marker.ns=self.params.namespace
+        points_marker.ns=self.params.marker_namespace
         points_marker.id=1
-        points_marker.lifetime=rclpy.duration.Duration(seconds=0, nanoseconds=int(.5E9)).to_msg()
+        # points_marker.lifetime=rclpy.duration.Duration(seconds=0, nanoseconds=int(.5E9)).to_msg()
         points_marker.pose=geometry_msgs.msg.Pose()
         points_marker.scale=geometry_msgs.msg.Vector3(x=self.params.control_point_scale, y=self.params.control_point_scale, z=self.params.control_point_scale)
         points_marker.colors=[]
@@ -90,8 +90,10 @@ class CBCVisualizer(rclpy.node.Node):
         (curve_points_samp,), idxbuckets = mu.compositeBezierEval(tstart[None], delta_t[None], control_points[None], tsamp[None], self.matrix_factories[cbc_msg.order])
         control_points_deriv = cbc_msg.order*torch.diff(control_points, dim=-2)/delta_t[:,None,None]
         (curve_vels_samp,), _ = mu.compositeBezierEval(tstart[None], delta_t[None], control_points_deriv[None], tsamp[None], self.matrix_factories[cbc_msg.order-1], idxbuckets=idxbuckets)
-        curve_speeds_samp = torch.norm(curve_vels_samp, p=2.0, dim=-1)
+        
+        curve_speeds_samp = torch.linalg.vector_norm(curve_vels_samp, dim=-1, keepdim=False)
 
+        
         curve_marker = visualization_msgs.msg.Marker()
         curve_marker.header=cbc_msg.header
         curve_marker.action=visualization_msgs.msg.Marker.ADD
@@ -126,9 +128,7 @@ class CBCVisualizer(rclpy.node.Node):
         arrow_marker.scale=geometry_msgs.msg.Vector3(x=self.params.arrow_scale, y=1.5*self.params.arrow_scale)
 
         self.marker_pub.publish(visualization_msgs.msg.MarkerArray(markers=[points_marker, curve_marker, arrow_marker]))
-        
-        # print(pointssamp[0])
-        
+
 
 
 
