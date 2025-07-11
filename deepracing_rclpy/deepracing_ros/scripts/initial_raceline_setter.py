@@ -96,7 +96,7 @@ def main(args=None):
             node.get_logger().info("Successfully set the raceline")
         else:
             node.get_logger().error("Unable to set the raceline. Error code: %d." % (getlineresponse.return_code,))
-            exit(-1)
+            # exit(-1)
 
 
     node.get_logger().info("Setting raceline")
@@ -104,15 +104,11 @@ def main(args=None):
     setlineserviceclient : rclpy.client.Client = node.create_client(deepracing_msgs.srv.SetRaceline, "set_raceline")
     setlineserviceclient.wait_for_service()
     req : deepracing_msgs.srv.SetRaceline.Request = deepracing_msgs.srv.SetRaceline.Request()
-    # req.filename=linedict["filepath"]
-    # req.frame_id="track"
     req.new_raceline = getlineresponse.line
     success = False
     while not success:
         future = setlineserviceclient.call_async(req)
         rclpy.spin_until_future_complete(node, future)
-        # while not future.done():
-        #     rate.sleep()
         response : deepracing_msgs.srv.SetRaceline.Response = future.result()
         if response.error_code==deepracing_msgs.srv.SetRaceline.Response.SUCCESS:
             success = True
