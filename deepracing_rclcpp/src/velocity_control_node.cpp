@@ -17,7 +17,7 @@
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <control_toolbox/pid_ros.hpp>
 
-class VelocityControlNode : public rclcpp::Node 
+class VelocityControlNode : public rclcpp::Node
 {
 
   public:
@@ -30,6 +30,7 @@ class VelocityControlNode : public rclcpp::Node
           get_node_logging_interface(),
           get_node_parameters_interface(),
           get_node_topics_interface())
+      // m_pid_controller_<VelocityControlNode>(this)
     {
       setpoint_listener = create_subscription<ackermann_msgs::msg::AckermannDriveStamped>("ctrl_cmd", rclcpp::QoS{1}, std::bind(&VelocityControlNode::setpointCallback, this, std::placeholders::_1));
       
@@ -54,7 +55,13 @@ class VelocityControlNode : public rclcpp::Node
       {
         odom_listener = create_subscription<nav_msgs::msg::Odometry>("odom_in", rclcpp::QoS{1}, std::bind(&VelocityControlNode::odomCallback, this, std::placeholders::_1));
       }
-      m_pid_controller_.initPid(1.0, 0.0, 0.0, 0.5, -0.5, true);
+      control_toolbox::AntiWindupStrategy antiwindup_strat;
+      antiwindup_strat.type = control_toolbox::AntiWindupStrategy::LEGACY;
+      antiwindup_strat.i_max = 1.0;
+      antiwindup_strat.i_min = -1.0;
+      antiwindup_strat.legacy_antiwindup = true;
+      m_pid_controller_.initialize_from_args(1.0, 0.0, 0.0, 1.0, -1.0, antiwindup_strat, true);
+      m_pid_controller_.initialize_from_ros_parameters();
       remove_on_set_parameters_callback(m_pid_controller_.getParametersCallbackHandle().get());
       parameter_cb_handle = add_on_set_parameters_callback(std::bind(&VelocityControlNode::setParametersCB, this, std::placeholders::_1));
       
@@ -106,6 +113,11 @@ class VelocityControlNode : public rclcpp::Node
     }
     inline double getError()
     {
+      rclcpp::Time now = get_clock()->now();
+      rclcpp::Duration time_since_most_recent_odom = now - m_current_odom_.header.stamp;
+      if (time_since_most_recent_odom>rclcpp::Duration::from_seconds(0.15)){
+        return -m_current_speed_;
+      }
       return m_setpoint_scale_factor_*m_setpoint_.drive.speed - m_current_speed_;
     }
     inline bool withAcceleration()
@@ -119,7 +131,7 @@ class VelocityControlNode : public rclcpp::Node
       {
         current_time_= now;
         m_pid_controller_.setCurrentCmd(0.0);
-        m_pid_controller_.computeCommand(0.0, rclcpp::Duration::from_seconds(0.0));
+        m_pid_controller_.compute_command(0.0, rclcpp::Duration::from_seconds(0.0));
         return;
       }
       if(m_with_acceleration_)
@@ -133,11 +145,11 @@ class VelocityControlNode : public rclcpp::Node
         {
           error_dot = m_current_accel_;
         }
-        m_pid_controller_.computeCommand(error, error_dot, now - current_time_);
+        m_pid_controller_.compute_command(error, error_dot, now - current_time_);
       }
       else
       {
-        m_pid_controller_.computeCommand(getError(), now - current_time_);
+        m_pid_controller_.compute_command(getError(), now - current_time_);
       }
       
       current_time_= now;
@@ -163,11 +175,13 @@ class VelocityControlNode : public rclcpp::Node
       RCLCPP_DEBUG(get_logger(),"Got a synchronized pair of odom and acceleration");
       Eigen::Vector3d velvec(new_odom->twist.twist.linear.x, new_odom->twist.twist.linear.y, new_odom->twist.twist.linear.z);
       m_current_speed_=velvec.norm();
-      m_current_accel_=new_accel->accel.accel.linear.x;
+      Eigen::Vector3d accelvec(new_accel->accel.accel.linear.x, new_accel->accel.accel.linear.y, new_accel->accel.accel.linear.z);
+      m_current_accel_=accelvec.dot(velvec.normalized());
     }
     inline void odomCallback(const nav_msgs::msg::Odometry::SharedPtr new_odom)
     {
       RCLCPP_DEBUG(get_logger(),"Got some odom");
+      m_current_odom_ = *new_odom;
       Eigen::Vector3d velvec(new_odom->twist.twist.linear.x, new_odom->twist.twist.linear.y, new_odom->twist.twist.linear.z);
       m_current_speed_=velvec.norm();
     }
@@ -179,6 +193,7 @@ class VelocityControlNode : public rclcpp::Node
 
     double m_current_speed_, m_current_accel_, m_error_rate_, m_setpoint_scale_factor_;
     ackermann_msgs::msg::AckermannDriveStamped m_setpoint_;
+    nav_msgs::msg::Odometry m_current_odom_;
 
     control_toolbox::PidROS m_pid_controller_;
 };
