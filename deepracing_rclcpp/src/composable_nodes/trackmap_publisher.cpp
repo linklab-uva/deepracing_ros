@@ -121,7 +121,9 @@ namespace composable_nodes
             }
             void session_cb(deepracing_msgs::msg::TimestampedPacketSessionData::UniquePtr session_data)
             {
-                if((session_data->udp_packet.track_id<0) || (session_data->udp_packet.track_id>34)){
+                
+                if((session_data->udp_packet.track_id<0) || (names_map_.find(session_data->udp_packet.track_id)==names_map_.end())){
+                    RCLCPP_ERROR(get_logger(), "Track ID %d not found in names map", session_data->udp_packet.track_id);
                     return;
                 }
                 std::scoped_lock lock(mutex_);
