@@ -92,8 +92,8 @@ endif()
 add_subdirectory(src/composable_nodes)
 
 set(nodes_to_install_)
-
-if(control_toolbox_FOUND AND ackermann_msgs_FOUND)
+option(with_velocity_control_node "Build the velocity control node" OFF)
+if(control_toolbox_FOUND AND ackermann_msgs_FOUND AND with_velocity_control_node)
   add_executable(velocity_control_node src/velocity_control_node.cpp)
   ament_target_dependencies(velocity_control_node ackermann_msgs control_msgs control_toolbox deepracing_msgs geometry_msgs message_filters nav_msgs rclcpp std_msgs tf2_eigen)
   target_link_libraries(velocity_control_node
@@ -221,6 +221,10 @@ rclcpp_components_register_node(deepracing_composable_nodes
 rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::MeasurementPublisher"
   EXECUTABLE measurement_publisher_exe
+)
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::SyntheticSessionDataNode"
+  EXECUTABLE synthetic_session_data_exe
 )
 rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::TrackmapPublisher"
