@@ -15,8 +15,8 @@ dbf_overtaking:
       description: "Stdev to use in folded normal distribution for probability of boundary violation"
     alpha:
       type: double
-      default_value: 0.1
-      description: "Alpha value for GLR algorithm on collision probability"
+      default_value: 0.0
+      description: "Alpha value for gauss-legendre integration of dynamics violation probability"
   dynamics_newton:
     stepsize:
       type: double
@@ -59,8 +59,8 @@ dbf_overtaking:
       description: "Spacing to presample the centerline for bounds checking"
     alpha:
       type: double
-      default_value: 0.1
-      description: "Alpha value for GLR algorithm on collision probability"
+      default_value: 0.0
+      description: "Alpha value for gauss-legendre integration of boundary violation probability"
 
   collision_gauss:
     order_space:
@@ -73,7 +73,7 @@ dbf_overtaking:
       description: "Gauss-Legendre order across time for collision probability computation"
     alpha:
       type: double
-      default_value: 0.1
+      default_value: 0.0
       description: "Alpha value for GLR algorithm on collision probability"
   compile_backend:
     type: string
