@@ -36,7 +36,7 @@ namespace composable_nodes
                     std::bind(&LateralErrorPublisher::odom_cb, this, std::placeholders::_1));
                 m_error_publisher_ = create_publisher<std_msgs::msg::Float64>("lateral_error", qos);
                 m_refpoint_publisher_ = create_publisher<geometry_msgs::msg::PointStamped>("reference_point", qos);
-                m_tfbuffer_.reset(new tf2_ros::Buffer(get_clock(), tf2::durationFromSec(20.0), this));
+                m_tfbuffer_.reset(new tf2_ros::Buffer(get_clock(), tf2::durationFromSec(20.0), shared_from_this()));
                 m_tflistener_.reset(new tf2_ros::TransformListener(*m_tfbuffer_));
             
             } 
