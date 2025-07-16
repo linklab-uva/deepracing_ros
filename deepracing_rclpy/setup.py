@@ -43,6 +43,7 @@ setup(
               ])),
     entry_points={
         'console_scripts': [
+            'raceline_propagator = %s.scripts.raceline_propagator:main' % (python_pkg_name),
             'dbf_path_server = %s.scripts.dbf_path_server:main' % (python_pkg_name),
             'lateral_error_publisher = %s.scripts.lateral_error_publisher:main' % (python_pkg_name),
             'load_measurement_publisher = %s.scripts.load_measurement_publisher:main' % (python_pkg_name),
