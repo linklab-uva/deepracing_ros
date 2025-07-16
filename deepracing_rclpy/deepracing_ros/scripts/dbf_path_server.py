@@ -48,7 +48,7 @@ def main(args=None):
     
 
 
-    getline_client : rclpy.client.Client = node.create_client(deepracing_srvs.GetLine, "/get_line")
+    getline_client : rclpy.client.Client = node.create_client(deepracing_srvs.GetLine, "get_line")
     getline_client.wait_for_service()
     
     raceline_np, raceline_frame = call_line_service(getline_client, node, "raceline")
