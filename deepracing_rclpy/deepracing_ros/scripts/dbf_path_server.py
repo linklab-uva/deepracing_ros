@@ -17,6 +17,7 @@ import numpy as np
 import sensor_msgs_py.point_cloud2
 import deepracing_msgs.srv as deepracing_srvs
 from deepracing_ros.controls.path_server_dbfovertaking import DBFOvertakingPathServer
+import threading
 def call_line_service(getline_client : rclpy.client.Client, node : rclpy.node.Node, key : str):
     getlinereq : deepracing_srvs.GetLine.Request = deepracing_srvs.GetLine.Request()
     success = False
@@ -61,8 +62,14 @@ def main(args=None):
     node.get_logger().info("outerbound_frame: %s" % (outerbound_frame,))
     node.get_logger().info("width_map_frame: %s" % (width_map_frame,))
 
-    node.initialize(raceline_np, width_map_np, innerbound_np, outerbound_np)
-
+    initialize_thread = threading.Thread(
+        target=node.initialize,
+        args=(raceline_np, width_map_np, innerbound_np, outerbound_np),
+        # daemon=True
+    )
+    initialize_thread.start()
+    # node.initialize(raceline_np, width_map_np, innerbound_np, outerbound_np)
+    # initialize_thread.
     timer : rclpy.timer.Timer = node.create_timer(1.0/frequency_param.get_parameter_value().double_value, node.getTrajectory)
 
     rclpy.spin(node)
