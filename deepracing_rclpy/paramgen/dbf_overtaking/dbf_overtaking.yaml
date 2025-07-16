@@ -103,20 +103,20 @@ dbf_overtaking:
   stdev_range:
     longitudinal:
       type: double_array
-      default_value: [0.75, 1.875]
+      default_value: [0.1, 0.3]
       description: "Range of longitudinal standard deviations to use for TV prediction. Eventually replace this with probabilitic prediction module"
     lateral:
       type: double_array
-      default_value: [0.25, 1.0]
+      default_value: [0.1, 0.2]
       description: "Range of lateral standard deviations to use for TV prediction. Eventually replace this with probabilitic prediction module"
   buffer_factor:
     longitudinal:
       type: double
-      default_value: 0.875
+      default_value: 0.6
       description: "Buffer factor to apply for collision avoidance in the longitudinal direction (0.5 is no extra buffer)"
     lateral:
       type: double
-      default_value: 0.65
+      default_value: 0.6
       description: "Buffer factor to apply for collision avoidance in the lateral direction (0.5 is no extra buffer)"
   time_horizon:
     type: double
@@ -124,7 +124,7 @@ dbf_overtaking:
     description: "Time horizon to use in planning"
   timescale:
     type: double
-    default_value: 0.8
+    default_value: 0.75
     description: "Scale the speeds on the optimal raceline by this value"
   controlpoint_noise:
     lateral:
