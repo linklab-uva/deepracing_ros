@@ -252,7 +252,7 @@ class DBFOvertakingPathServer(PathServerROS):
             self.get_logger().error("No odom yet")
             return
         state : str = self.get_parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME).value
-        if state=="PLANNING":
+        if not (state=="PLANNING"):
             return
         current_pose_msg = deepcopy(self.current_odom.pose.pose)
         current_vel_msg = deepcopy(self.current_odom.twist.twist)
@@ -339,10 +339,6 @@ class DBFOvertakingPathServer(PathServerROS):
                 msgout.two_d=False
                 for j in range(len(msgout.control_points_flat)):
                     msgout.control_points_flat[j].z = current_pose_msg.position.z
-                # self.get_logger().info("YAY! DBF algorithm converged in %f seconds" % (tock-tick,))
-                # self.state="OVERTAKING"
-                # req = rosbag2_interfaces.srv.Resume.Request()
-                # self.unpause_service.call_async(req)
                 self.composite_bcurve_pub.publish(msgout)
             else:
                 # pass
@@ -355,7 +351,7 @@ class DBFOvertakingPathServer(PathServerROS):
         idx_resample = torch.empty_like(rfinal).long()
         particle_likelihoods = torch.empty_like(rfinal)
         success = torch.as_tensor(0).to(dtype=bool, device=idx_resample.device)
-        for i in range(12):
+        for i in range(24):
             # minrfinal, maxrfinal = torch.min(rfinal), torch.max(rfinal)
             # self.get_logger().debug("minrfinal: " + str(minrfinal) + " maxrfinal: " + str(maxrfinal) + " rfinal_min: " + str(rfinal_min))
             if i > 0:
