@@ -191,7 +191,7 @@ def fromBezierCurveMsg(curve_msg : drmsgs.BezierCurve, dtype=torch.float32, devi
    return torch.as_tensor(ptsnp.copy(), device=device, dtype=dtype), covariances
 def toCompositeBezierCurveMsg(delta_t : torch.Tensor, control_points : torch.Tensor, header = Header()) -> drmsgs.CompositeBezierCurve:
    cbc_msg = drmsgs.CompositeBezierCurve(header=header)
-   cbc_msg.delta_t = delta_t.cpu().numpy()#.tolist() 
+   cbc_msg.delta_t = delta_t.cpu().numpy().tolist() 
    cbc_msg.segments = control_points.shape[0]
    cbc_msg.order = control_points.shape[1]-1
    cbc_msg.two_d = control_points.shape[2]<3
