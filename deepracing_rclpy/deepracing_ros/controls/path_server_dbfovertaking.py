@@ -10,6 +10,7 @@ import rclpy.qos
 import rclpy.publisher
 import rclpy.subscription
 import rclpy.client
+import rclpy.parameter
 import rosbag2_interfaces.srv, rosbag2_interfaces.msg
 
 import deepracing_models.math_utils as mu, deepracing_ros.convert as C
@@ -23,11 +24,13 @@ import scipy.interpolate
 import threading
 
 class DBFOvertakingPathServer(PathServerROS):
+    STATE_PARAMETER_NAME="state"
     def __init__(self):
         super(DBFOvertakingPathServer, self).__init__()
         self.get_logger().info("Hello Path Server! I live in namespace: %s" % (self.get_namespace()))
 
-        
+        self.declare_parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, value="CREATED")
+
         self.param_listener = dbf_overtaking.ParamListener(self)
         # dbf_overtaking.ParamListener.update()
         self.params = self.param_listener.get_params()
@@ -36,14 +39,15 @@ class DBFOvertakingPathServer(PathServerROS):
         self.opponent_curve_msg : CompositeBezierCurve | None = None
         self.opponent_bcurve_sub : rclpy.subscription.Subscription = self.create_subscription(CompositeBezierCurve, "opponent_curve", self.opponent_curve_CB, rclpy.qos.qos_profile_sensor_data)
         self.composite_bcurve_pub : rclpy.publisher.Publisher = None #self.create_publisher(CompositeBezierCurve, "oraclecompositebeziercurves", 1)
-        self.unpause_service : rclpy.client.Client = self.create_client(rosbag2_interfaces.srv.Resume, "/rosbag2_recorder/resume")
+        # self.unpause_service : rclpy.client.Client = self.create_client(rosbag2_interfaces.srv.Resume, "/rosbag2_recorder/resume")
     def opponent_curve_CB(self, msg : CompositeBezierCurve):
         if not self.opponent_curve_mutex.acquire(timeout=0.1):
             raise ValueError("Unable to acquire opponent_curve_mutex")
         self.opponent_curve_msg = msg
         self.opponent_curve_mutex.release()
-
     def initialize(self, raceline_structured : np.ndarray, widthmap_structured : np.ndarray, innerbound_structured : np.ndarray, outerbound_structured : np.ndarray):
+        stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "INITIALIZING")
+        self.set_parameters([stateparam,])
         torch.set_float32_matmul_precision("high")
         device = torch.device("cuda:%d" % self.params.gpu if self.params.gpu>=0 else "cpu")
         self.get_logger().info("Building Raceline Helpers")
@@ -55,6 +59,8 @@ class DBFOvertakingPathServer(PathServerROS):
         interp_spline_points = interp_spline(interp_times)
         interp_spline_speeds = np.linalg.norm(interp_spline(interp_times, nu=1), ord=2.0, axis=1)
         line_all_speeds = torch.as_tensor(interp_spline_speeds).double()
+        # line_all_speeds = torch.as_tensor(raceline_structured["speed"]).double()
+        # line_all_points_cast = torch.zeros_like(line_all_points).type_as(line_all_speeds)
         _raceline_helper_ : mu.RacelineHelper = mu.RacelineHelper.from_closed_path(
             torch.as_tensor(interp_spline_points).type_as(line_all_speeds), self.params.timescale*line_all_speeds,
             0.5
@@ -236,15 +242,17 @@ class DBFOvertakingPathServer(PathServerROS):
         warmup_times = torch.as_tensor(warmup_times, dtype=torch.float64)
         self.get_logger().info("Compiled Overall Filter")
         self.get_logger().info("warmup_times: " + str(warmup_times))
-        self.state="PLANNING"
         self.composite_bcurve_pub : rclpy.publisher.Publisher = self.create_publisher(CompositeBezierCurve, "bcurvesout", 1)
+        stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "PLANNING")
+        self.set_parameters([stateparam,])
 
     
     def getTrajectory(self):
         if self.current_odom is None:
             self.get_logger().error("No odom yet")
             return
-        if not self.state=="PLANNING":
+        state : str = self.get_parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME).value
+        if state=="PLANNING":
             return
         current_pose_msg = deepcopy(self.current_odom.pose.pose)
         current_vel_msg = deepcopy(self.current_odom.twist.twist)
@@ -265,7 +273,9 @@ class DBFOvertakingPathServer(PathServerROS):
                                                     constraint_level=2 )
         rfinal = rfit[[-1,]].expand(self.params.Nparticles).clone()
         self.Curveparticles = Curveparticles.expand(self.params.Nparticles, *Curveparticles.shape[1:]).clone()
-        if self.opponent_curve_msg is not None:
+        if self.opponent_curve_msg is None:
+            self.get_logger().error("No opponent curve")
+        else:
             if not self.opponent_curve_mutex.acquire(timeout=0.1):
                 raise ValueError("Unable to acquire opponent_curve_mutex")
             TV_curve_dT, Targetvehicle_curve  = C.fromCompositeBezierCurveMsg(self.opponent_curve_msg, dtype=self.tfit.dtype, device=self.tfit.device)
@@ -330,9 +340,9 @@ class DBFOvertakingPathServer(PathServerROS):
                 for j in range(len(msgout.control_points_flat)):
                     msgout.control_points_flat[j].z = current_pose_msg.position.z
                 # self.get_logger().info("YAY! DBF algorithm converged in %f seconds" % (tock-tick,))
-                self.state="OVERTAKING"
-                req = rosbag2_interfaces.srv.Resume.Request()
-                self.unpause_service.call_async(req)
+                # self.state="OVERTAKING"
+                # req = rosbag2_interfaces.srv.Resume.Request()
+                # self.unpause_service.call_async(req)
                 self.composite_bcurve_pub.publish(msgout)
             else:
                 # pass
