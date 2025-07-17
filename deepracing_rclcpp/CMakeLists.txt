@@ -223,6 +223,10 @@ rclcpp_components_register_node(deepracing_composable_nodes
   EXECUTABLE measurement_publisher_exe
 )
 rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::PolygonPublisher"
+  EXECUTABLE polygon_publisher
+)
+rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::SyntheticSessionDataNode"
   EXECUTABLE synthetic_session_data_exe
 )

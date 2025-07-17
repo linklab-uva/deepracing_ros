@@ -12,6 +12,7 @@ set(deepracing_composable_node_srcs
   map_to_baselink_transform.cpp
   map_to_odom_transform.cpp
   measurement_publisher.cpp
+  polygon_publisher.cpp
   synthetic_session_data.cpp
   trackmap_publisher.cpp
 )
