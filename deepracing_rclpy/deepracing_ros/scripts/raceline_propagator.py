@@ -71,14 +71,14 @@ class RacelinePropagator(rclpy.node.Node):
         closest_t = self.raceline_helper.t_of_r(closest_r)[0]
         
         
-        prediction_horizon = self.get_parameter(RacelinePropagator.PREDICTION_HORIZON_PARAMETER_NAME).get_parameter_value().double_value
-        t_forward = torch.linspace(closest_t, closest_t + prediction_horizon, steps=30).type_as(vel)
-
+        # prediction_horizon = self.get_parameter(RacelinePropagator.PREDICTION_HORIZON_PARAMETER_NAME).get_parameter_value().double_value
+        # t_forward = torch.linspace(closest_t, closest_t + prediction_horizon, steps=30).type_as(vel)
+        t_forward = self.tdelta + closest_t
         r_forward, rl_points, rl_vels, _ = self.raceline_helper(t=t_forward)
 
-        t_fit = t_forward - t_forward[0]
+        #t_fit = self.tdelta
 
-        control_points, tswitch = mu.compositeBezierFit(t_fit, rl_points, 3, Y_0=pos, dYdT_0=vel, constraint_level=2, kbezier=3)
+        control_points, tswitch = mu.compositeBezierFit(self.tdelta, rl_points, 3, Y_0=pos, dYdT_0=vel, constraint_level=2, kbezier=3)
         
         delta_t = torch.diff(tswitch, dim=0)
       
@@ -142,6 +142,9 @@ class RacelinePropagator(rclpy.node.Node):
                 rtest = self.raceline_helper.__t_of_r__.arclengths[-1]*torch.rand_like(rtest)
                 tick = time.time()
                 tequavalent = self.raceline_helper.t_of_r(rtest)
+                # irand = np.random.randint(0, high=self.raceline_helper.__r_of_t__.xstart_vec.shape[0], size=[1,]).item()
+                # trand = self.raceline_helper.__r_of_t__.xstart_vec[irand]
+                yay = self.raceline_helper(t=(self.tdelta + tequavalent[0].item()))
                 tock = time.time()
                 comptimes[i] = (tock - tick)
             self.get_logger().info("comptimes: %s" % (str(1000.0*comptimes),))
