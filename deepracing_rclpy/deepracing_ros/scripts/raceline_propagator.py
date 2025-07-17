@@ -23,7 +23,7 @@ import rclpy.subscription
 import deepracing_ros.convert as C
 import deepracing_msgs.msg 
 import deepracing_msgs.srv as deepracing_srvs   
-
+import rclpy
 import sensor_msgs_py.point_cloud2
 import geometry_msgs.msg
 import nav_msgs.msg
@@ -46,7 +46,7 @@ class RacelinePropagator(rclpy.node.Node):
         self.declare_parameter(RacelinePropagator.GPU_PARAMETER_NAME, value=-1)
         self.declare_parameter(RacelinePropagator.TIMESCALE_PARAMETER_NAME, value=1.0)
         self.declare_parameter(RacelinePropagator.PREDICTION_HORIZON_PARAMETER_NAME, value=7.0)
-        self.prediction_pub = self.create_publisher(deepracing_msgs.msg.CompositeBezierCurve, "target_predictions", 1)
+        self.prediction_pub = self.create_publisher(deepracing_msgs.msg.CompositeBezierCurve, "target_predictions", rclpy.qos.qos_profile_sensor_data)
         self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(nav_msgs.msg.Odometry, "target_odom", self.odom_cb, 1)
     def odom_cb(self, odom : nav_msgs.msg.Odometry):
         state = self.get_parameter(RacelinePropagator.STATE_PARAMETER_NAME).get_parameter_value().string_value
@@ -82,11 +82,8 @@ class RacelinePropagator(rclpy.node.Node):
         
         delta_t = torch.diff(tswitch, dim=0)
       
-      
-        header = std_msgs.msg.Header()
-        header.stamp = self.get_clock().now().to_msg()
-        header.frame_id = "map"
-        cbc_msg = C.toCompositeBezierCurveMsg(delta_t, control_points, header=header)
+    
+        cbc_msg = C.toCompositeBezierCurveMsg(delta_t, control_points, header=odom.header)
         # print(cbc_msg)
         self.prediction_pub.publish(cbc_msg)
 
