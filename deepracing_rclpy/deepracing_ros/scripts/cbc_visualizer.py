@@ -32,14 +32,23 @@ import matplotlib.pyplot as plt
 import matplotlib, matplotlib.colors, matplotlib.cm
 from deepracing_rclpy.cbc_viz import cbc_visualizer
 import sensor_msgs_py.point_cloud2
+import deepracing_models.math_utils.convert as math_C
+import ros2_numpy
 
 class CBCVisualizer(rclpy.node.Node):
     def __init__(self, name="cbc_viz"):
         super(CBCVisualizer, self).__init__(name)
         self.cbc_sub : rclpy.subscription.Subscription = self.create_subscription(deepracing_msgs.msg.CompositeBezierCurve, "curve_in", self.cbc_cb, rclpy.qos.qos_profile_sensor_data)
         self.marker_pub : rclpy.publisher.Publisher = self.create_publisher(visualization_msgs.msg.MarkerArray, "marker_out", rclpy.qos.qos_profile_sensor_data)
+        self.pc2_pub : rclpy.publisher.Publisher = self.create_publisher(sensor_msgs.msg.PointCloud2, "pc2_out", rclpy.qos.qos_profile_sensor_data)
         
-        self.matrix_factories = dict()
+        gpu_param = self.declare_parameter("gpu", -1)
+        gpu = gpu_param.get_parameter_value().integer_value
+        self.matrix_factories : dict[int,mu.BezierMatrixFactory] = dict()
+        for k in range(1,7):
+            self.matrix_factories[k] = mu.BezierMatrixFactory(k).double()
+            if gpu >= 0:
+                self.matrix_factories[k] = self.matrix_factories[k].cuda(gpu)
         prop_cycle = plt.rcParams['axes.prop_cycle']
         self.colorcycle = list(prop_cycle.by_key()['color'])
         self.param_listener = cbc_visualizer.ParamListener(self)
@@ -47,17 +56,26 @@ class CBCVisualizer(rclpy.node.Node):
         self.cm = matplotlib.cm.get_cmap(name=self.params.color_map)
 
     def cbc_cb(self, cbc_msg : deepracing_msgs.msg.CompositeBezierCurve):
-
-        delta_t, control_points = C.fromCompositeBezierCurveMsg(cbc_msg, dtype=torch.float64)
+        if cbc_msg.two_d:
+            for pt in cbc_msg.control_points_flat:
+                pt.z=0.0
+            cbc_msg.two_d=False
+        delta_t, control_points = C.fromCompositeBezierCurveMsg(cbc_msg, dtype=self.matrix_factories[3].comb_factors.dtype, device=self.matrix_factories[3].comb_factors.device)
         tstart = torch.cumsum(delta_t, 0) - delta_t[0]
         tsamp = torch.linspace(0.0, tstart[-1] + delta_t[-1], steps=self.params.num_sample_points).type_as(control_points)
 
-        if cbc_msg.order not in self.matrix_factories:
-            self.matrix_factories[cbc_msg.order] = mu.BezierMatrixFactory(cbc_msg.order)
-        if (cbc_msg.order-1) not in self.matrix_factories:
-            self.matrix_factories[cbc_msg.order-1] = mu.BezierMatrixFactory(cbc_msg.order-1)
-        if (cbc_msg.order-2) not in self.matrix_factories:
-            self.matrix_factories[cbc_msg.order-2] = mu.BezierMatrixFactory(cbc_msg.order-2)
+
+        # if cbc_msg.order not in self.matrix_factories:
+        #     self.matrix_factories[cbc_msg.order] = mu.BezierMatrixFactory(cbc_msg.order)
+        # if (cbc_msg.order-1) not in self.matrix_factories:
+        #     self.matrix_factories[cbc_msg.order-1] = mu.BezierMatrixFactory(cbc_msg.order-1)
+        # if (cbc_msg.order-2) not in self.matrix_factories:
+        #     self.matrix_factories[cbc_msg.order-2] = mu.BezierMatrixFactory(cbc_msg.order-2)
+
+        cavsim_arr = math_C.to_cavsim_cloud(control_points, delta_t, tsamp, self.matrix_factories)
+        pc2_msg : sensor_msgs.msg.PointCloud2 = ros2_numpy.msgify(sensor_msgs.msg.PointCloud2, cavsim_arr)
+        pc2_msg.header = cbc_msg.header
+        self.pc2_pub.publish(pc2_msg)
 
         points_marker = visualization_msgs.msg.Marker()
         points_marker.header=cbc_msg.header
@@ -126,6 +144,7 @@ class CBCVisualizer(rclpy.node.Node):
         arrow_marker.lifetime=points_marker.lifetime
         arrow_marker.points=[cbc_msg.control_points_flat[0], cbc_msg.control_points_flat[1]]
         arrow_marker.scale=geometry_msgs.msg.Vector3(x=self.params.arrow_scale, y=1.5*self.params.arrow_scale)
+
 
         self.marker_pub.publish(visualization_msgs.msg.MarkerArray(markers=[points_marker, curve_marker, arrow_marker]))
 
