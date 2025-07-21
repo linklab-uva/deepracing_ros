@@ -238,6 +238,10 @@ rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::TrackmapPublisher"
   EXECUTABLE trackmap_publisher
 )
+rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::WaitForOvertakeComplete"
+  EXECUTABLE wait_for_overtake_complete
+)
 if(with_lateral_error_publisher_)
   rclcpp_components_register_node(deepracing_composable_nodes
     PLUGIN "deepracing::composable_nodes::LateralErrorPublisher"

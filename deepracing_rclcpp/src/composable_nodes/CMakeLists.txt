@@ -16,6 +16,7 @@ set(deepracing_composable_node_srcs
   polygon_publisher.cpp
   synthetic_session_data.cpp
   trackmap_publisher.cpp
+  wait_for_overtake_complete.cpp
 )
 add_library(deepracing_composable_nodes SHARED ${deepracing_composable_node_srcs})
 find_package(pcl_conversions QUIET)
