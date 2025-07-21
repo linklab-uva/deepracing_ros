@@ -26,6 +26,7 @@ import scipy.interpolate
 import threading
 import std_msgs.msg
 import sensor_msgs.msg
+import builtin_interfaces.msg
 import ros2_numpy
 
 class DBFOvertakingPathServer(PathServerROS):
@@ -49,8 +50,13 @@ class DBFOvertakingPathServer(PathServerROS):
         self.opponent_bcurve_sub : rclpy.subscription.Subscription = self.create_subscription(CompositeBezierCurve, "opponent_curve", self.opponent_curve_CB, rclpy.qos.qos_profile_sensor_data)
         self.cloud_pub : rclpy.publisher.Publisher =  self.create_publisher(sensor_msgs.msg.PointCloud2, "overtaking_curves", 1)
         self.pathswitch_pub : rclpy.publisher.Publisher =  self.create_publisher(std_msgs.msg.String, "switch_path", 1)
+        self.overtake_begin_pub : rclpy.publisher.Publisher =  self.create_publisher(builtin_interfaces.msg.Time, "overtake_begin", 1)
+        self.overtake_end_pub : rclpy.publisher.Publisher =  self.create_publisher(builtin_interfaces.msg.Time, "overtake_end", 1)
         # self.composite_bcurve_pub : rclpy.publisher.Publisher = None #self.create_publisher(CompositeBezierCurve, "oraclecompositebeziercurves", 1)
-        # self.unpause_service : rclpy.client.Client = self.create_client(rosbag2_interfaces.srv.Resume, "/rosbag2_recorder/resume")
+        # bagrecordername_param = self.declare_parameter("bag_recorder_name", value="/rosbag2_recorder")
+        # bagrecordername = bagrecordername_param.get_parameter_value().string_value
+        # self.pause_service : rclpy.client.Client = self.create_client(rosbag2_interfaces.srv.Pause, "%s/pause" % (bagrecordername,))
+        # self.unpause_service : rclpy.client.Client = self.create_client(rosbag2_interfaces.srv.Resume, "%s/resume" % (bagrecordername,))
     def opponent_curve_CB(self, msg : CompositeBezierCurve):
         if not self.opponent_curve_mutex.acquire(timeout=0.1):
             raise ValueError("Unable to acquire opponent_curve_mutex")
@@ -384,8 +390,10 @@ class DBFOvertakingPathServer(PathServerROS):
                 
                 
                 self.composite_bcurve_pub.publish(msgout)
+                
                 stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "OVERTAKING")
                 self.set_parameters([stateparam,])
+                self.overtake_begin_pub.publish(self.get_clock().now().to_msg())
             else:
                 self.get_logger().error("DBF algorithm did not converge in %f seconds" % (tock-tick,))
     def handleStateOvertaking(self):
@@ -419,8 +427,17 @@ class DBFOvertakingPathServer(PathServerROS):
         cloud_msg.header = current_odom.header
         self.cloud_pub.publish(cloud_msg)
 
-        pathswitch_msg = std_msgs.msg.String(data="graph")
-        self.pathswitch_pub.publish(pathswitch_msg)
+
+        if tclosest.item() > (self.params.time_horizon + 1.0):
+            self.get_logger().info("Overtaking finished, pausing bag and switching to idle state and setting path tracker back to static raceline")
+            self.overtake_end_pub.publish(self.get_clock().now().to_msg())
+            self.pathswitch_pub.publish(std_msgs.msg.String(data="raceline"))
+            stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "IDLE")
+            self.set_parameters([stateparam,])
+            # self.pause_service.call_async(rosbag2_interfaces.srv.Pause.Request())
+        else:
+            pathswitch_msg = std_msgs.msg.String(data="graph")
+            self.pathswitch_pub.publish(pathswitch_msg)
 
 
     def unpause_CB(self, result : rosbag2_interfaces.srv.Resume.Response):
