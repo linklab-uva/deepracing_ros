@@ -15,7 +15,7 @@ dbf_overtaking:
       description: "Stdev to use in folded normal distribution for probability of boundary violation"
     alpha:
       type: double
-      default_value: 0.0
+      default_value: 0.1
       description: "Alpha value for gauss-legendre integration of dynamics violation probability"
   dynamics_newton:
     stepsize:
@@ -59,17 +59,16 @@ dbf_overtaking:
       description: "Spacing to presample the centerline for bounds checking"
     alpha:
       type: double
-      default_value: 0.0
+      default_value: 0.1
       description: "Alpha value for gauss-legendre integration of boundary violation probability"
-
   collision_gauss:
     order_space:
       type: int
-      default_value: 10
+      default_value: 14
       description: "Gauss-Legendre order across space for collision probability computation"
     order_time:
       type: int
-      default_value: 36
+      default_value: 32
       description: "Gauss-Legendre order across time for collision probability computation"
     alpha:
       type: double
@@ -81,7 +80,7 @@ dbf_overtaking:
     description: "What torch.compile backend to use. Default (empty string) means do not use compiled modules"
   Nparticles:
     type: int
-    default_value: 1024
+    default_value: 512
     description: "How many particles in the dbf algorithm to use"
   kbezier:
     type: int
@@ -103,20 +102,20 @@ dbf_overtaking:
   stdev_range:
     longitudinal:
       type: double_array
-      default_value: [0.1, 0.3]
+      default_value: [0.2, 0.5]
       description: "Range of longitudinal standard deviations to use for TV prediction. Eventually replace this with probabilitic prediction module"
     lateral:
       type: double_array
-      default_value: [0.1, 0.2]
+      default_value: [0.1, 0.25]
       description: "Range of lateral standard deviations to use for TV prediction. Eventually replace this with probabilitic prediction module"
   buffer_factor:
     longitudinal:
       type: double
-      default_value: 0.6
+      default_value: 0.875
       description: "Buffer factor to apply for collision avoidance in the longitudinal direction (0.5 is no extra buffer)"
     lateral:
       type: double
-      default_value: 0.6
+      default_value: 0.875
       description: "Buffer factor to apply for collision avoidance in the lateral direction (0.5 is no extra buffer)"
   time_horizon:
     type: double
@@ -133,8 +132,8 @@ dbf_overtaking:
       description: "Noise factor to apply to particles in the lateral direction"
     longitudinal:
       type: double
-      default_value: -1.0
-      description: "Noise factor to apply to particles in the longitudinal direction. Negative value means use 0.5**lateral noise"
+      default_value: 1.0
+      description: "Noise factor to apply to particles in the longitudinal direction. Negative value means use 0.5*lateral noise"
     final:
       type: double
       default_value: -1.0
