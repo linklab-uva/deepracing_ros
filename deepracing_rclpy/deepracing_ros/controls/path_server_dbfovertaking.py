@@ -341,7 +341,7 @@ class DBFOvertakingPathServer(PathServerROS):
             if TV_rinitial[0]>TV_rfinal[0]:
                 TV_rfinal+=self.raceline_helper.__arclengths_in__[-1]
                 rfinal[rfinal<(0.25*self.raceline_helper.__arclengths_in__[-1])]+=self.raceline_helper.__arclengths_in__[-1]
-            rfinal_min = TV_rfinal[0] + 1.0*self.params.car_dims.length
+            rfinal_min = TV_rfinal[0] + 2.0*self.params.car_dims.length
             TV_velocities, _ = mu.compositeBezierEval(TV_curve_tstart, TV_curve_dT, Targetvehicle_curve_deriv, tnodes, self.overall_filter.derivative_matrix_factory) 
             TV_tangents : torch.Tensor = TV_velocities/torch.linalg.vector_norm(TV_velocities, dim=-1, keepdim=True)
             TV_normals = TV_tangents[:,[1,0]].clone()
