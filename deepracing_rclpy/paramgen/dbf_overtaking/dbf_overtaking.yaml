@@ -68,7 +68,7 @@ dbf_overtaking:
       description: "Gauss-Legendre order across space for collision probability computation"
     order_time:
       type: int
-      default_value: 32
+      default_value: 36
       description: "Gauss-Legendre order across time for collision probability computation"
     alpha:
       type: double
@@ -128,7 +128,7 @@ dbf_overtaking:
   controlpoint_noise:
     lateral:
       type: double
-      default_value: 1.25
+      default_value: 0.875
       description: "Noise factor to apply to particles in the lateral direction"
     longitudinal:
       type: double
