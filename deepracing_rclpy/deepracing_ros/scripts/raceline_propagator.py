@@ -174,7 +174,9 @@ def main(args=None):
         future = getline_client.call_async(getlinereq)
         rclpy.spin_until_future_complete(node, future, timeout_sec = 2.0)
         getlineresponse : deepracing_srvs.GetLine.Response = future.result()
-        if getlineresponse.return_code==deepracing_srvs.GetLine.Response.SUCCESS:
+        if getlineresponse is None:
+            node.get_logger().error("Get line service call returned None. Retrying...")
+        elif getlineresponse.return_code==deepracing_srvs.GetLine.Response.SUCCESS:
             success = True
             node.get_logger().info("Successfully got the raceline")
         else:
