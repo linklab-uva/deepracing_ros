@@ -49,8 +49,6 @@ namespace composable_nodes
                 }
                 transform_to_map_= declare_parameter<bool>("transform_to_map", true);
                 
-                get_line_srv_ = create_service<deepracing_msgs::srv::GetLine>("get_line", 
-                    std::bind(&TrackmapPublisher::getline_cb, this, std::placeholders::_1, std::placeholders::_2));
                 session_sub_ = create_subscription<deepracing_msgs::msg::TimestampedPacketSessionData>("session_data", qos,
                     std::bind(&TrackmapPublisher::session_cb, this, std::placeholders::_1));
                 ib_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("inner_boundary", qos);
@@ -139,6 +137,13 @@ namespace composable_nodes
                         }
                         else if(!(track_map_->widthMap()) && widthmap_pub_){   
                             widthmap_pub_.reset();
+                        }
+                        if(!get_line_srv_){
+                            get_line_srv_ = create_service<deepracing_msgs::srv::GetLine>("get_line", 
+                                std::bind(&TrackmapPublisher::getline_cb, this, std::placeholders::_1, std::placeholders::_2));
+                        }
+                        else{
+                            RCLCPP_INFO(get_logger(), "Reusing existing get_line service");
                         }
                     }
                     else{
