@@ -23,9 +23,10 @@ namespace composable_nodes
         private:
             inline DEEPRACING_RCLCPP_LOCAL void topic_cb(const builtin_interfaces::msg::Time::ConstPtr& time_msg)
             {
-                RCLCPP_INFO(get_logger(), "Overtake complete at time: %d.%d", time_msg->sec, time_msg->nanosec);
-                std::this_thread::sleep_for(std::chrono::seconds(1)); // wait a bit for ros2 bag to also log the message
-                RCLCPP_INFO(get_logger(), "Processing complete, shutting down node.");
+                RCLCPP_INFO(get_logger(), "Overtake complete at time: %d.%d, shutting down node.", time_msg->sec, time_msg->nanosec);
+                // // std::this_thread::sleep_for(std::chrono::seconds(1)); // wait a bit for ros2 bag to also log the message
+                // RCLCPP_INFO(get_logger(), "Processing complete");
+                m_subscription_.reset();
                 exit(0); // Exit the node gracefully
             }
             rclcpp::Subscription<builtin_interfaces::msg::Time>::SharedPtr m_subscription_;

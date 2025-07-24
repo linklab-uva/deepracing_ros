@@ -73,7 +73,7 @@ namespace composable_nodes
             bool getline_cb(const deepracing_msgs::srv::GetLine::Request::SharedPtr request,
                 deepracing_msgs::srv::GetLine::Response::SharedPtr response)
             {
-                std::scoped_lock lock(mutex_);
+                // std::scoped_lock lock(mutex_);
                 if(!track_map_)
                 {
                     response->return_code=deepracing_msgs::srv::GetLine::Response::TRACKMAP_NOT_INITIALIZED;
@@ -126,7 +126,7 @@ namespace composable_nodes
                     RCLCPP_ERROR(get_logger(), "Track ID %d not found in names map", session_data->udp_packet.track_id);
                     return;
                 }
-                std::scoped_lock lock(mutex_);
+                // std::scoped_lock lock(mutex_);
                 std::string tracknamein = names_map_.at(session_data->udp_packet.track_id);
                 if(!track_map_ || track_map_->name()!=tracknamein)
                 {
@@ -148,7 +148,7 @@ namespace composable_nodes
             }
             void timer_cb()
             {
-                std::scoped_lock lock(mutex_);
+                // std::scoped_lock lock(mutex_);
                 if(!track_map_)
                 {
                     return;

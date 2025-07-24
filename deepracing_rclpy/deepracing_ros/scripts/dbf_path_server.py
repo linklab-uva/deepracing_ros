@@ -24,7 +24,7 @@ def call_line_service(getline_client : rclpy.client.Client, node : rclpy.node.No
     getlinereq.key.data=key
     while not success:
         future = getline_client.call_async(getlinereq)
-        rclpy.spin_until_future_complete(node, future)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=2.0)
         getlineresponse : deepracing_srvs.GetLine.Response = future.result()
         if getlineresponse.return_code==deepracing_srvs.GetLine.Response.SUCCESS:
             success = True

@@ -172,7 +172,7 @@ def main(args=None):
     success = False
     while not success:
         future = getline_client.call_async(getlinereq)
-        rclpy.spin_until_future_complete(node, future)
+        rclpy.spin_until_future_complete(node, future, timeout_sec = 2.0)
         getlineresponse : deepracing_srvs.GetLine.Response = future.result()
         if getlineresponse.return_code==deepracing_srvs.GetLine.Response.SUCCESS:
             success = True
