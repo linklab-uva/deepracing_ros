@@ -69,6 +69,8 @@ class DBFOvertakingPathServer(PathServerROS):
         self.pathswitch_pub : rclpy.publisher.Publisher =  self.create_publisher(std_msgs.msg.String, "switch_path", 1)
         self.overtake_begin_pub : rclpy.publisher.Publisher =  self.create_publisher(builtin_interfaces.msg.Time, "overtake_begin", 1)
         self.overtake_end_pub : rclpy.publisher.Publisher =  self.create_publisher(builtin_interfaces.msg.Time, "overtake_end", 1)
+        self.composite_bcurve_pub : rclpy.publisher.Publisher = self.create_publisher(CompositeBezierCurve, "bcurvesout", 1)
+        self.opponent_composite_bcurve_pub : rclpy.publisher.Publisher = self.create_publisher(CompositeBezierCurve, "paired_opponent_curve", 1)
         # self.composite_bcurve_pub : rclpy.publisher.Publisher = None #self.create_publisher(CompositeBezierCurve, "oraclecompositebeziercurves", 1)
         # bagrecordername_param = self.declare_parameter("bag_recorder_name", value="/rosbag2_recorder")
         # bagrecordername = bagrecordername_param.get_parameter_value().string_value
@@ -303,7 +305,6 @@ class DBFOvertakingPathServer(PathServerROS):
         warmup_times = torch.as_tensor(warmup_times, dtype=torch.float64)
         self.get_logger().info("Compiled Overall Filter")
         self.get_logger().info("warmup_times: " + str(warmup_times))
-        self.composite_bcurve_pub : rclpy.publisher.Publisher = self.create_publisher(CompositeBezierCurve, "bcurvesout", 1)
         stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "PLANNING")
         self.set_parameters([stateparam,])
 
@@ -345,8 +346,9 @@ class DBFOvertakingPathServer(PathServerROS):
         else:
             if not self.opponent_curve_mutex.acquire(timeout=0.1):
                 raise ValueError("Unable to acquire opponent_curve_mutex")
-            TV_curve_dT, Targetvehicle_curve  = C.fromCompositeBezierCurveMsg(self.opponent_curve_msg, dtype=self.tfit.dtype, device=self.tfit.device)
+            opponent_curve_msg = deepcopy(self.opponent_curve_msg)
             self.opponent_curve_mutex.release()
+            TV_curve_dT, Targetvehicle_curve  = C.fromCompositeBezierCurveMsg(opponent_curve_msg, dtype=self.tfit.dtype, device=self.tfit.device)
             Targetvehicle_curve = Targetvehicle_curve[...,[0,1]]
             # print(Targetvehicle_curve.shape)
             # print(TV_curve_dT.shape)
@@ -404,12 +406,16 @@ class DBFOvertakingPathServer(PathServerROS):
                 (self.overtaking_vsamp,), _ = mu.compositeBezierEval(self.overtaking_tstart[None], self.overtaking_dT[None], self.overtaking_curve_deriv[None], self.overtaking_tsamp[None], self.overall_filter.derivative_matrix_factory, idxbuckets=idxbuckets)
                 (self.overtaking_asamp,), _ = mu.compositeBezierEval(self.overtaking_tstart[None], self.overtaking_dT[None], self.overtaking_curve_2ndderiv[None], self.overtaking_tsamp[None], self.overall_filter.second_derivative_matrix_factory, idxbuckets=idxbuckets)
 
+            
 
                 msgout = C.toCompositeBezierCurveMsg(self.overtaking_dT, self.overtaking_curve)
                 msgout.header.frame_id="map"
+                msgout.header.stamp = self.get_clock().now().to_msg()
                 
                 
+                opponent_curve_msg.header=msgout.header
                 self.composite_bcurve_pub.publish(msgout)
+                self.opponent_composite_bcurve_pub.publish(opponent_curve_msg)
                 
                 stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "OVERTAKING")
                 self.set_parameters([stateparam,])
@@ -433,7 +439,7 @@ class DBFOvertakingPathServer(PathServerROS):
         deltas = self.overtaking_psamp - current_position[None]
         iclosest = torch.argmin(torch.linalg.vector_norm(deltas, dim=-1))
         tclosest = self.overtaking_tsamp[iclosest]#.item()
-        tsamp = torch.linspace(tclosest, tclosest + 2.0, steps=400).type_as(tclosest)
+        tsamp = torch.linspace(tclosest, tclosest + 1.6, steps=41).type_as(tclosest)
 
         matrix_factories = {
             self.params.kbezier : self.overall_filter.matrix_factory,
@@ -461,7 +467,7 @@ class DBFOvertakingPathServer(PathServerROS):
 
     def handleStateIdle(self):
         # self.get_logger().info("Overtaking finished, pausing bag and switching to idle state and setting path tracker back to static raceline")
-        pass
+        # pass
         self.overtake_end_pub.publish(self.get_clock().now().to_msg())
     def unpause_CB(self, result : rosbag2_interfaces.srv.Resume.Response):
         pass
