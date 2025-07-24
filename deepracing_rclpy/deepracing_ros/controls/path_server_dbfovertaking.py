@@ -41,6 +41,23 @@ class DBFOvertakingPathServer(PathServerROS):
         # dbf_overtaking.ParamListener.update()
         self.params = self.param_listener.get_params()
 
+        brake_factor = long_accel_factor = lat_accel_factor = self.params.timescale
+
+
+        brake_speeds = (1.0 + 0.000)*torch.as_tensor([-1.0,    0.00,    25.190,  40.192,  64.544,  75.197,  89.330,  1000.0])
+        max_brakes = brake_factor*torch.as_tensor( [-14.574,  -14.574, -14.574, -17.701, -21.424, -23.359, -25.593, -25.593])
+        self.declare_parameter("brake_speeds", value=brake_speeds.cpu().numpy().tolist())
+        self.declare_parameter("max_brakes", value=max_brakes.cpu().numpy().tolist())
+
+        long_accel_speeds = (1.0 + 0.000)*torch.as_tensor(    [-1.0,    0.0,    24.102,  40.192,  48.237,  59.325, 75.850, 91.069, 92.5,  1000.0]) 
+        max_long_accels = long_accel_factor*torch.as_tensor([ 14.162,   14.162, 14.162,  12.971,  12.375,  9.546,  4.484,  0.464,  0.0,   0.0])
+        self.declare_parameter("long_accel_speeds", value=long_accel_speeds.cpu().numpy().tolist())
+        self.declare_parameter("max_long_accels", value=max_long_accels.cpu().numpy().tolist())
+
+        lat_accel_speeds = (1.0 + 0.000)*torch.as_tensor([-1.00,   0.0,    19.0,   75.850,  91.069,  1000.0]) 
+        max_lat_accels = lat_accel_factor*torch.as_tensor([ 12.224,   12.224, 16.224, 35.156,  40.218,  40.218])
+        self.declare_parameter("lat_accel_speeds", value=lat_accel_speeds.cpu().numpy().tolist())
+        self.declare_parameter("max_lat_accels", value=max_lat_accels.cpu().numpy().tolist())
         self.overtaking_curve = None
         self.overtaking_dT = None
 
@@ -101,16 +118,17 @@ class DBFOvertakingPathServer(PathServerROS):
         self.get_logger().info("Built Bounds Checker")
 
         self.get_logger().info("Building Dynamics Checker")
-        brake_factor = long_accel_factor = lat_accel_factor = self.params.timescale
+        # brake_factor = long_accel_factor = lat_accel_factor = self.params.timescale
         _dynamic_violation_estimator_ = ExceedLimitsProbabilityEstimator(
-            (1.0 + 0.000)*torch.as_tensor([-1.0,    0.00,    25.190,  40.192,  64.544,  75.197,  89.330,  1000.0]), 
-            brake_factor*torch.as_tensor( [-14.574,  -14.574, -14.574, -17.701, -21.424, -23.359, -25.593, -25.593]),
+            torch.as_tensor(self.get_parameter("brake_speeds").value),
+            torch.as_tensor(self.get_parameter("max_brakes").value),
 
-            (1.0 + 0.000)*torch.as_tensor(    [-1.0,    0.0,    24.102,  40.192,  48.237,  59.325, 75.850, 91.069, 92.5,  1000.0]), 
-            long_accel_factor*torch.as_tensor([ 14.162,   14.162, 14.162,  12.971,  12.375,  9.546,  4.484,  0.464,  0.0,   0.0]),
+            torch.as_tensor(self.get_parameter("long_accel_speeds").value),
+            torch.as_tensor(self.get_parameter("max_long_accels").value),
 
-            (1.0 + 0.000)*torch.as_tensor(   [-1.00,   0.0,    19.0,   75.850,  91.069,  1000.0]), 
-            lat_accel_factor*torch.as_tensor([ 12.224,   12.224, 16.224, 35.156,  40.218,  40.218]),
+            torch.as_tensor(self.get_parameter("lat_accel_speeds").value),
+            torch.as_tensor(self.get_parameter("max_lat_accels").value),
+
             gauss_order=self.params.dynamics_gauss.order,
             stdev=self.params.dynamics_gauss.stdev,
             alpha=self.params.dynamics_gauss.alpha,
@@ -299,7 +317,9 @@ class DBFOvertakingPathServer(PathServerROS):
             self.handleStatePlanning()
         elif (state=="OVERTAKING"):
             self.handleStateOvertaking()
-        
+        elif (state=="IDLE"):
+            self.handleStateIdle()
+
     def handleStatePlanning(self):
         current_pose_msg = deepcopy(self.current_odom.pose.pose)
         current_vel_msg = deepcopy(self.current_odom.twist.twist)
@@ -439,7 +459,10 @@ class DBFOvertakingPathServer(PathServerROS):
             pathswitch_msg = std_msgs.msg.String(data="graph")
             self.pathswitch_pub.publish(pathswitch_msg)
 
-
+    def handleStateIdle(self):
+        # self.get_logger().info("Overtaking finished, pausing bag and switching to idle state and setting path tracker back to static raceline")
+        pass
+        self.overtake_end_pub.publish(self.get_clock().now().to_msg())
     def unpause_CB(self, result : rosbag2_interfaces.srv.Resume.Response):
         pass
     def attempt_dbf(self, Curveparticles : torch.Tensor, Curveparticle_tstart : torch.Tensor, Curveparticle_dT : torch.Tensor, rfinal : torch.Tensor, rfinal_min,
@@ -448,7 +471,7 @@ class DBFOvertakingPathServer(PathServerROS):
         idx_resample = torch.empty_like(rfinal).long()
         particle_likelihoods = torch.empty_like(rfinal)
         success = torch.as_tensor(0).to(dtype=bool, device=idx_resample.device)
-        for i in range(24):
+        for i in range(16):
             # minrfinal, maxrfinal = torch.min(rfinal), torch.max(rfinal)
             # self.get_logger().debug("minrfinal: " + str(minrfinal) + " maxrfinal: " + str(maxrfinal) + " rfinal_min: " + str(rfinal_min))
             if i > 0:
