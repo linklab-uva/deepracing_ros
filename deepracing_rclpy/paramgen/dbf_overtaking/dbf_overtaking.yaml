@@ -7,7 +7,7 @@ dbf_overtaking:
   dynamics_gauss:
     order:
       type: int
-      default_value: 36
+      default_value: 48
       description: "Gauss-Legendre order across time for bounds checking"
     stdev:
       type: double
@@ -15,7 +15,7 @@ dbf_overtaking:
       description: "Stdev to use in folded normal distribution for probability of boundary violation"
     alpha:
       type: double
-      default_value: 0.1
+      default_value: 0.0
       description: "Alpha value for gauss-legendre integration of dynamics violation probability"
   dynamics_newton:
     stepsize:
@@ -62,13 +62,17 @@ dbf_overtaking:
       default_value: 0.1
       description: "Alpha value for gauss-legendre integration of boundary violation probability"
   collision_gauss:
+    gamma:
+      type: double
+      default_value: 0.9
+      description: "Gamma value for collision probability computation"
     order_space:
       type: int
       default_value: 14
       description: "Gauss-Legendre order across space for collision probability computation"
     order_time:
       type: int
-      default_value: 36
+      default_value: 42
       description: "Gauss-Legendre order across time for collision probability computation"
     alpha:
       type: double
@@ -111,11 +115,11 @@ dbf_overtaking:
   buffer_factor:
     longitudinal:
       type: double
-      default_value: 0.875
+      default_value: 0.75
       description: "Buffer factor to apply for collision avoidance in the longitudinal direction (0.5 is no extra buffer)"
     lateral:
       type: double
-      default_value: 0.875
+      default_value: 0.75
       description: "Buffer factor to apply for collision avoidance in the lateral direction (0.5 is no extra buffer)"
   time_horizon:
     type: double
