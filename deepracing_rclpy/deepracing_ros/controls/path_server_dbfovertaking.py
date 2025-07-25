@@ -6,6 +6,7 @@ from scipy.spatial.transform import Rotation
 from deepracing_models.math_utils import bezier
 from deepracing_msgs.msg import CompositeBezierCurve
 import rclpy
+import rclpy.time
 import rclpy.client
 import rclpy.qos
 import rclpy.publisher
@@ -123,13 +124,13 @@ class DBFOvertakingPathServer(PathServerROS):
         # brake_factor = long_accel_factor = lat_accel_factor = self.params.timescale
         _dynamic_violation_estimator_ = ExceedLimitsProbabilityEstimator(
             torch.as_tensor(self.get_parameter("brake_speeds").value),
-            torch.as_tensor(self.get_parameter("max_brakes").value),
+            0.95*torch.as_tensor(self.get_parameter("max_brakes").value),
 
             torch.as_tensor(self.get_parameter("long_accel_speeds").value),
-            torch.as_tensor(self.get_parameter("max_long_accels").value),
+            0.95*torch.as_tensor(self.get_parameter("max_long_accels").value),
 
             torch.as_tensor(self.get_parameter("lat_accel_speeds").value),
-            torch.as_tensor(self.get_parameter("max_lat_accels").value),
+            0.95*torch.as_tensor(self.get_parameter("max_lat_accels").value),
 
             gauss_order=self.params.dynamics_gauss.order,
             stdev=self.params.dynamics_gauss.stdev,
@@ -146,7 +147,8 @@ class DBFOvertakingPathServer(PathServerROS):
         long_buffer = car_length*self.params.buffer_factor.longitudinal
         lat_buffer = car_width*self.params.buffer_factor.lateral
         _collision_probability_estimator_ : CollisionProbabilityEstimator = CollisionProbabilityEstimator(
-            self.params.collision_gauss.order_time, self.params.time_horizon, self.params.collision_gauss.order_space, lat_buffer, long_buffer, alpha=self.params.collision_gauss.alpha
+            self.params.collision_gauss.order_time, self.params.time_horizon, self.params.collision_gauss.order_space, lat_buffer, long_buffer, 
+            gamma=self.params.collision_gauss.gamma, alpha=self.params.collision_gauss.alpha
         ).to(tensor=line_all_points)
         eta_scaled = (_collision_probability_estimator_.gl1d.eta.detach())/self.params.time_horizon
         boxpoints_target_01 = 0.5*torch.stack([
@@ -159,8 +161,10 @@ class DBFOvertakingPathServer(PathServerROS):
             torch.as_tensor([-car_length, car_width]),
             torch.as_tensor([car_length, -car_width]),
             torch.as_tensor([-car_length, -car_width]),
-            # 0.5*torch.as_tensor([car_length, 0.0]),
-            # 0.5*torch.as_tensor([-car_length, 0.0]),
+            torch.as_tensor([0.5*car_length, car_width]),
+            torch.as_tensor([0.5*car_length, -car_width]),
+            torch.as_tensor([-0.5*car_length, car_width]),
+            torch.as_tensor([-0.5*car_length, -car_width]),
         ], dim=0).type_as(line_all_points)
         long_stdev_range, lat_stdev_range = self.params.stdev_range.longitudinal, self.params.stdev_range.lateral
         logtwopi = float(np.log(2.0*np.pi))
@@ -310,18 +314,20 @@ class DBFOvertakingPathServer(PathServerROS):
 
     
     def getTrajectory(self):
+        now = self.get_clock().now()
         if self.current_odom is None:
             self.get_logger().error("No odom yet")
             return
         state : str = self.get_parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME).value
         if (state=="PLANNING"):
-            self.handleStatePlanning()
+            self.handleStatePlanning(now)
         elif (state=="OVERTAKING"):
-            self.handleStateOvertaking()
+            self.handleStateOvertaking(now)
         elif (state=="IDLE"):
-            self.handleStateIdle()
+            self.handleStateIdle(now)
 
-    def handleStatePlanning(self):
+    def handleStatePlanning(self, now : rclpy.time.Time):
+
         current_pose_msg = deepcopy(self.current_odom.pose.pose)
         current_vel_msg = deepcopy(self.current_odom.twist.twist)
         current_rot = Rotation.from_quat([0.0, 0.0, current_pose_msg.orientation.z, current_pose_msg.orientation.w])
@@ -363,7 +369,7 @@ class DBFOvertakingPathServer(PathServerROS):
             if TV_rinitial[0]>TV_rfinal[0]:
                 TV_rfinal+=self.raceline_helper.__arclengths_in__[-1]
                 rfinal[rfinal<(0.25*self.raceline_helper.__arclengths_in__[-1])]+=self.raceline_helper.__arclengths_in__[-1]
-            rfinal_min = TV_rfinal[0] + 2.0*self.params.car_dims.length
+            rfinal_min = TV_rfinal[0] + 3.0*self.params.car_dims.length
             TV_velocities, _ = mu.compositeBezierEval(TV_curve_tstart, TV_curve_dT, Targetvehicle_curve_deriv, tnodes, self.overall_filter.derivative_matrix_factory) 
             TV_tangents : torch.Tensor = TV_velocities/torch.linalg.vector_norm(TV_velocities, dim=-1, keepdim=True)
             TV_normals = TV_tangents[:,[1,0]].clone()
@@ -400,7 +406,7 @@ class DBFOvertakingPathServer(PathServerROS):
 
                 self.overtaking_tstart = torch.cumsum(self.overtaking_dT, 0) - self.overtaking_dT
                 self.overtaking_tsamp = torch.linspace(0.0, (self.overtaking_tstart[-1] + self.overtaking_dT[-1]).item(), steps=2000).type_as(self.overtaking_tstart)
-
+                self.overtake_start_time = now
                 # self.get_logger().info("self.overtaking_tsamp.shape: " + str(self.overtaking_tsamp.shape))
                 (self.overtaking_psamp,), idxbuckets = mu.compositeBezierEval(self.overtaking_tstart[None], self.overtaking_dT[None], self.overtaking_curve[None], self.overtaking_tsamp[None], self.overall_filter.matrix_factory)
                 (self.overtaking_vsamp,), _ = mu.compositeBezierEval(self.overtaking_tstart[None], self.overtaking_dT[None], self.overtaking_curve_deriv[None], self.overtaking_tsamp[None], self.overall_filter.derivative_matrix_factory, idxbuckets=idxbuckets)
@@ -422,24 +428,25 @@ class DBFOvertakingPathServer(PathServerROS):
                 self.overtake_begin_pub.publish(self.get_clock().now().to_msg())
             else:
                 self.get_logger().error("DBF algorithm did not converge in %f seconds" % (tock-tick,))
-    def handleStateOvertaking(self):
+    def handleStateOvertaking(self, now : rclpy.time.Time):
         self.get_logger().info("Handling Overtaking State")
-        current_odom = deepcopy(self.current_odom)
-        current_pose_msg = current_odom.pose.pose
-        # current_vel_msg = deepcopy(self.current_odom.twist.twist)
+        # current_odom = deepcopy(self.current_odom)
+        # current_pose_msg = current_odom.pose.pose
+        # current_vel_msg = current_odom.twist.twist
         # current_rot = Rotation.from_quat([current_pose_msg.orientation.x, current_pose_msg.orientation.y, current_pose_msg.orientation.z, current_pose_msg.orientation.w])
         # current_rotmat = torch.as_tensor(current_rot.as_matrix()).type_as(self.overtaking_curve)
         # current_vel_local = torch.as_tensor([current_vel_msg.linear.x, current_vel_msg.linear.y, current_vel_msg.linear.z]).type_as(self.overtaking_curve)
         # current_velocity = (current_rotmat@current_vel_local.unsqueeze(-1)).squeeze(-1)
-        current_position = torch.as_tensor([current_pose_msg.position.x, current_pose_msg.position.y, current_pose_msg.position.z]).type_as(self.overtaking_curve)
+        # current_position = torch.as_tensor([current_pose_msg.position.x, current_pose_msg.position.y, current_pose_msg.position.z]).type_as(self.overtaking_curve)
 
         # tclosest, Pclosest, Vclosest, _ = self.closest_point_finder(
         #     self.overtaking_tstart, self.overtaking_dT,
         #     self.overtaking_curve, current_position)
-        deltas = self.overtaking_psamp - current_position[None]
-        iclosest = torch.argmin(torch.linalg.vector_norm(deltas, dim=-1))
-        tclosest = self.overtaking_tsamp[iclosest]#.item()
-        tsamp = torch.linspace(tclosest, tclosest + 1.6, steps=41).type_as(tclosest)
+        # deltas = self.overtaking_psamp - current_position[None]
+        # iclosest = torch.argmin(torch.linalg.vector_norm(deltas, dim=-1))
+        # tclosest = self.overtaking_tsamp[iclosest]#.item()
+        tclosest = (now - self.overtake_start_time).nanoseconds*1e-9
+        tsamp = torch.linspace(tclosest, tclosest + 1.6, steps=41).type_as(self.overtaking_curve)
 
         matrix_factories = {
             self.params.kbezier : self.overall_filter.matrix_factory,
@@ -447,16 +454,16 @@ class DBFOvertakingPathServer(PathServerROS):
             self.params.kbezier-2 : self.overall_filter.second_derivative_matrix_factory
         }
         numpy_cloud = math_C.to_cavsim_cloud(self.overtaking_curve, self.overtaking_dT, tsamp, matrix_factories,) 
-                                           # centerline_helper=self.centerline_helper)
 
         cloud_msg = ros2_numpy.msgify(sensor_msgs.msg.PointCloud2, numpy_cloud)
-        cloud_msg.header = current_odom.header
+        cloud_msg.header.frame_id="map"
+        cloud_msg.header.stamp = now.to_msg()
         self.cloud_pub.publish(cloud_msg)
 
 
-        if tclosest.item() > (self.params.time_horizon + 1.0):
+        if tclosest > (self.params.time_horizon):
             self.get_logger().info("Overtaking finished, pausing bag and switching to idle state and setting path tracker back to static raceline")
-            self.overtake_end_pub.publish(self.get_clock().now().to_msg())
+            self.overtake_end_pub.publish(now.to_msg())
             self.pathswitch_pub.publish(std_msgs.msg.String(data="raceline"))
             stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "IDLE")
             self.set_parameters([stateparam,])
@@ -465,10 +472,10 @@ class DBFOvertakingPathServer(PathServerROS):
             pathswitch_msg = std_msgs.msg.String(data="graph")
             self.pathswitch_pub.publish(pathswitch_msg)
 
-    def handleStateIdle(self):
+    def handleStateIdle(self, now : rclpy.time.Time):
         # self.get_logger().info("Overtaking finished, pausing bag and switching to idle state and setting path tracker back to static raceline")
         # pass
-        self.overtake_end_pub.publish(self.get_clock().now().to_msg())
+        self.overtake_end_pub.publish(now.to_msg())
     def unpause_CB(self, result : rosbag2_interfaces.srv.Resume.Response):
         pass
     def attempt_dbf(self, Curveparticles : torch.Tensor, Curveparticle_tstart : torch.Tensor, Curveparticle_dT : torch.Tensor, rfinal : torch.Tensor, rfinal_min,
