@@ -8,11 +8,11 @@ dbf_overtaking:
     order:
       type: int
       default_value: 48
-      description: "Gauss-Legendre order across time for bounds checking"
+      description: "Gauss-Legendre order across time for dynamics checking"
     stdev:
       type: double
-      default_value: 0.25
-      description: "Stdev to use in folded normal distribution for probability of boundary violation"
+      default_value: 0.5
+      description: "Stdev to use in folded normal distribution for probability of dynamics violation"
     alpha:
       type: double
       default_value: 0.0
@@ -84,7 +84,7 @@ dbf_overtaking:
     description: "What torch.compile backend to use. Default (empty string) means do not use compiled modules"
   Nparticles:
     type: int
-    default_value: 512
+    default_value: 256
     description: "How many particles in the dbf algorithm to use"
   kbezier:
     type: int
@@ -106,11 +106,11 @@ dbf_overtaking:
   stdev_range:
     longitudinal:
       type: double_array
-      default_value: [0.2, 0.5]
+      default_value: [0.4, 1.5]
       description: "Range of longitudinal standard deviations to use for TV prediction. Eventually replace this with probabilitic prediction module"
     lateral:
       type: double_array
-      default_value: [0.1, 0.25]
+      default_value: [0.4, 1.0]
       description: "Range of lateral standard deviations to use for TV prediction. Eventually replace this with probabilitic prediction module"
   buffer_factor:
     longitudinal:
