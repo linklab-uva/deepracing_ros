@@ -162,10 +162,10 @@ class DBFOvertakingPathServer(PathServerROS):
             torch.as_tensor([-car_length, car_width]),
             torch.as_tensor([car_length, -car_width]),
             torch.as_tensor([-car_length, -car_width]),
-            torch.as_tensor([0.5*car_length, car_width]),
-            torch.as_tensor([0.5*car_length, -car_width]),
-            torch.as_tensor([-0.5*car_length, car_width]),
-            torch.as_tensor([-0.5*car_length, -car_width]),
+            # torch.as_tensor([0.5*car_length, car_width]),
+            # torch.as_tensor([0.5*car_length, -car_width]),
+            # torch.as_tensor([-0.5*car_length, car_width]),
+            # torch.as_tensor([-0.5*car_length, -car_width]),
         ], dim=0).type_as(line_all_points)
         long_stdev_range, lat_stdev_range = self.params.stdev_range.longitudinal, self.params.stdev_range.lateral
         logtwopi = float(np.log(2.0*np.pi))
