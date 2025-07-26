@@ -119,18 +119,19 @@ class DBFOvertakingPathServer(PathServerROS):
             newton_iterations=self.params.bounds_newton.iterations, newton_stepsize=self.params.bounds_newton.stepsize, max_step=self.params.bounds_newton.max_step
         ).eval().to(tensor=line_all_points)
         self.get_logger().info("Built Bounds Checker")
-
+        nd = torch.distributions.Normal(0.0, 1.0)
+        scaledown = nd.cdf(torch.as_tensor(1.5)).item()
         self.get_logger().info("Building Dynamics Checker")
         # brake_factor = long_accel_factor = lat_accel_factor = self.params.timescale
         _dynamic_violation_estimator_ = ExceedLimitsProbabilityEstimator(
             torch.as_tensor(self.get_parameter("brake_speeds").value),
-            0.95*torch.as_tensor(self.get_parameter("max_brakes").value),
+            scaledown*torch.as_tensor(self.get_parameter("max_brakes").value),
 
             torch.as_tensor(self.get_parameter("long_accel_speeds").value),
-            0.95*torch.as_tensor(self.get_parameter("max_long_accels").value),
+            scaledown*torch.as_tensor(self.get_parameter("max_long_accels").value),
 
             torch.as_tensor(self.get_parameter("lat_accel_speeds").value),
-            0.95*torch.as_tensor(self.get_parameter("max_lat_accels").value),
+            scaledown*torch.as_tensor(self.get_parameter("max_lat_accels").value),
 
             gauss_order=self.params.dynamics_gauss.order,
             stdev=self.params.dynamics_gauss.stdev,
