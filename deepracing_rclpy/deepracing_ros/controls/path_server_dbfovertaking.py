@@ -423,14 +423,31 @@ class DBFOvertakingPathServer(PathServerROS):
                 opponent_curve_msg.header=msgout.header
                 self.composite_bcurve_pub.publish(msgout)
                 self.opponent_composite_bcurve_pub.publish(opponent_curve_msg)
+                matrix_factories = {
+                    self.params.kbezier : self.overall_filter.matrix_factory,
+                    self.params.kbezier-1 : self.overall_filter.derivative_matrix_factory,
+                    self.params.kbezier-2 : self.overall_filter.second_derivative_matrix_factory
+                }
+                deltat_ros = self.get_clock().now() - now
+                tstart : float = deltat_ros.nanoseconds*1e-9
+                if tstart>0.15:
+                    self.get_logger().warn("DBF took too long to compute: %f seconds. Not context switching" % (tstart,))
+                    return
+                tsamp = torch.linspace(tstart, tstart+1.6, steps=41).type_as(self.overtaking_curve)
+                numpy_cloud = math_C.to_cavsim_cloud(self.overtaking_curve, self.overtaking_dT, tsamp, matrix_factories,) 
+                cloud_msg = ros2_numpy.msgify(sensor_msgs.msg.PointCloud2, numpy_cloud)
+                cloud_msg.header.frame_id="map"
+                cloud_msg.header.stamp = now.to_msg()
+                self.cloud_pub.publish(cloud_msg)
+                self.pathswitch_pub.publish(std_msgs.msg.String(data="graph"))
                 
                 stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "OVERTAKING")
                 self.set_parameters([stateparam,])
                 self.overtake_begin_pub.publish(self.get_clock().now().to_msg())
             else:
-                self.get_logger().error("DBF algorithm did not converge in %f seconds" % (tock-tick,))
+                self.get_logger().debug("DBF algorithm did not converge in %f seconds" % (tock-tick,))
     def handleStateOvertaking(self, now : rclpy.time.Time):
-        self.get_logger().info("Handling Overtaking State")
+        self.get_logger().debug("Handling Overtaking State")
         # current_odom = deepcopy(self.current_odom)
         # current_pose_msg = current_odom.pose.pose
         # current_vel_msg = current_odom.twist.twist
@@ -469,9 +486,8 @@ class DBFOvertakingPathServer(PathServerROS):
             stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "IDLE")
             self.set_parameters([stateparam,])
             # self.pause_service.call_async(rosbag2_interfaces.srv.Pause.Request())
-        else:
-            pathswitch_msg = std_msgs.msg.String(data="graph")
-            self.pathswitch_pub.publish(pathswitch_msg)
+        # else:
+        #     self.pathswitch_pub.publish(std_msgs.msg.String(data="graph"))
 
     def handleStateIdle(self, now : rclpy.time.Time):
         # self.get_logger().info("Overtaking finished, pausing bag and switching to idle state and setting path tracker back to static raceline")
