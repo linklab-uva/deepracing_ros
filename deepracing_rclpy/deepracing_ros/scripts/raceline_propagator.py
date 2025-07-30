@@ -36,6 +36,7 @@ from scipy.spatial.transform import Rotation
 
 class RacelinePropagator(rclpy.node.Node):
     STATE_PARAMETER_NAME="state"
+    NSEGMENTS_PARAMETER_NAME="Nsegments"
     GPU_PARAMETER_NAME="gpu"
     TIMESCALE_PARAMETER_NAME="timescale"
     PREDICTION_HORIZON_PARAMETER_NAME="prediction_horizon"
@@ -44,6 +45,7 @@ class RacelinePropagator(rclpy.node.Node):
         self.raceline_helper : mu.RacelineHelper = None
         self.declare_parameter(RacelinePropagator.STATE_PARAMETER_NAME, value="CREATED")
         self.declare_parameter(RacelinePropagator.GPU_PARAMETER_NAME, value=-1)
+        self.declare_parameter(RacelinePropagator.NSEGMENTS_PARAMETER_NAME, value=4)
         self.declare_parameter(RacelinePropagator.TIMESCALE_PARAMETER_NAME, value=1.0)
         self.declare_parameter(RacelinePropagator.PREDICTION_HORIZON_PARAMETER_NAME, value=7.0)
         self.prediction_pub = self.create_publisher(deepracing_msgs.msg.CompositeBezierCurve, "target_predictions", rclpy.qos.qos_profile_sensor_data)
@@ -78,8 +80,9 @@ class RacelinePropagator(rclpy.node.Node):
 
         #t_fit = self.tdelta
 
-        control_points, tswitch = mu.compositeBezierFit(self.tdelta, rl_points, 3, Y_0=pos, dYdT_0=vel, constraint_level=2, kbezier=3)
-        
+        Nsegments = self.get_parameter(RacelinePropagator.NSEGMENTS_PARAMETER_NAME).get_parameter_value().integer_value
+        control_points, tswitch = mu.compositeBezierFit(self.tdelta, rl_points, Nsegments, Y_0=pos, dYdT_0=vel, constraint_level=2, kbezier=3)
+
         delta_t = torch.diff(tswitch, dim=0)
       
     
