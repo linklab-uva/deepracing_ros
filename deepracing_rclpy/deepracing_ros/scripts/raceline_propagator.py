@@ -11,6 +11,7 @@
 # limitations under the License.
 
 
+from encodings import latin_1
 import threading
 from turtle import pos
 import rclpy
@@ -23,7 +24,6 @@ import rclpy.subscription
 import deepracing_ros.convert as C
 import deepracing_msgs.msg 
 import deepracing_msgs.srv as deepracing_srvs   
-import rclpy
 import sensor_msgs_py.point_cloud2
 import geometry_msgs.msg
 import nav_msgs.msg
@@ -33,6 +33,11 @@ import numpy as np
 import torch
 import time
 from scipy.spatial.transform import Rotation
+try:
+    import deepracing_ros.convert.cavsim_utils as cavsim_utils
+    import uva_iac_msgs.msg
+except ImportError:
+    pass
 
 class RacelinePropagator(rclpy.node.Node):
     STATE_PARAMETER_NAME="state"
@@ -40,6 +45,9 @@ class RacelinePropagator(rclpy.node.Node):
     GPU_PARAMETER_NAME="gpu"
     TIMESCALE_PARAMETER_NAME="timescale"
     PREDICTION_HORIZON_PARAMETER_NAME="prediction_horizon"
+    PUBLISH_CAVSIM_PARAMETER_NAME="publish_cavsim"
+    LAT_STDEV_RANGE_PARAMETER_NAME="stdev_range.lateral"
+    LONG_STDEV_RANGE_PARAMETER_NAME="stdev_range.longitudinal"
     def __init__(self, name="raceline_propagator"):
         super(RacelinePropagator, self).__init__(name)
         self.raceline_helper : mu.RacelineHelper = None
@@ -48,6 +56,18 @@ class RacelinePropagator(rclpy.node.Node):
         self.declare_parameter(RacelinePropagator.NSEGMENTS_PARAMETER_NAME, value=4)
         self.declare_parameter(RacelinePropagator.TIMESCALE_PARAMETER_NAME, value=1.0)
         self.declare_parameter(RacelinePropagator.PREDICTION_HORIZON_PARAMETER_NAME, value=7.0)
+        publish_cavsim_param = self.declare_parameter(RacelinePropagator.PUBLISH_CAVSIM_PARAMETER_NAME, value=False)
+        self.declare_parameter(RacelinePropagator.LAT_STDEV_RANGE_PARAMETER_NAME, value=[0.0, 0.0])
+        self.declare_parameter(RacelinePropagator.LONG_STDEV_RANGE_PARAMETER_NAME, value=[0.0, 0.0])
+        if publish_cavsim_param.value:
+            #rclcpp::QoS(1).best_effort();
+            cavsim_qos = rclpy.qos.QoSProfile(depth=1)
+            cavsim_qos.reliability = rclpy.qos.ReliabilityPolicy.BEST_EFFORT
+            self.cavsim_track_pub = self.create_publisher(uva_iac_msgs.msg.BatchTrack, "cavsim_tracks", cavsim_qos)
+            self.cavsim_prediction_pub = self.create_publisher(uva_iac_msgs.msg.BatchTrackPrediction, "cavsim_predictions", cavsim_qos)
+        else:
+            self.cavsim_track_pub = None
+            self.cavsim_prediction_pub = None
         self.prediction_pub = self.create_publisher(deepracing_msgs.msg.CompositeBezierCurve, "target_predictions", rclpy.qos.qos_profile_sensor_data)
         self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(nav_msgs.msg.Odometry, "target_odom", self.odom_cb, 1)
     def odom_cb(self, odom : nav_msgs.msg.Odometry):
@@ -72,22 +92,28 @@ class RacelinePropagator(rclpy.node.Node):
 
         closest_t = self.raceline_helper.t_of_r(closest_r)[0]
         
-        
-        # prediction_horizon = self.get_parameter(RacelinePropagator.PREDICTION_HORIZON_PARAMETER_NAME).get_parameter_value().double_value
-        # t_forward = torch.linspace(closest_t, closest_t + prediction_horizon, steps=30).type_as(vel)
         t_forward = self.tdelta + closest_t
         r_forward, rl_points, rl_vels, _ = self.raceline_helper(t=t_forward)
-
-        #t_fit = self.tdelta
 
         Nsegments = self.get_parameter(RacelinePropagator.NSEGMENTS_PARAMETER_NAME).get_parameter_value().integer_value
         control_points, tswitch = mu.compositeBezierFit(self.tdelta, rl_points, Nsegments, Y_0=pos, dYdT_0=vel, constraint_level=2, kbezier=3)
 
         delta_t = torch.diff(tswitch, dim=0)
-      
-    
+
         cbc_msg = C.toCompositeBezierCurveMsg(delta_t, control_points, header=odom.header)
-        # print(cbc_msg)
+       
+        if self.cavsim_prediction_pub is not None:
+            lat_stdev_range = self.get_parameter(RacelinePropagator.LAT_STDEV_RANGE_PARAMETER_NAME).get_parameter_value().double_array_value
+            long_stdev_range = self.get_parameter(RacelinePropagator.LONG_STDEV_RANGE_PARAMETER_NAME).get_parameter_value().double_array_value
+            batchtrack, batchtrack_prediction = cavsim_utils.cbc_to_track(
+                control_points, delta_t, self.tdelta,
+                lat_stdev_range, long_stdev_range,
+                self.raceline_helper.__curve_of_r__.__curve__.matrix_factory,
+                self.raceline_helper.__curve_of_r__.__curve_deriv__.matrix_factory,
+                odom, track_id=3, reputation=1.0
+            )
+            self.cavsim_track_pub.publish(batchtrack)
+            self.cavsim_prediction_pub.publish(batchtrack_prediction)
         self.prediction_pub.publish(cbc_msg)
 
 
