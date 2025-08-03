@@ -17,9 +17,9 @@ else
   export PYTHONPATH=${extrapythonpaths}:${PYTHONPATH}
 fi
 
-mapsdir=$SCRIPT_PATH/deepracing_launch/maps
-if [[ -z "${F1_MAP_DIRS}" ]]; then
-  export F1_MAP_DIRS=${mapsdir}
-else
-  export F1_MAP_DIRS=${mapsdir}:${F1_MAP_DIRS}
-fi
+# mapsdir=$SCRIPT_PATH/deepracing_launch/maps
+# if [[ -z "${F1_MAP_DIRS}" ]]; then
+#   export F1_MAP_DIRS=${mapsdir}
+# else
+#   export F1_MAP_DIRS=${mapsdir}:${F1_MAP_DIRS}
+# fi

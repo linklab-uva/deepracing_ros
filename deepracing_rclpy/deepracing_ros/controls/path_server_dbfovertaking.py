@@ -42,7 +42,7 @@ class DBFOvertakingPathServer(PathServerROS):
         # dbf_overtaking.ParamListener.update()
         self.params = self.param_listener.get_params()
 
-        brake_factor = long_accel_factor = lat_accel_factor = self.params.timescale
+        brake_factor = long_accel_factor = lat_accel_factor = 1.0 #self.params.timescale
 
 
         brake_speeds = (1.0 + 0.000)*torch.as_tensor([-1.0,    0.00,    25.190,  40.192,  64.544,  75.197,  89.330,  1000.0])
@@ -120,7 +120,7 @@ class DBFOvertakingPathServer(PathServerROS):
         ).eval().to(tensor=line_all_points)
         self.get_logger().info("Built Bounds Checker")
         nd = torch.distributions.Normal(0.0, 1.0)
-        scaledown = nd.cdf(torch.as_tensor(1.5)).item()
+        scaledown = nd.cdf(torch.as_tensor(2.0).sqrt()).item()
         self.get_logger().info("Building Dynamics Checker")
         # brake_factor = long_accel_factor = lat_accel_factor = self.params.timescale
         _dynamic_violation_estimator_ = ExceedLimitsProbabilityEstimator(

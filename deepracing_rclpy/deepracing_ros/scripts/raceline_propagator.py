@@ -54,7 +54,7 @@ class RacelinePropagator(rclpy.node.Node):
         self.declare_parameter(RacelinePropagator.STATE_PARAMETER_NAME, value="CREATED")
         self.declare_parameter(RacelinePropagator.GPU_PARAMETER_NAME, value=-1)
         self.declare_parameter(RacelinePropagator.NSEGMENTS_PARAMETER_NAME, value=4)
-        self.declare_parameter(RacelinePropagator.TIMESCALE_PARAMETER_NAME, value=1.0)
+        self.declare_parameter(RacelinePropagator.TIMESCALE_PARAMETER_NAME, value=0.75)
         self.declare_parameter(RacelinePropagator.PREDICTION_HORIZON_PARAMETER_NAME, value=7.0)
         publish_cavsim_param = self.declare_parameter(RacelinePropagator.PUBLISH_CAVSIM_PARAMETER_NAME, value=False)
         self.declare_parameter(RacelinePropagator.LAT_STDEV_RANGE_PARAMETER_NAME, value=[0.0, 0.0])

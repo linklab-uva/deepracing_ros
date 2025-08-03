@@ -11,7 +11,7 @@ dbf_overtaking:
       description: "Gauss-Legendre order across time for dynamics checking"
     stdev:
       type: double
-      default_value: 0.5
+      default_value: 0.2
       description: "Stdev to use in folded normal distribution for probability of dynamics violation"
     alpha:
       type: double
