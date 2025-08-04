@@ -448,21 +448,6 @@ class DBFOvertakingPathServer(PathServerROS):
                 self.get_logger().debug("DBF algorithm did not converge in %f seconds" % (tock-tick,))
     def handleStateOvertaking(self, now : rclpy.time.Time):
         self.get_logger().debug("Handling Overtaking State")
-        # current_odom = deepcopy(self.current_odom)
-        # current_pose_msg = current_odom.pose.pose
-        # current_vel_msg = current_odom.twist.twist
-        # current_rot = Rotation.from_quat([current_pose_msg.orientation.x, current_pose_msg.orientation.y, current_pose_msg.orientation.z, current_pose_msg.orientation.w])
-        # current_rotmat = torch.as_tensor(current_rot.as_matrix()).type_as(self.overtaking_curve)
-        # current_vel_local = torch.as_tensor([current_vel_msg.linear.x, current_vel_msg.linear.y, current_vel_msg.linear.z]).type_as(self.overtaking_curve)
-        # current_velocity = (current_rotmat@current_vel_local.unsqueeze(-1)).squeeze(-1)
-        # current_position = torch.as_tensor([current_pose_msg.position.x, current_pose_msg.position.y, current_pose_msg.position.z]).type_as(self.overtaking_curve)
-
-        # tclosest, Pclosest, Vclosest, _ = self.closest_point_finder(
-        #     self.overtaking_tstart, self.overtaking_dT,
-        #     self.overtaking_curve, current_position)
-        # deltas = self.overtaking_psamp - current_position[None]
-        # iclosest = torch.argmin(torch.linalg.vector_norm(deltas, dim=-1))
-        # tclosest = self.overtaking_tsamp[iclosest]#.item()
         tclosest = (now - self.overtake_start_time).nanoseconds*1e-9
         tsamp = torch.linspace(tclosest, tclosest + 1.6, steps=41).type_as(self.overtaking_curve)
 
