@@ -235,6 +235,10 @@ rclcpp_components_register_node(deepracing_composable_nodes
   EXECUTABLE synthetic_session_data_exe
 )
 rclcpp_components_register_node(deepracing_composable_nodes
+  PLUGIN "deepracing::composable_nodes::TimerAndExit"
+  EXECUTABLE timer_and_exit
+)
+rclcpp_components_register_node(deepracing_composable_nodes
   PLUGIN "deepracing::composable_nodes::TrackmapPublisher"
   EXECUTABLE trackmap_publisher
 )

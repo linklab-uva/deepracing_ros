@@ -15,6 +15,7 @@ set(deepracing_composable_node_srcs
   odom_to_tf.cpp
   polygon_publisher.cpp
   synthetic_session_data.cpp
+  timer_and_exit.cpp
   trackmap_publisher.cpp
   wait_for_overtake_complete.cpp
 )
