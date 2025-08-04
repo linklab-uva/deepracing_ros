@@ -295,12 +295,6 @@ class DBFOvertakingPathServer(PathServerROS):
             iquery = torch.randint(0, curve_particle_withz_flat.shape[0], (1,)).item()
             pquery = curve_particle_withz_flat[iquery].clone()
             pquery += 4.0*torch.randn_like(pquery)
-            # self.get_logger().info("pquery.shape: " + str(pquery.shape))
-            # self.get_logger().info("curve_particle_withz.shape: " + str(curve_particle_withz.shape))
-            # self.get_logger().info("tstart.shape: " + str(tstart.shape))
-            # self.get_logger().info("Curveparticle_dT[0].shape: " + str(Curveparticle_dT[0].shape))
-            # t, P, V, _ = self.closest_point_finder(tstart, Curveparticle_dT[0], curve_particle_withz, pquery)
-            
             tock = time.time()
             warmup_times.append(tock-tick)
         self.tfit = tfit
