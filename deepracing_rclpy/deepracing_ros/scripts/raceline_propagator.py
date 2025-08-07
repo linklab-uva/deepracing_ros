@@ -24,6 +24,8 @@ import rclpy.subscription
 import deepracing_ros.convert as C
 import deepracing_msgs.msg 
 import deepracing_msgs.srv as deepracing_srvs   
+import sensor_msgs
+import sensor_msgs.msg
 import sensor_msgs_py.point_cloud2
 import geometry_msgs.msg
 import nav_msgs.msg
@@ -65,9 +67,11 @@ class RacelinePropagator(rclpy.node.Node):
             cavsim_qos.reliability = rclpy.qos.ReliabilityPolicy.BEST_EFFORT
             self.cavsim_track_pub = self.create_publisher(uva_iac_msgs.msg.BatchTrack, "cavsim_tracks", cavsim_qos)
             self.cavsim_prediction_pub = self.create_publisher(uva_iac_msgs.msg.BatchTrackPrediction, "cavsim_predictions", cavsim_qos)
+            self.cavsim_pc2_pub = self.create_publisher(sensor_msgs.msg.PointCloud2, "cavsim_predictions_pc2", cavsim_qos)
         else:
             self.cavsim_track_pub = None
             self.cavsim_prediction_pub = None
+            self.cavsim_pc2_pub = None
         self.prediction_pub = self.create_publisher(deepracing_msgs.msg.CompositeBezierCurve, "target_predictions", rclpy.qos.qos_profile_sensor_data)
         self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(nav_msgs.msg.Odometry, "target_odom", self.odom_cb, 1)
     def odom_cb(self, odom : nav_msgs.msg.Odometry):
@@ -114,6 +118,7 @@ class RacelinePropagator(rclpy.node.Node):
             )
             self.cavsim_track_pub.publish(batchtrack)
             self.cavsim_prediction_pub.publish(batchtrack_prediction)
+            self.cavsim_pc2_pub.publish(batchtrack_prediction.track_predictions[0].position_history)
         self.prediction_pub.publish(cbc_msg)
 
 
