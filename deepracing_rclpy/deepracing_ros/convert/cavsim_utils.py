@@ -52,5 +52,6 @@ def cbc_to_track(control_points : torch.Tensor, delta_t : torch.Tensor, tsamp : 
     
     batchtrack_prediction.track_predictions[0].position_history = \
         ros2_numpy.msgify(sensor_msgs.PointCloud2, cloud_structured)
+    batchtrack_prediction.track_predictions[0].position_history.header = odom.header
 
     return batchtrack, batchtrack_prediction
