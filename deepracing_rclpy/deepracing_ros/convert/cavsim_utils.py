@@ -32,6 +32,7 @@ def cbc_to_track(control_points : torch.Tensor, delta_t : torch.Tensor, tsamp : 
     Psamp, _ = mu.compositeBezierEval(tstart, delta_t, control_points, tsamp, matrix_factory)
     Vsamp, _ = mu.compositeBezierEval(tstart, delta_t, control_points_deriv, tsamp, matrix_factory_deriv)
     speedsamp : torch.Tensor = torch.linalg.vector_norm(Vsamp, dim=-1)
+    tausamp : torch.Tensor = Vsamp/speedsamp[..., None]
 
     lat_stdevs = torch.linspace(lat_stdev_range[0], lat_stdev_range[1], steps=tsamp.shape[0])
     long_stdevs = torch.linspace(long_stdev_range[0], long_stdev_range[1], steps=tsamp.shape[0])
@@ -39,11 +40,12 @@ def cbc_to_track(control_points : torch.Tensor, delta_t : torch.Tensor, tsamp : 
     distances = torch.zeros_like(speedsamp)
     distances[1:]= torch.cumsum(speedsamp[:-1]*(tsamp[1:] - tsamp[:-1]), 0)
 
-    keys=["x", "y", "z", "speed", "distance", "time", "lat_uncertainty", "lon_uncertainty"]
+    keys=["x", "y", "z", "xt", "yt", "zt", "speed", "distance", "time", "lat_uncertainty", "lon_uncertainty"]
     cloud_structured = np.zeros(Psamp.shape[0], dtype=[(k, np.float32) for k in keys])
     cloud_structured["x"] = Psamp[:, 0].cpu().numpy()
     cloud_structured["y"] = Psamp[:, 1].cpu().numpy()
-    # cloud_structured["z"] = Psamp[:, 2].cpu().numpy()
+    cloud_structured["xt"] = tausamp[:, 0].cpu().numpy()
+    cloud_structured["yt"] = tausamp[:, 1].cpu().numpy()
     cloud_structured["speed"] = speedsamp.cpu().numpy()
     cloud_structured["distance"] = distances.cpu().numpy()
     cloud_structured["time"] = tsamp.cpu().numpy()
