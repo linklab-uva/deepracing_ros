@@ -15,6 +15,7 @@ import rclpy.client
 import rclpy.parameter
 import rosbag2_interfaces.srv, rosbag2_interfaces.msg
 
+from deepracing_ros.controls import PlannerParamNames
 import deepracing_models.math_utils.convert as math_C
 import deepracing_models.math_utils as mu, deepracing_ros.convert as C
 from deepracing_models.math_utils.bayesian_filtering import BayesianFilter, ParticleNoiser
@@ -29,14 +30,18 @@ import std_msgs.msg
 import sensor_msgs.msg
 import builtin_interfaces.msg
 import ros2_numpy
+try:
+    import uva_iac_msgs.msg
+    IMPORTED_UVA_IAC_MSGS=True
+except ImportError:
+    IMPORTED_UVA_IAC_MSGS=False
 
 class DBFOvertakingPathServer(PathServerROS):
-    STATE_PARAMETER_NAME="state"
     def __init__(self):
         super(DBFOvertakingPathServer, self).__init__()
         self.get_logger().info("Hello Path Server! I live in namespace: %s" % (self.get_namespace()))
 
-        self.declare_parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, value="CREATED")
+        self.declare_parameter(PlannerParamNames.STATE, value="CREATED")
 
         self.param_listener = dbf_overtaking.ParamListener(self)
         # dbf_overtaking.ParamListener.update()
@@ -72,6 +77,10 @@ class DBFOvertakingPathServer(PathServerROS):
         self.overtake_end_pub : rclpy.publisher.Publisher =  self.create_publisher(builtin_interfaces.msg.Time, "overtake_end", 1)
         self.composite_bcurve_pub : rclpy.publisher.Publisher = self.create_publisher(CompositeBezierCurve, "bcurvesout", 1)
         self.opponent_composite_bcurve_pub : rclpy.publisher.Publisher = self.create_publisher(CompositeBezierCurve, "paired_opponent_curve", 1)
+        
+        if IMPORTED_UVA_IAC_MSGS:
+            self.cavsim_reset_pub : rclpy.publisher.Publisher = self.create_publisher(uva_iac_msgs.msg.SetCavsimState, "cavsim_reset", 1)
+            self.cavsim_toggler : rclpy.publisher.Publisher = self.create_publisher(std_msgs.msg.Bool, "cavsim_pause", 1)
         # self.composite_bcurve_pub : rclpy.publisher.Publisher = None #self.create_publisher(CompositeBezierCurve, "oraclecompositebeziercurves", 1)
         # bagrecordername_param = self.declare_parameter("bag_recorder_name", value="/rosbag2_recorder")
         # bagrecordername = bagrecordername_param.get_parameter_value().string_value
@@ -83,7 +92,7 @@ class DBFOvertakingPathServer(PathServerROS):
         self.opponent_curve_msg = msg
         self.opponent_curve_mutex.release()
     def initialize(self, raceline_structured : np.ndarray, widthmap_structured : np.ndarray, innerbound_structured : np.ndarray, outerbound_structured : np.ndarray):
-        stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "INITIALIZING")
+        stateparam = rclpy.Parameter(PlannerParamNames.STATE, rclpy.Parameter.Type.STRING, "INITIALIZING")
         self.set_parameters([stateparam,])
         torch.set_float32_matmul_precision("high")
         device = torch.device("cuda:%d" % self.params.gpu if self.params.gpu>=0 else "cpu")
@@ -96,16 +105,10 @@ class DBFOvertakingPathServer(PathServerROS):
         interp_spline_points = interp_spline(interp_times)
         interp_spline_speeds = np.linalg.norm(interp_spline(interp_times, nu=1), ord=2.0, axis=1)
         line_all_speeds = torch.as_tensor(interp_spline_speeds).double()
-        # line_all_speeds = torch.as_tensor(raceline_structured["speed"]).double()
-        # line_all_points_cast = torch.zeros_like(line_all_points).type_as(line_all_speeds)
         _raceline_helper_ : mu.RacelineHelper = mu.RacelineHelper.from_closed_path(
             torch.as_tensor(interp_spline_points).type_as(line_all_speeds), self.params.timescale*line_all_speeds,
             0.5
         ).to(tensor=line_all_points)
-        # self.fullspeed_raceline_helper : mu.RacelineHelper = mu.RacelineHelper.from_closed_path(
-        #     line_all_points.cpu().double(), line_all_speeds,
-        #     0.5
-        # ).to(tensor=line_all_points)
         self.get_logger().info("Built Raceline Helpers")
         self.get_logger().info("Building Bounds Checker")
         shrink_factor = 1.0
@@ -281,7 +284,9 @@ class DBFOvertakingPathServer(PathServerROS):
             r, _, _, _ = self.raceline_helper(t=tfit + 10.0 + torch.randn(1).item())
             self.raceline_helper(r=r + 10.0 + torch.randn(1).item())
             self.raceline_helper.closest_point_approximate(Pquery + torch.randn_like(Pquery), newton_iterations=3)
-            self.raceline_helper.t_of_r(rfinal_[[0,]])
+            tback = self.raceline_helper.t_of_r(rfinal_[[0,]])
+            self.raceline_helper.__speed_of_t__(tback)
+            self.raceline_helper.__along_of_t__(tback)
 
             istart = torch.randint(0, centerline_dense.shape[0], (1,)).item()
             idx_grab = torch.arange(istart, istart+400, step=1, dtype=torch.int64)%(centerline_dense.shape[0])
@@ -304,7 +309,7 @@ class DBFOvertakingPathServer(PathServerROS):
         warmup_times = torch.as_tensor(warmup_times, dtype=torch.float64)
         self.get_logger().info("Compiled Overall Filter")
         self.get_logger().info("warmup_times: " + str(warmup_times))
-        stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "PLANNING")
+        stateparam = rclpy.Parameter(PlannerParamNames.STATE, rclpy.Parameter.Type.STRING, "PLANNING")
         self.set_parameters([stateparam,])
 
     
@@ -313,7 +318,7 @@ class DBFOvertakingPathServer(PathServerROS):
         if self.current_odom is None:
             self.get_logger().error("No odom yet")
             return
-        state : str = self.get_parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME).value
+        state : str = self.get_parameter(PlannerParamNames.STATE).value
         if (state=="PLANNING"):
             self.handleStatePlanning(now)
         elif (state=="OVERTAKING"):
@@ -434,8 +439,7 @@ class DBFOvertakingPathServer(PathServerROS):
                 cloud_msg.header.stamp = now.to_msg()
                 self.cloud_pub.publish(cloud_msg)
                 self.pathswitch_pub.publish(std_msgs.msg.String(data="graph"))
-                
-                stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "OVERTAKING")
+                stateparam = rclpy.Parameter(PlannerParamNames.STATE, rclpy.Parameter.Type.STRING, "OVERTAKING")
                 self.set_parameters([stateparam,])
                 self.overtake_begin_pub.publish(self.get_clock().now().to_msg())
             else:
@@ -457,22 +461,36 @@ class DBFOvertakingPathServer(PathServerROS):
         cloud_msg.header.stamp = now.to_msg()
         self.cloud_pub.publish(cloud_msg)
 
-
         if tclosest > (self.params.time_horizon):
-            self.get_logger().info("Overtaking finished, pausing bag and switching to idle state and setting path tracker back to static raceline")
             self.overtake_end_pub.publish(now.to_msg())
             self.pathswitch_pub.publish(std_msgs.msg.String(data="raceline"))
-            stateparam = rclpy.Parameter(DBFOvertakingPathServer.STATE_PARAMETER_NAME, rclpy.Parameter.Type.STRING, "IDLE")
+            stateparam = rclpy.Parameter(PlannerParamNames.STATE, rclpy.Parameter.Type.STRING, "IDLE")
             self.set_parameters([stateparam,])
-            # self.pause_service.call_async(rosbag2_interfaces.srv.Pause.Request())
-        # else:
-        #     self.pathswitch_pub.publish(std_msgs.msg.String(data="graph"))
+            # self.cavsim_toggler.publish(std_msgs.msg.Bool(data=True))
+            # current_pose_msg = deepcopy(self.current_odom.pose.pose)
+            # Pquery = torch.as_tensor([[current_pose_msg.position.x, current_pose_msg.position.y],]).type_as(self.raceline_helper.__t_of_r__.arclengths)
+            # rclosest, _, _, _ = self.raceline_helper.closest_point_approximate(Pquery, newton_iterations=3)
+            # tclosest = self.raceline_helper.t_of_r(rclosest)
+            # treset = tclosest + 0.4
+            # _, preset, vreset, _ = self.raceline_helper(t=treset)
+            # speedreset : float = torch.linalg.vector_norm(vreset, dim=-1, keepdim=True).item()
+            # accelreset : float = self.raceline_helper.__along_of_t__(treset)[0].item()
+            # taureset = vreset[0]/speedreset
+            # headingreset = torch.atan2(taureset[1], taureset[0]).item()
+            # cavsimreset = uva_iac_msgs.msg.SetCavsimState()
+            # cavsimreset.header.frame_id="map"
+            # cavsimreset.header.stamp = now.to_msg()
+            # cavsimreset.car_ids = [1,]
+            # cavsimreset.positions = [current_pose_msg.position,]
+            # cavsimreset.headings = [headingreset,]
+            # cavsimreset.speeds = [speedreset,] 
+            # cavsimreset.accels = [accelreset,]
+            # self.cavsim_reset_pub.publish(cavsimreset)
+            # # self.get_logger().info("Resetting lead vehicle to raceline at t=%f, speed=%f, accel=%f" % (treset.item(), speedreset, accelreset))
+            # time.sleep(0.25)
+            # self.cavsim_toggler.publish(std_msgs.msg.Bool(data=False))
 
     def handleStateIdle(self, now : rclpy.time.Time):
-        # self.get_logger().info("Overtaking finished, pausing bag and switching to idle state and setting path tracker back to static raceline")
-        # pass
-        self.overtake_end_pub.publish(now.to_msg())
-    def unpause_CB(self, result : rosbag2_interfaces.srv.Resume.Response):
         pass
     def attempt_dbf(self, Curveparticles : torch.Tensor, Curveparticle_tstart : torch.Tensor, Curveparticle_dT : torch.Tensor, rfinal : torch.Tensor, rfinal_min,
                     TV_box_positions : torch.Tensor, TV_stdev_inv_matrix : torch.Tensor):
