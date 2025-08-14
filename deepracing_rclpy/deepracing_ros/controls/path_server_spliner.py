@@ -1,12 +1,11 @@
 
-from copy import deepcopy
-from re import I
 import deepracing_models.math_utils.convert as math_C
 import deepracing_models.math_utils as mu, deepracing_ros.convert as C
 from deepracing_ros.controls.path_server_ros import PathServerROS
 from deepracing_ros.controls import PlannerParamNames
 import numpy as np
 import torch
+import uva_iac_msgs.msg
 import nav_msgs.msg
 import std_msgs.msg
 import sensor_msgs_py.point_cloud2
@@ -64,7 +63,11 @@ class SplinerPathServer(PathServerROS):
         self.published_first_path=False
         self.path_switcher = self.create_publisher(std_msgs.msg.String, "path_switch", 1)
         
-        
+        self.ego_frenet_pub = self.create_publisher(uva_iac_msgs.msg.FrenetPointStamped, "ego_frenet", 1)
+        self.target_frenet_pub = self.create_publisher(uva_iac_msgs.msg.FrenetPointStamped, "target_frenet", 1)
+
+        self.optim_wrapper = SplinerOptim(kappa_max=1.0/10.0)
+        self.initial_guess : np.ndarray | None = None
     def opponentOdomCallback(self, msg : nav_msgs.msg.Odometry):
         with self.opponent_odom_mutex:
             self.opponent_odom_msg = msg
@@ -115,9 +118,16 @@ class SplinerPathServer(PathServerROS):
         # rlnormals = rltangents[:,[1,0]].clone()
         # rlnormals[:,0] *= -1.0
         # opponent_frenet_d : torch.Tensor  = torch.linalg.vecdot(opponent_positions - rlpoints, rlnormals, dim=-1)
-        opponent_frenet_s = self.raceline_frenet.raceline.closest_point_approximate(opponent_positions, newton_iterations=self.newton_iterations)[0]
+        opponent_frenet_s, rl_projections, rl_tangents, _ = self.raceline_frenet.raceline.closest_point_approximate(opponent_positions, newton_iterations=self.newton_iterations)
+        rl_tangents : torch.Tensor = rl_tangents/torch.linalg.vector_norm(rl_tangents, dim=-1, keepdim=True)
+        rl_normals = rl_tangents[:,[1,0]].clone()
+        rl_normals[:,0]*=-1.0
+        opponent_frenet_msg = uva_iac_msgs.msg.FrenetPointStamped()
+        opponent_frenet_msg.header = ego_odom.header
+        opponent_frenet_msg.s = opponent_frenet_s[0].item()
+        opponent_frenet_msg.d = torch.sum((opponent_positions[0] - rl_projections[0]) * rl_normals[0]).item()
+
         ego_position = torch.as_tensor([ego_odom.pose.pose.position.x, ego_odom.pose.pose.position.y]).type_as(self.raceline_frenet.rsamp)
-        
         (ego_current_s,), (projpoint,), (projtangent,), _ = self.raceline_frenet.raceline.closest_point_approximate(ego_position[None], newton_iterations=self.newton_iterations)
         projtangent : torch.Tensor = projtangent/torch.linalg.vector_norm(projtangent)
         projnormal = projtangent[[1,0]].clone()
@@ -125,6 +135,15 @@ class SplinerPathServer(PathServerROS):
 
         (ego_current_t,) = self.raceline_frenet.raceline.t_of_r(ego_current_s[None])
         ego_current_d : float = torch.linalg.vecdot(ego_position - projpoint, projnormal).item()
+        ego_frenet_msg = uva_iac_msgs.msg.FrenetPointStamped()
+        ego_frenet_msg.header = ego_odom.header
+        ego_frenet_msg.s = ego_current_s.item()
+        ego_frenet_msg.d = ego_current_d
+
+        self.target_frenet_pub.publish(opponent_frenet_msg)
+        self.ego_frenet_pub.publish(ego_frenet_msg)
+
+        
 
 
         ego_dense_s = self.raceline_frenet.raceline.__r_of_t__(ego_current_t + prediction_times)[0].squeeze(-1)
@@ -135,12 +154,13 @@ class SplinerPathServer(PathServerROS):
         I_cend = torch.argmax(((relative_s - opponent_lon_safety_distances)>0.0).short())
         t_cend = prediction_times[I_cend].item()
 
-        t_spliner = torch.linspace(0.0, prediction_times[-1], steps=60).type_as(prediction_times)
+        t_spliner = torch.linspace(0.0, prediction_times[-1], steps=30).type_as(prediction_times)
         idx_before_collision = (t_spliner < t_cstart)
         idx_after_collision = (t_spliner > t_cend)
         idx_potential_collision = (~idx_before_collision)*(~idx_after_collision)
-        # if torch.sum(idx_potential_collision)==0:
-        #     return
+        if torch.sum(idx_potential_collision)==0:
+            self.get_logger().error("No potential collision detected????")
+            return
 
         potentially_colliding_times = t_spliner[idx_potential_collision].cpu().numpy()
         potentially_colliding_positions = torch.as_tensor(opponent_position_spline(potentially_colliding_times)).type_as(opponent_positions)
@@ -152,51 +172,59 @@ class SplinerPathServer(PathServerROS):
         rltangents = rlvels/rlspeeds[..., None]
         rlnormals = rltangents[:,[1,0]].clone()
         rlnormals[:,0] *= -1.0
-        opponent_frenet_d : torch.Tensor  = torch.linalg.vecdot(potentially_colliding_positions - rlpoints, rlnormals, dim=-1)
+        # opponent_frenet_d : torch.Tensor  = torch.linalg.vecdot(potentially_colliding_positions - rlpoints, rlnormals, dim=-1)
+        opponent_frenet_d = 5000.0*torch.ones_like(t_spliner)
+        opponent_frenet_d[idx_potential_collision] = torch.linalg.vecdot(potentially_colliding_positions - rlpoints, rlnormals, dim=-1)
 
 
-        left_overtake_d = opponent_frenet_d + opponent_lat_safety_distances
-        right_overtake_d = opponent_frenet_d - opponent_lat_safety_distances
+        left_overtake_d = opponent_frenet_d[idx_potential_collision] + opponent_lat_safety_distances
+        right_overtake_d = opponent_frenet_d[idx_potential_collision] - opponent_lat_safety_distances
 
         space_on_left = torch.min(upper_d_opponent - left_overtake_d)
         space_on_right = torch.max(lower_d_opponent - right_overtake_d)
 
         if (space_on_left<0) and (space_on_right>0):
             #If neither side has space. We can't overtake.
-            # self.get_logger().error("Overtaking is impossible. insufficient space")
+            self.get_logger().error("Overtaking is impossible. insufficient space. Space on left: %f. Space on right: %f" 
+                                    % (space_on_left.item(), space_on_right.item()))
             return
-        
-
-        if (space_on_left<0):
-            #overtaking on the left is impossible. attempt overtake on the right.
-            overtake_d = right_overtake_d
-        elif (space_on_right>0):
-            #overtaking on the right is impossible. attempt overtake on the left.
-            overtake_d = left_overtake_d
-        else:
-            #both sides have space. take the one with more
-            if space_on_left>space_on_right.abs():
-                overtake_d = left_overtake_d
-            else:
-                overtake_d = right_overtake_d
 
         tglobal = t_spliner + ego_current_t
         all_ego_s = self.raceline_frenet.raceline.__r_of_t__(tglobal)[0].squeeze(-1)
-        all_ego_d = torch.zeros_like(all_ego_s)
-        all_ego_d[idx_before_collision] = ego_current_d
-        all_ego_d[idx_potential_collision] = overtake_d
-        all_ego_d[0] = ego_current_d
+        all_ego_d = ego_current_d*torch.ones_like(all_ego_s)
+        delta_s = torch.diff(all_ego_s, dim=0)
+
         _, rlpoints, rlvels, lower_d, upper_d = self.raceline_frenet(all_ego_s)
-
-
         rlspeeds : torch.Tensor = torch.linalg.vector_norm(rlvels, dim=-1)
-        rlaccels = self.raceline_frenet.raceline.__along_of_t__(tglobal)[0].squeeze(-1)
         rltangents = rlvels/rlspeeds[..., None]
         rlnormals = rltangents[:,[1,0]].clone()
         rlnormals[:,0] *= -1.0
-        
+        rl2ndderivs = self.raceline_frenet.raceline.__curve_of_r__.__curve_2nd_deriv__(all_ego_s)[0]
+        global_kappas : torch.Tensor = torch.linalg.vecdot(rl2ndderivs, rlnormals, dim=-1)
+        if self.initial_guess is not None:
+            guess = self.initial_guess.copy()
+        else:
+            guess = all_ego_d.cpu().numpy()
+        guess = np.clip(guess, lower_d.cpu().numpy(), upper_d.cpu().numpy())
+        guess[0] = ego_current_d
+        guess[-2] = guess[-1] = 0.0
+        extra_safety_margin = 0.0*opponent_uncertainty_spline(t_spliner.cpu())[:,0]
+        result = self.optim_wrapper.optimize_d(
+            opponent_frenet_d.cpu().numpy(),  guess, 1.75*car_width*np.ones(opponent_frenet_d.shape[0], dtype=float) + extra_safety_margin,
+            lower_d.cpu().numpy(), upper_d.cpu().numpy(), global_kappas.cpu().numpy(), delta_s.cpu().numpy()
+        )
+        if result.success:
+            optimized_ego_d = torch.as_tensor(result.x).type_as(all_ego_s)
+            self.initial_guess = optimized_ego_d.cpu().numpy()
+        else:
+            self.get_logger().error("Optimization failed: "  + result.message)
+            return
+
+        # dv_dr : torch.Tensor = self.raceline_frenet.raceline.__dspeed_dr__(all_ego_s)[0].squeeze(-1)
+        # rlaccels = dv_dr * rlspeeds
+        rlaccels = self.raceline_frenet.raceline.__along_of_t__(tglobal)[0].squeeze(-1)
         t_spliner_cpu = t_spliner.cpu()
-        overtaking_points = rlpoints + rlnormals*all_ego_d[:,None]
+        overtaking_points = rlpoints + rlnormals*optimized_ego_d[:,None]
         splineout : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(
             t_spliner_cpu, overtaking_points.cpu(), k=3
         )
@@ -212,7 +240,7 @@ class SplinerPathServer(PathServerROS):
         # self.field_names_out=["x", "y", "z", "s", "roll", "psi", "kappa", "vx", "ax"]
         maxkappa = np.max(kappa)
         maxlateral_accel = np.max(lateral_accelout)
-        self.get_logger().info("Max Kappa: %f. Max Lat Accel: %f. Max Long Accel: %f" % (float(maxkappa), float(maxlateral_accel), rlaccels.max().item()))
+        self.get_logger().info("Max Speed: %f. Max Kappa: %f. Max Lat Accel: %f. Max Long Accel: %f" % (rlspeeds.max().item(), float(maxkappa), float(maxlateral_accel), rlaccels.max().item()))
         points_out = np.zeros([rlpoints.shape[0], len(self.field_names_out)], dtype=np.float32)
         #x,y. 
         points_out[:,:2] = overtaking_points.cpu().float()
@@ -263,14 +291,14 @@ class SplinerPathServer(PathServerROS):
         # interp_spline_points = interp_spline(interp_times)
         # interp_spline_speeds = np.linalg.norm(interp_spline(interp_times, nu=1), ord=2.0, axis=1)
         # line_all_speeds = torch.as_tensor(interp_spline_speeds).double()
+        car_length = self.get_parameter(PlannerParamNames.CAR_LENGTH).get_parameter_value().double_value
+        drsamp = 0.375*car_length
         line_all_speeds = torch.as_tensor(raceline_structured["speed"]).type_as(line_all_points)
         self.get_logger().info("Building Raceline Helper")
         _raceline_helper_ : mu.RacelineHelper = mu.RacelineHelper.from_closed_path(
             line_all_points, timescale*line_all_speeds,
-            2.0
+            drsamp
         ).to(tensor=line_all_points)
-        car_length = self.get_parameter(PlannerParamNames.CAR_LENGTH).get_parameter_value().double_value
-        drsamp = 0.5*car_length
 
         self.get_logger().info("Building Inner Boundary Helper")
         innerbound = torch.as_tensor(np.stack([innerbound_structured[k] for k in ["x", "y"]], axis=1)).type_as(line_all_points)
@@ -307,10 +335,11 @@ class SplinerPathServer(PathServerROS):
             tstart = torch.rand(1, dtype=torch.float32).item()*(_raceline_helper_.__r_of_t__.xend_vec[-1].item())
             tend = tstart + 7.0
             tsamp = torch.linspace(tstart, tend, steps=30).type_as(line_all_points)
+            tsamp_dense = torch.linspace(tstart, tend, steps=300).type_as(line_all_points)
             # rsamp, _ = self.raceline_frenet.raceline.__r_of_t__(tsamp)
             rsamp, rlpoints, rlvels, _ = self.raceline_frenet.raceline(t=tsamp)
             self.raceline_frenet.raceline(r=rsamp)
-            
+            self.raceline_frenet.raceline.__dspeed_dr__(rsamp)
             rlpoints_noisy = rlpoints + 2.0*torch.randn_like(rlpoints)
 
             rtrue, rlpointsback, rlvelsback, ib_widths, ob_widths = self.raceline_frenet.at_closest_point(rlpoints_noisy, newton_iterations=self.newton_iterations)
@@ -320,6 +349,11 @@ class SplinerPathServer(PathServerROS):
             self.raceline_frenet(rsamp)
             self.raceline_frenet(rtrue)
             self.raceline_frenet.raceline.closest_point_approximate(rlpoints_noisy[[0,]], newton_iterations=self.newton_iterations)
+
+            rsamp_dense, rlpoints_dense, rlvels_dense, _ = self.raceline_frenet.raceline(t=tsamp_dense)
+            self.raceline_frenet(rsamp_dense)
+            self.raceline_frenet.raceline(r=rsamp_dense)
+            self.raceline_frenet.raceline.__dspeed_dr__(rsamp_dense)
             tock = time.time()
             comptimes.append(tock-tick)
         comptimes = 1000.0*torch.as_tensor(comptimes, dtype=torch.float64)
