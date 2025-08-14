@@ -4,6 +4,8 @@ class PlannerParamNames:
     STATE = "state"
     GPU = "gpu"
     TIMESCALE = "timescale"
+    CAR_WIDTH = "car_dims.width"
+    CAR_LENGTH = "car_dims.length"
 
 class RacelinePropagatorParamNames:
     STATE = PlannerParamNames.STATE

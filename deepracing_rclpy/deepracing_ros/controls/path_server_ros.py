@@ -42,6 +42,7 @@ from scipy.spatial.kdtree import KDTree
 import timeit
 import deepracing_ros, deepracing_ros.convert
 import tf2_ros
+import threading
 
 
 class PathServerROS(Node):
@@ -63,16 +64,23 @@ class PathServerROS(Node):
 
         self.player_car_index : int = 0
        
-        self.current_odom : Odometry = None
+        self.current_odom : Odometry | None = None
         self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = Duration(seconds=5))
         self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
         self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(Odometry, 'odom', self.odomCallback, 1)
         self.session_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketSessionData, 'session_data', self.sessionCallback, 1)
         self.current_session_data : TimestampedPacketSessionData = None
+        self.current_odom_mutex = threading.Semaphore()
 
     def odomCallback(self, odom_msg : Odometry):
         self.get_logger().debug("Got a new pose: " + str(odom_msg))
-        self.current_odom = odom_msg        
+        with self.current_odom_mutex:
+            self.current_odom = odom_msg
+    def getCurrentOdom(self):
+        if self.current_odom is None:
+            return None
+        with self.current_odom_mutex:
+            return deepcopy(self.current_odom)
 
     def sessionCallback(self, session_msg : TimestampedPacketSessionData):
         self.get_logger().debug("Got a new session packet: " + str(session_msg))

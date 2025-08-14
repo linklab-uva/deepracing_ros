@@ -327,9 +327,9 @@ class DBFOvertakingPathServer(PathServerROS):
             self.handleStateIdle(now)
 
     def handleStatePlanning(self, now : rclpy.time.Time):
-
-        current_pose_msg = deepcopy(self.current_odom.pose.pose)
-        current_vel_msg = deepcopy(self.current_odom.twist.twist)
+        with self.current_odom_mutex:
+            current_pose_msg = deepcopy(self.current_odom.pose.pose)
+            current_vel_msg = deepcopy(self.current_odom.twist.twist)
         current_rot = Rotation.from_quat([0.0, 0.0, current_pose_msg.orientation.z, current_pose_msg.orientation.w])
         current_rotmat = torch.as_tensor(current_rot.as_matrix()[0:2,0:2]).type_as(self.Curveparticle_tstart)
         current_position_msg = current_pose_msg.position

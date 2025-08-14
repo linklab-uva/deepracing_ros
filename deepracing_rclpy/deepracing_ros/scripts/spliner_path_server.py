@@ -41,7 +41,6 @@ def main(args=None):
     rclpy.init(args=args)
     rclpy.logging.initialize()
     node = SplinerPathServer()
-    frequency_param : rclpy.Parameter = node.declare_parameter("rate", value=100.0)
     # try:
     #     print(node.params.compile_backend)
     # except rclpy.exceptions.ParameterUninitializedException as e:
@@ -70,6 +69,7 @@ def main(args=None):
     initialize_thread.start()
     # node.initialize(raceline_np, width_map_np, innerbound_np, outerbound_np)
     # initialize_thread.
+    frequency_param : rclpy.Parameter = node.declare_parameter("rate", value=100.0)
     timer : rclpy.timer.Timer = node.create_timer(1.0/frequency_param.get_parameter_value().double_value, node.getTrajectory)
 
     rclpy.spin(node)
