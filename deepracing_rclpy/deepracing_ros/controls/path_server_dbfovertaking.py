@@ -114,8 +114,8 @@ class DBFOvertakingPathServer(PathServerROS):
         shrink_factor = 1.0
         centerline_dense = torch.as_tensor(np.stack([widthmap_structured[k] for k in ["x", "y"]], axis=1)).type_as(line_all_speeds)
         _centerline_helper_ = mu.SimplePathHelper.from_closed_path(centerline_dense, 0.5).to(tensor=line_all_points)
-        left_widths = shrink_factor*torch.as_tensor(widthmap_structured["ob_distance"]).type_as(line_all_speeds) - 0.2*self.params.car_dims.width
-        right_widths = shrink_factor*torch.as_tensor(widthmap_structured["ib_distance"]).type_as(line_all_speeds) + 0.2*self.params.car_dims.width
+        left_widths = shrink_factor*torch.as_tensor(widthmap_structured["ob_distance"]).type_as(line_all_speeds) + 0.1*self.params.car_dims.width
+        right_widths = shrink_factor*torch.as_tensor(widthmap_structured["ib_distance"]).type_as(line_all_speeds) - 0.1*self.params.car_dims.width
         _bounds_checker_ = BoundsChecker(gauss_order=self.params.bounds_gauss.order, dT=self.params.time_horizon, stdev=self.params.bounds_gauss.stdev,
             dr_samp=self.params.bounds_gauss.dr_samp, alpha=self.params.bounds_gauss.alpha,
             left_widths=left_widths, right_widths=right_widths, refline_points=centerline_dense,
@@ -498,7 +498,7 @@ class DBFOvertakingPathServer(PathServerROS):
         idx_resample = torch.empty_like(rfinal).long()
         particle_likelihoods = torch.empty_like(rfinal)
         success = torch.as_tensor(0).to(dtype=bool, device=idx_resample.device)
-        for i in range(16):
+        for i in range(12):
             # minrfinal, maxrfinal = torch.min(rfinal), torch.max(rfinal)
             # self.get_logger().debug("minrfinal: " + str(minrfinal) + " maxrfinal: " + str(maxrfinal) + " rfinal_min: " + str(rfinal_min))
             if i > 0:

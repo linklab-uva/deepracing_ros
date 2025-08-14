@@ -140,7 +140,7 @@ dbf_overtaking:
       description: "Noise factor to apply to particles in the longitudinal direction. Negative value means use 0.5*lateral noise"
     final:
       type: double
-      default_value: -1.0
+      default_value: 1.0
       description: "Noise factor to apply to the ending arclength on the raceline. Negative value means use 0.5*longitudinal noise"
   min_particle_likelihood:
     type: double

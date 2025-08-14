@@ -46,7 +46,7 @@ class RacelinePropagator(rclpy.node.Node):
     NSEGMENTS_PARAMETER_NAME="Nsegments"
     GPU_PARAMETER_NAME="gpu"
     TIMESCALE_PARAMETER_NAME="timescale"
-    PREDICTION_HORIZON_PARAMETER_NAME="prediction_horizon"
+    PREDICTION_HORIZON_PARAMETER_NAME="time_horizon"
     PUBLISH_CAVSIM_PARAMETER_NAME="publish_cavsim"
     LAT_STDEV_RANGE_PARAMETER_NAME="stdev_range.lateral"
     LONG_STDEV_RANGE_PARAMETER_NAME="stdev_range.longitudinal"
