@@ -15,7 +15,7 @@ import rclpy, rclpy.qos
 import scipy.interpolate, scipy.optimize
 import time
 import threading
-import ros2_numpy
+from .spliner_utils import SplinerOptim
 
         # sensor_msgs::PointCloud2Iterator<float> iter_x(*pointcloud, "x");
         # sensor_msgs::PointCloud2Iterator<float> iter_y(*pointcloud, "y");
@@ -127,8 +127,8 @@ class SplinerPathServer(PathServerROS):
         ego_current_d : float = torch.linalg.vecdot(ego_position - projpoint, projnormal).item()
 
 
-        ego_advantaged_s = self.raceline_frenet.raceline.__r_of_t__(ego_current_t + prediction_times)[0].squeeze(-1)
-        relative_s = ego_advantaged_s - opponent_frenet_s
+        ego_dense_s = self.raceline_frenet.raceline.__r_of_t__(ego_current_t + prediction_times)[0].squeeze(-1)
+        relative_s = ego_dense_s - opponent_frenet_s
 
         I_cstart = torch.argmax(((relative_s + opponent_lon_safety_distances)>0.0).short())
         t_cstart = prediction_times[I_cstart].item()
@@ -212,7 +212,7 @@ class SplinerPathServer(PathServerROS):
         # self.field_names_out=["x", "y", "z", "s", "roll", "psi", "kappa", "vx", "ax"]
         maxkappa = np.max(kappa)
         maxlateral_accel = np.max(lateral_accelout)
-        self.get_logger().info("Max Kappa: %f. Max Lat Accel: %f" % (float(maxkappa), float(maxlateral_accel)))
+        self.get_logger().info("Max Kappa: %f. Max Lat Accel: %f. Max Long Accel: %f" % (float(maxkappa), float(maxlateral_accel), rlaccels.max().item()))
         points_out = np.zeros([rlpoints.shape[0], len(self.field_names_out)], dtype=np.float32)
         #x,y. 
         points_out[:,:2] = overtaking_points.cpu().float()
@@ -229,10 +229,8 @@ class SplinerPathServer(PathServerROS):
         #kappa
         points_out[:,6] = kappa
         #vels
-        # points_out[:,7] = self.advantage_factor*speedsout
         points_out[:,7] = (rlspeeds).cpu().numpy()
         #accels
-        # points_out[:,8] = self.advantage_factor*np.sum(accelout*tangentsout, axis=1)
         points_out[:,8] = (rlaccels).cpu().numpy()
         tock = self.get_clock().now()
 
@@ -259,16 +257,17 @@ class SplinerPathServer(PathServerROS):
         torch.set_float32_matmul_precision("high")
         times_in = raceline_structured["time"].astype(np.float64)
         line_all_points = torch.as_tensor(np.stack([raceline_structured[k] for k in ["x", "y"]], axis=1), dtype=torch.float32, device=device)
-        interp_spline : scipy.interpolate.BSpline = \
-            scipy.interpolate.make_interp_spline(times_in, line_all_points.cpu().numpy(), k=2, bc_type="periodic")
-        interp_times = np.linspace(times_in[0], times_in[-1], num=int(round(times_in[-1].item()/0.075)))
-        interp_spline_points = interp_spline(interp_times)
-        interp_spline_speeds = np.linalg.norm(interp_spline(interp_times, nu=1), ord=2.0, axis=1)
-        line_all_speeds = torch.as_tensor(interp_spline_speeds).double()
+        # interp_spline : scipy.interpolate.BSpline = \
+        #     scipy.interpolate.make_interp_spline(times_in, line_all_points.cpu().numpy(), k=2, bc_type="periodic")
+        # interp_times = np.linspace(times_in[0], times_in[-1], num=int(round(times_in[-1].item()/0.075)))
+        # interp_spline_points = interp_spline(interp_times)
+        # interp_spline_speeds = np.linalg.norm(interp_spline(interp_times, nu=1), ord=2.0, axis=1)
+        # line_all_speeds = torch.as_tensor(interp_spline_speeds).double()
+        line_all_speeds = torch.as_tensor(raceline_structured["speed"]).type_as(line_all_points)
         self.get_logger().info("Building Raceline Helper")
         _raceline_helper_ : mu.RacelineHelper = mu.RacelineHelper.from_closed_path(
-            torch.as_tensor(interp_spline_points).type_as(line_all_speeds), timescale*line_all_speeds,
-            0.5
+            line_all_points, timescale*line_all_speeds,
+            2.0
         ).to(tensor=line_all_points)
         car_length = self.get_parameter(PlannerParamNames.CAR_LENGTH).get_parameter_value().double_value
         drsamp = 0.5*car_length
