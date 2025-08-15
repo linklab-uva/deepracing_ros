@@ -211,9 +211,9 @@ class SplinerPathServer(PathServerROS):
             self.get_logger().error("Optimization failed: "  + result.message)
             return
 
-        # dv_dr : torch.Tensor = self.raceline_frenet.raceline.__dspeed_dr__(all_ego_s)[0].squeeze(-1)
-        # rlaccels = dv_dr * rlspeeds
-        rlaccels = self.raceline_frenet.raceline.__along_of_t__(tglobal)[0].squeeze(-1)
+        dv_dr : torch.Tensor = self.raceline_frenet.raceline.__dspeed_dr__(all_ego_s)[0].squeeze(-1)
+        rlaccels = dv_dr * rlspeeds
+        # rlaccels = self.raceline_frenet.raceline.__along_of_t__(tglobal)[0].squeeze(-1)
         t_spliner_cpu = t_spliner.cpu()
         overtaking_points = rlpoints + rlnormals*optimized_ego_d[:,None]
         splineout : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(
