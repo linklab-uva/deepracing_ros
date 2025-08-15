@@ -55,7 +55,7 @@ class EndpointConstraintsWrapper:
         return LinearConstraint(jac, eq, eq, keep_feasible=keep_feasible)
         # return NonlinearConstraint(self.fun, self.safety_buffers, np.inf*np.ones_like(self.safety_buffers), jac=jac, keep_feasible=keep_feasible)
 class SplinerOptim:
-    def __init__(self,  q_d : float = 1.0, q_ds : float = 10.0, q_ddelta : float = 100.0, kappa_max : float = 0.1):
+    def __init__(self,  q_d : float = 10.0, q_ds : float = 100.0, q_ddelta : float = 1000.0, kappa_max : float = 0.1):
         # self.d_initial = d_initial
         # self.s_ego = s_ego
         self.q_d = q_d

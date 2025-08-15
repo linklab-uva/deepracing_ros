@@ -66,11 +66,9 @@ class SplinerPathServer(PathServerROS):
         self.ego_frenet_pub = self.create_publisher(uva_iac_msgs.msg.FrenetPointStamped, "ego_frenet", 1)
         self.target_frenet_pub = self.create_publisher(uva_iac_msgs.msg.FrenetPointStamped, "target_frenet", 1)
 
-        self.optim_wrapper = SplinerOptim(kappa_max=1.0/10.0)
+        spliner_params = self.get_parameters_by_prefix("spliner")
+        self.optim_wrapper = SplinerOptim(**spliner_params)
         self.initial_guess : np.ndarray | None = None
-    def opponentOdomCallback(self, msg : nav_msgs.msg.Odometry):
-        with self.opponent_odom_mutex:
-            self.opponent_odom_msg = msg
 
     def opponentPredictionCallback(self, msg : sensor_msgs.msg.PointCloud2):
         with self.opponent_prediction_mutex:
@@ -110,14 +108,7 @@ class SplinerPathServer(PathServerROS):
 
         opponent_lat_safety_distances =  3.0*opponent_lat_uncertainties + car_width
         opponent_lon_safety_distances =  3.0*opponent_lon_uncertainties + car_length
-        # opponent_lon_safety_distances =  car_length*torch.ones_like(opponent_lon_uncertainties)
 
-        # opponent_frenet_s, rlpoints, rlvels, lower_d_opponent, upper_d_opponent = self.raceline_frenet.at_closest_point(opponent_positions)
-        # rlspeeds : torch.Tensor = torch.linalg.vector_norm(rlvels, dim=-1)
-        # rltangents = rlvels/rlspeeds[..., None]
-        # rlnormals = rltangents[:,[1,0]].clone()
-        # rlnormals[:,0] *= -1.0
-        # opponent_frenet_d : torch.Tensor  = torch.linalg.vecdot(opponent_positions - rlpoints, rlnormals, dim=-1)
         opponent_frenet_s, rl_projections, rl_tangents, _ = self.raceline_frenet.raceline.closest_point_approximate(opponent_positions, newton_iterations=self.newton_iterations)
         rl_tangents : torch.Tensor = rl_tangents/torch.linalg.vector_norm(rl_tangents, dim=-1, keepdim=True)
         rl_normals = rl_tangents[:,[1,0]].clone()
