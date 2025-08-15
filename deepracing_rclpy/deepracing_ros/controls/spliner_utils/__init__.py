@@ -1,7 +1,7 @@
-from re import L
 import numpy as np
 from scipy.optimize import minimize, LinearConstraint, NonlinearConstraint, Bounds, OptimizeResult
 
+#Much of this code is copied from the original Predictive Spliner implementation to ensure 1-to-1 comparison https://github.com/ForzaETH/predictive-spliner
 class CurvatureConstraintWrapper:
     def __init__(self, max_kappas : np.ndarray, global_traj_kappas : np.ndarray, delta_s : np.ndarray):
         #The numerical differentiation pops off the last 2 points
@@ -50,14 +50,11 @@ class EndpointConstraintsWrapper:
         jac[0,0] = 1.0
         jac[1,-2] = 1.0
         jac[2,-1] = 1.0
-        eq : np.ndarray = np.zeros(3, dtype=float)
+        eq : np.ndarray = np.zeros(jac.shape[0], dtype=float)
         eq[0] = self.d_current
         return LinearConstraint(jac, eq, eq, keep_feasible=keep_feasible)
-        # return NonlinearConstraint(self.fun, self.safety_buffers, np.inf*np.ones_like(self.safety_buffers), jac=jac, keep_feasible=keep_feasible)
 class SplinerOptim:
     def __init__(self,  q_d : float = 10.0, q_ds : float = 100.0, q_ddelta : float = 1000.0, kappa_max : float = 0.1):
-        # self.d_initial = d_initial
-        # self.s_ego = s_ego
         self.q_d = q_d
         self.q_ds = q_ds
         self.q_ddelta = q_ddelta
@@ -79,7 +76,7 @@ class SplinerOptim:
         collision_constraint = CollisionAvoidanceConstraintWrapper(opponent_d, safety_buffers)
         endpoint_constraints = EndpointConstraintsWrapper(float(ego_d_guess[0]))
 
-        constraints = [curvature_constraint.as_scipy(), collision_constraint.as_scipy(), endpoint_constraints.as_scipy(len(ego_d_guess))]
+        constraints = [curvature_constraint.as_scipy(), collision_constraint.as_scipy(), endpoint_constraints.as_scipy(len(ego_d_guess), keep_feasible=True)]
 
         bounds = Bounds(lower_bound, upper_bound, keep_feasible=True)
         
