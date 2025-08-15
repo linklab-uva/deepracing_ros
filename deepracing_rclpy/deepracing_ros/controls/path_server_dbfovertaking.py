@@ -47,23 +47,20 @@ class DBFOvertakingPathServer(PathServerROS):
         # dbf_overtaking.ParamListener.update()
         self.params = self.param_listener.get_params()
 
-        brake_factor = long_accel_factor = lat_accel_factor = 1.0 #self.params.timescale
+        # brake_speeds = (1.0 + 0.000)*torch.as_tensor([-1.0,    0.00,    25.190,  40.192,  64.544,  75.197,  89.330,  1000.0])
+        # max_brakes = brake_factor*torch.as_tensor( [-14.574,  -14.574, -14.574, -17.701, -21.424, -23.359, -25.593, -25.593])
+        # self.declare_parameter("brake_speeds", value=brake_speeds.cpu().numpy().tolist())
+        # self.declare_parameter("max_brakes", value=max_brakes.cpu().numpy().tolist())
 
+        # long_accel_speeds = (1.0 + 0.000)*torch.as_tensor(    [-1.0,    0.0,    24.102,  40.192,  48.237,  59.325, 75.850, 91.069, 92.5,  1000.0]) 
+        # max_long_accels = long_accel_factor*torch.as_tensor([ 14.162,   14.162, 14.162,  12.971,  12.375,  9.546,  4.484,  0.464,  0.0,   0.0])
+        # self.declare_parameter("long_accel_speeds", value=long_accel_speeds.cpu().numpy().tolist())
+        # self.declare_parameter("max_long_accels", value=max_long_accels.cpu().numpy().tolist())
 
-        brake_speeds = (1.0 + 0.000)*torch.as_tensor([-1.0,    0.00,    25.190,  40.192,  64.544,  75.197,  89.330,  1000.0])
-        max_brakes = brake_factor*torch.as_tensor( [-14.574,  -14.574, -14.574, -17.701, -21.424, -23.359, -25.593, -25.593])
-        self.declare_parameter("brake_speeds", value=brake_speeds.cpu().numpy().tolist())
-        self.declare_parameter("max_brakes", value=max_brakes.cpu().numpy().tolist())
-
-        long_accel_speeds = (1.0 + 0.000)*torch.as_tensor(    [-1.0,    0.0,    24.102,  40.192,  48.237,  59.325, 75.850, 91.069, 92.5,  1000.0]) 
-        max_long_accels = long_accel_factor*torch.as_tensor([ 14.162,   14.162, 14.162,  12.971,  12.375,  9.546,  4.484,  0.464,  0.0,   0.0])
-        self.declare_parameter("long_accel_speeds", value=long_accel_speeds.cpu().numpy().tolist())
-        self.declare_parameter("max_long_accels", value=max_long_accels.cpu().numpy().tolist())
-
-        lat_accel_speeds = (1.0 + 0.000)*torch.as_tensor([-1.00,   0.0,    19.0,   75.850,  91.069,  1000.0]) 
-        max_lat_accels = lat_accel_factor*torch.as_tensor([ 12.224,   12.224, 16.224, 35.156,  40.218,  40.218])
-        self.declare_parameter("lat_accel_speeds", value=lat_accel_speeds.cpu().numpy().tolist())
-        self.declare_parameter("max_lat_accels", value=max_lat_accels.cpu().numpy().tolist())
+        # lat_accel_speeds = (1.0 + 0.000)*torch.as_tensor([-1.00,   0.0,    19.0,   75.850,  91.069,  1000.0]) 
+        # max_lat_accels = lat_accel_factor*torch.as_tensor([ 12.224,   12.224, 16.224, 35.156,  40.218,  40.218])
+        # self.declare_parameter("lat_accel_speeds", value=lat_accel_speeds.cpu().numpy().tolist())
+        # self.declare_parameter("max_lat_accels", value=max_lat_accels.cpu().numpy().tolist())
         self.overtaking_curve = None
         self.overtaking_dT = None
 
@@ -127,14 +124,14 @@ class DBFOvertakingPathServer(PathServerROS):
         self.get_logger().info("Building Dynamics Checker")
         # brake_factor = long_accel_factor = lat_accel_factor = self.params.timescale
         _dynamic_violation_estimator_ = ExceedLimitsProbabilityEstimator(
-            torch.as_tensor(self.get_parameter("brake_speeds").value),
-            scaledown*torch.as_tensor(self.get_parameter("max_brakes").value),
+            torch.as_tensor(self.params.dynamic_limits.braking.speeds),
+            scaledown*self.params.dynamic_limits.braking.scale_factor*torch.as_tensor(self.params.dynamic_limits.braking.limits),
 
-            torch.as_tensor(self.get_parameter("long_accel_speeds").value),
-            scaledown*torch.as_tensor(self.get_parameter("max_long_accels").value),
+            torch.as_tensor(self.params.dynamic_limits.longitudinal_acceleration.speeds),
+            scaledown*self.params.dynamic_limits.longitudinal_acceleration.scale_factor*torch.as_tensor(self.params.dynamic_limits.longitudinal_acceleration.limits),
 
-            torch.as_tensor(self.get_parameter("lat_accel_speeds").value),
-            scaledown*torch.as_tensor(self.get_parameter("max_lat_accels").value),
+            torch.as_tensor(self.params.dynamic_limits.lateral_acceleration.speeds),
+            scaledown*self.params.dynamic_limits.lateral_acceleration.scale_factor*torch.as_tensor(self.params.dynamic_limits.lateral_acceleration.limits),
 
             gauss_order=self.params.dynamics_gauss.order,
             stdev=self.params.dynamics_gauss.stdev,
