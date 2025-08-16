@@ -30,7 +30,10 @@ dbf_overtaking:
       type: int
       default_value: 6
       description: "Number of iterations to use in newton's method"
-
+  extra_boundary_factor:
+    type: double
+    default_value: 0.1
+    description: "Extra distance (as ratio of car width) to expand the boundaries. Negative value means shrink boundaries"
   bounds_newton:
     stepsize:
       type: double

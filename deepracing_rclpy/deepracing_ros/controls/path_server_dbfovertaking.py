@@ -111,8 +111,8 @@ class DBFOvertakingPathServer(PathServerROS):
         shrink_factor = 1.0
         centerline_dense = torch.as_tensor(np.stack([widthmap_structured[k] for k in ["x", "y"]], axis=1)).type_as(line_all_speeds)
         _centerline_helper_ = mu.SimplePathHelper.from_closed_path(centerline_dense, 0.5).to(tensor=line_all_points)
-        left_widths = shrink_factor*torch.as_tensor(widthmap_structured["ob_distance"]).type_as(line_all_speeds) + 0.1*self.params.car_dims.width
-        right_widths = shrink_factor*torch.as_tensor(widthmap_structured["ib_distance"]).type_as(line_all_speeds) - 0.1*self.params.car_dims.width
+        left_widths = shrink_factor*torch.as_tensor(widthmap_structured["ob_distance"]).type_as(line_all_speeds) + self.params.extra_boundary_factor*self.params.car_dims.width
+        right_widths = shrink_factor*torch.as_tensor(widthmap_structured["ib_distance"]).type_as(line_all_speeds) - self.params.extra_boundary_factor*self.params.car_dims.width
         _bounds_checker_ = BoundsChecker(gauss_order=self.params.bounds_gauss.order, dT=self.params.time_horizon, stdev=self.params.bounds_gauss.stdev,
             dr_samp=self.params.bounds_gauss.dr_samp, alpha=self.params.bounds_gauss.alpha,
             left_widths=left_widths, right_widths=right_widths, refline_points=centerline_dense,
