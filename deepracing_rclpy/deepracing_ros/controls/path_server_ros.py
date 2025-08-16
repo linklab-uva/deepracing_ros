@@ -33,6 +33,7 @@ from rclpy.publisher import Publisher
 from rclpy.duration import Duration
 from rclpy.timer import Timer, Rate
 from rclpy.time import Time
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from copy import deepcopy
 import sensor_msgs
 from scipy.spatial.kdtree import KDTree
@@ -53,7 +54,7 @@ class PathServerROS(Node):
     odom_sub : rclpy.subscription.Subscription 
         A subscription to listen for the current odometry of the car in the global coordinate system
     """
-    def __init__(self, name='path_server_ros'):
+    def __init__(self, name='path_server_ros', with_tf=True):
         super(PathServerROS,self).__init__(name, allow_undeclared_parameters=False, automatically_declare_parameters_from_overrides=False)
           
         
@@ -63,12 +64,13 @@ class PathServerROS(Node):
         self.base_link_id : str = "base_link_%s" %(self.carname,)
 
         self.player_car_index : int = 0
-       
+        self.measurements_cb_group = None #MutuallyExclusiveCallbackGroup()
         self.current_odom : Odometry | None = None
-        self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = Duration(seconds=5))
-        self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
-        self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(Odometry, 'odom', self.odomCallback, 1)
-        self.session_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketSessionData, 'session_data', self.sessionCallback, 1)
+        if with_tf:
+            self.tf2_buffer : tf2_ros.Buffer = tf2_ros.Buffer(cache_time = Duration(seconds=5))
+            self.tf2_listener : tf2_ros.TransformListener = tf2_ros.TransformListener(self.tf2_buffer, self, spin_thread=False)
+        self.odom_sub : rclpy.subscription.Subscription = self.create_subscription(Odometry, 'odom', self.odomCallback, 1, callback_group=self.measurements_cb_group)
+        self.session_sub : rclpy.subscription.Subscription = self.create_subscription(TimestampedPacketSessionData, 'session_data', self.sessionCallback, 1, callback_group=self.measurements_cb_group)
         self.current_session_data : TimestampedPacketSessionData = None
         self.current_odom_mutex = threading.Semaphore()
 

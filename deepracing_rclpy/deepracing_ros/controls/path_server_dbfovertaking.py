@@ -38,7 +38,7 @@ except ImportError:
 
 class DBFOvertakingPathServer(PathServerROS):
     def __init__(self):
-        super(DBFOvertakingPathServer, self).__init__()
+        super(DBFOvertakingPathServer, self).__init__(with_tf=False)
         self.get_logger().info("Hello Path Server! I live in namespace: %s" % (self.get_namespace()))
 
         self.declare_parameter(PlannerParamNames.STATE, value="CREATED")

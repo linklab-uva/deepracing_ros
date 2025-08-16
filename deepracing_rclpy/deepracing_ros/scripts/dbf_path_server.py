@@ -13,11 +13,13 @@
 import rclpy.exceptions
 import rclpy, rclpy.logging, rclpy.client, rclpy.node
 import rclpy.timer
+import rclpy.executors
 import numpy as np
 import sensor_msgs_py.point_cloud2
 import deepracing_msgs.srv as deepracing_srvs
 from deepracing_ros.controls.path_server_dbfovertaking import DBFOvertakingPathServer
 import threading
+
 def call_line_service(getline_client : rclpy.client.Client, node : rclpy.node.Node, key : str):
     getlinereq : deepracing_srvs.GetLine.Request = deepracing_srvs.GetLine.Request()
     success = False
@@ -73,8 +75,8 @@ def main(args=None):
     # node.initialize(raceline_np, width_map_np, innerbound_np, outerbound_np)
     # initialize_thread.
     timer : rclpy.timer.Timer = node.create_timer(1.0/frequency_param.get_parameter_value().double_value, node.getTrajectory)
-
-    rclpy.spin(node)
+    # executor  = rclpy.executors.MultiThreadedExecutor(num_threads = 3)
+    rclpy.spin(node)#, executor=executor)
     
 
 
