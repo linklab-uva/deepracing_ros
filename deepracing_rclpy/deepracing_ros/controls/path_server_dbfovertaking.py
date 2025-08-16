@@ -431,7 +431,7 @@ class DBFOvertakingPathServer(PathServerROS):
                     return
                 tsamp = torch.linspace(tstart, tstart+1.6, steps=41).type_as(self.overtaking_curve)
                 numpy_cloud = math_C.to_cavsim_cloud(self.overtaking_curve, self.overtaking_dT, tsamp, matrix_factories,) 
-                cloud_msg = ros2_numpy.msgify(sensor_msgs.msg.PointCloud2, numpy_cloud)
+                cloud_msg : sensor_msgs.msg.PointCloud2 = ros2_numpy.msgify(sensor_msgs.msg.PointCloud2, numpy_cloud)
                 cloud_msg.header.frame_id="map"
                 cloud_msg.header.stamp = now.to_msg()
                 self.cloud_pub.publish(cloud_msg)
