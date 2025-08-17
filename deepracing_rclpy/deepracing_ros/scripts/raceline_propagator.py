@@ -109,7 +109,7 @@ class RacelinePropagator(rclpy.node.Node):
         if self.cavsim_prediction_pub is not None:
             lat_stdev_range = self.get_parameter(RacelinePropagator.LAT_STDEV_RANGE_PARAMETER_NAME).get_parameter_value().double_array_value
             long_stdev_range = self.get_parameter(RacelinePropagator.LONG_STDEV_RANGE_PARAMETER_NAME).get_parameter_value().double_array_value
-            tsamp = torch.linspace(0.0, self.tdelta[-1].item(), steps=300).type_as(self.tdelta)
+            tsamp = torch.linspace(0.0, self.tdelta[-1].item(), steps=200).type_as(self.tdelta)
             batchtrack, batchtrack_prediction = cavsim_utils.cbc_to_track(
                 control_points, delta_t, tsamp,
                 lat_stdev_range, long_stdev_range,

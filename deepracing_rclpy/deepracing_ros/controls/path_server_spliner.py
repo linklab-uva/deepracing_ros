@@ -176,7 +176,7 @@ class SplinerPathServer(PathServerROS):
 
         if (space_on_left<0) and (space_on_right>0):
             #If neither side has space. We can't overtake.
-            self.get_logger().error("Overtaking is impossible. insufficient space. Space on left: %f. Space on right: %f" 
+            self.get_logger().debug("Overtaking is impossible. insufficient space. Space on left: %f. Space on right: %f" 
                                     % (space_on_left.item(), space_on_right.item()))
             return
 
@@ -208,7 +208,7 @@ class SplinerPathServer(PathServerROS):
             optimized_ego_d = torch.as_tensor(result.x).type_as(all_ego_s)
             self.initial_guess = optimized_ego_d.cpu().numpy()
         else:
-            self.get_logger().error("Optimization failed: "  + result.message)
+            self.get_logger().debug("Optimization failed: "  + result.message)
             return
 
         dv_dr : torch.Tensor = self.raceline_frenet.raceline.__dspeed_dr__(all_ego_s)[0].squeeze(-1)
@@ -231,7 +231,7 @@ class SplinerPathServer(PathServerROS):
         # self.field_names_out=["x", "y", "z", "s", "roll", "psi", "kappa", "vx", "ax"]
         maxkappa = np.max(kappa)
         maxlateral_accel = np.max(lateral_accelout)
-        self.get_logger().info("Max Speed: %f. Max Kappa: %f. Max Lat Accel: %f. Max Long Accel: %f" % (rlspeeds.max().item(), float(maxkappa), float(maxlateral_accel), rlaccels.max().item()))
+        self.get_logger().debug("Max Speed: %f. Max Kappa: %f. Max Lat Accel: %f. Max Long Accel: %f" % (rlspeeds.max().item(), float(maxkappa), float(maxlateral_accel), rlaccels.max().item()))
         points_out = np.zeros([rlpoints.shape[0], len(self.field_names_out)], dtype=np.float32)
         #x,y. 
         points_out[:,:2] = overtaking_points.cpu().float()
@@ -283,7 +283,7 @@ class SplinerPathServer(PathServerROS):
         # interp_spline_speeds = np.linalg.norm(interp_spline(interp_times, nu=1), ord=2.0, axis=1)
         # line_all_speeds = torch.as_tensor(interp_spline_speeds).double()
         car_length = self.get_parameter(PlannerParamNames.CAR_LENGTH).get_parameter_value().double_value
-        drsamp = 0.375*car_length
+        drsamp = 0.6*car_length
         line_all_speeds = torch.as_tensor(raceline_structured["speed"]).type_as(line_all_points)
         self.get_logger().info("Building Raceline Helper")
         _raceline_helper_ : mu.RacelineHelper = mu.RacelineHelper.from_closed_path(
@@ -326,7 +326,7 @@ class SplinerPathServer(PathServerROS):
             tstart = torch.rand(1, dtype=torch.float32).item()*(_raceline_helper_.__r_of_t__.xend_vec[-1].item())
             tend = tstart + 7.0
             tsamp = torch.linspace(tstart, tend, steps=30).type_as(line_all_points)
-            tsamp_dense = torch.linspace(tstart, tend, steps=300).type_as(line_all_points)
+            tsamp_dense = torch.linspace(tstart, tend, steps=200).type_as(line_all_points)
             # rsamp, _ = self.raceline_frenet.raceline.__r_of_t__(tsamp)
             rsamp, rlpoints, rlvels, _ = self.raceline_frenet.raceline(t=tsamp)
             self.raceline_frenet.raceline(r=rsamp)
