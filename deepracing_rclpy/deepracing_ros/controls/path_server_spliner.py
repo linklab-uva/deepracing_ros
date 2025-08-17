@@ -28,7 +28,7 @@ from .spliner_utils import SplinerOptim
 
 class SplinerPathServer(PathServerROS):
     def __init__(self):
-        super(SplinerPathServer, self).__init__()
+        super(SplinerPathServer, self).__init__(with_tf=False)
         self.field_names_out=["x", "y", "z", "s", "roll", "psi", "kappa", "vx", "ax"]
         self.pc2fields_out = [
             sensor_msgs.msg.PointField(name=name, offset=4*i, datatype=sensor_msgs.msg.PointField.FLOAT32, count=1)
