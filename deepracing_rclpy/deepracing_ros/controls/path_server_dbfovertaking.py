@@ -495,7 +495,7 @@ class DBFOvertakingPathServer(PathServerROS):
         idx_resample = torch.empty_like(rfinal).long()
         particle_likelihoods = torch.empty_like(rfinal)
         success = torch.as_tensor(0).to(dtype=bool, device=idx_resample.device)
-        for i in range(12):
+        for i in range(self.params.max_iterations):
             # minrfinal, maxrfinal = torch.min(rfinal), torch.max(rfinal)
             # self.get_logger().debug("minrfinal: " + str(minrfinal) + " maxrfinal: " + str(maxrfinal) + " rfinal_min: " + str(rfinal_min))
             if i > 0:

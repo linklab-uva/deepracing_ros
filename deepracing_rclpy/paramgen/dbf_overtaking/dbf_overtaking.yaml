@@ -93,6 +93,10 @@ dbf_overtaking:
     type: int
     default_value: 3
     description: "Order of bezier curves to use"
+  max_iterations:
+    type: int
+    default_value: 9
+    description: "Total max iterations for the outer loop of the dbf algorithm"
   Nsegments:
     type: int
     default_value: 3
