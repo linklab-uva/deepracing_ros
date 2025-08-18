@@ -59,6 +59,10 @@ class SplinerOptim:
         self.q_ds = q_ds
         self.q_ddelta = q_ddelta
         self.kappa_max = kappa_max
+
+        self.curvature_constraint = None
+        self.collision_constraint = None
+        self.endpoint_constraints = None
     def objective(self, d : np.ndarray) -> float:
         return np.sum((d) ** 2) * self.q_d  + np.sum(np.diff(np.diff(d))**2) * self.q_ds + (np.diff(d)[0] ** 2) * self.q_ddelta
 
@@ -72,11 +76,11 @@ class SplinerOptim:
         """
         # Create the curvature constraint wrapper
         max_kappas = self.kappa_max*np.ones_like(opponent_d)
-        curvature_constraint = CurvatureConstraintWrapper(max_kappas, global_traj_kappas, delta_s)
-        collision_constraint = CollisionAvoidanceConstraintWrapper(opponent_d, safety_buffers)
-        endpoint_constraints = EndpointConstraintsWrapper(float(ego_d_guess[0]))
+        self.curvature_constraint = CurvatureConstraintWrapper(max_kappas, global_traj_kappas, delta_s)
+        self.collision_constraint = CollisionAvoidanceConstraintWrapper(opponent_d, safety_buffers)
+        self.endpoint_constraints = EndpointConstraintsWrapper(float(ego_d_guess[0]))
 
-        constraints = [curvature_constraint.as_scipy(), collision_constraint.as_scipy(), endpoint_constraints.as_scipy(len(ego_d_guess), keep_feasible=True)]
+        constraints = [self.curvature_constraint.as_scipy(), self.collision_constraint.as_scipy(), self.endpoint_constraints.as_scipy(len(ego_d_guess), keep_feasible=True)]
 
         bounds = Bounds(lower_bound, upper_bound, keep_feasible=True)
         

@@ -196,28 +196,48 @@ class SplinerPathServer(PathServerROS):
             guess = self.initial_guess.copy()
         else:
             guess = all_ego_d.cpu().numpy()
-        guess = np.clip(guess, lower_d.cpu().numpy(), upper_d.cpu().numpy())
+        lower_d_numpy = lower_d.cpu().numpy()
+        upper_d_numpy = upper_d.cpu().numpy()
+        guess = np.clip(guess, lower_d_numpy, upper_d_numpy)
         guess[0] = ego_current_d
         guess[-2] = guess[-1] = 0.0
         extra_safety_margin = 0.0*opponent_uncertainty_spline(t_spliner.cpu())[:,0]
+        collision_bounds = 1.75*car_width*np.ones(opponent_frenet_d.shape[0], dtype=float) + extra_safety_margin
+        opponent_frenet_d_numpy = opponent_frenet_d.cpu().numpy()
         result = self.optim_wrapper.optimize_d(
-            opponent_frenet_d.cpu().numpy(),  guess, 1.75*car_width*np.ones(opponent_frenet_d.shape[0], dtype=float) + extra_safety_margin,
-            lower_d.cpu().numpy(), upper_d.cpu().numpy(), global_kappas.cpu().numpy(), delta_s.cpu().numpy()
+            opponent_frenet_d_numpy,  guess, collision_bounds,
+            lower_d_numpy, upper_d_numpy, global_kappas.cpu().numpy(), delta_s.cpu().numpy()
         )
+
         if result.success:
-            optimized_ego_d = torch.as_tensor(result.x).type_as(all_ego_s)
-            self.initial_guess = optimized_ego_d.cpu().numpy()
+            optimized_ego_d : np.ndarray = result.x
         else:
             self.get_logger().debug("Optimization failed: "  + result.message)
             return
-
+        if np.any(optimized_ego_d<lower_d_numpy):
+            self.get_logger().error("Optimized d violates lower boundary for some reason.")
+            return
+        if np.any(optimized_ego_d>upper_d_numpy):
+            self.get_logger().error("Optimized d violates upper boundary for some reason.")
+            return
+        frenet_deltas = np.abs(opponent_frenet_d_numpy - optimized_ego_d)
+        if np.any(frenet_deltas < collision_bounds):
+            self.get_logger().error("Optimized d violates collision limits for some reason")
+            return
+        curvature_constraint_vals = self.optim_wrapper.curvature_constraint.fun(optimized_ego_d)
+        if np.any(curvature_constraint_vals>self.optim_wrapper.kappa_max):
+            self.get_logger().error("Optimized d violates curvature limits for some reason")
+            return
+        self.initial_guess = optimized_ego_d
+        # kappavals = np.append(curvature_constraint_vals, [curvature_constraint_vals[-1], curvature_constraint_vals[-1]])  
+        
         dv_dr : torch.Tensor = self.raceline_frenet.raceline.__dspeed_dr__(all_ego_s)[0].squeeze(-1)
         rlaccels = dv_dr * rlspeeds
-        # rlaccels = self.raceline_frenet.raceline.__along_of_t__(tglobal)[0].squeeze(-1)
+        overtaking_points = rlpoints + rlnormals*(torch.as_tensor(optimized_ego_d).type_as(all_ego_s)[:,None])
+        rlaccels = self.raceline_frenet.raceline.__along_of_t__(tglobal)[0].squeeze(-1)
         t_spliner_cpu = t_spliner.cpu()
-        overtaking_points = rlpoints + rlnormals*optimized_ego_d[:,None]
         splineout : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(
-            t_spliner_cpu, overtaking_points.cpu(), k=3
+            t_spliner_cpu, overtaking_points.cpu(), k=2
         )
         velout : np.ndarray = splineout(t_spliner_cpu, nu=1)
         speedsout : np.ndarray = np.linalg.norm(velout, ord=2.0, axis=-1, keepdims=False)
@@ -225,13 +245,15 @@ class SplinerPathServer(PathServerROS):
         normalsout = tangentsout[:,[1,0]].copy()
         normalsout[:,0] *= -1.0
         accelout = splineout(t_spliner_cpu, nu=2)
-        lateral_accelout = np.abs(np.sum(accelout*normalsout, axis=1))
+        lateral_accelout = (np.sum(accelout*normalsout, axis=1))
         kappa = lateral_accelout/np.square(speedsout)
         
-        # self.field_names_out=["x", "y", "z", "s", "roll", "psi", "kappa", "vx", "ax"]
-        maxkappa = np.max(kappa)
-        maxlateral_accel = np.max(lateral_accelout)
+        maxkappa = np.max(np.abs(kappa))
+        maxlateral_accel = np.max(np.abs(lateral_accelout))
         self.get_logger().debug("Max Speed: %f. Max Kappa: %f. Max Lat Accel: %f. Max Long Accel: %f" % (rlspeeds.max().item(), float(maxkappa), float(maxlateral_accel), rlaccels.max().item()))
+        
+        
+        # self.field_names_out=["x", "y", "z", "s", "roll", "psi", "kappa", "vx", "ax"]
         points_out = np.zeros([rlpoints.shape[0], len(self.field_names_out)], dtype=np.float32)
         #x,y. 
         points_out[:,:2] = overtaking_points.cpu().float()
