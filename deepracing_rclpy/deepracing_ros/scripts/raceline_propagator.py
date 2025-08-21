@@ -46,6 +46,7 @@ class RacelinePropagator(rclpy.node.Node):
     NSEGMENTS_PARAMETER_NAME="Nsegments"
     GPU_PARAMETER_NAME="gpu"
     TIMESCALE_PARAMETER_NAME="timescale"
+    NPOINTS_CAVSIM_PARAMETER_NAME="npoints_cavsim"
     PREDICTION_HORIZON_PARAMETER_NAME="time_horizon"
     PUBLISH_CAVSIM_PARAMETER_NAME="publish_cavsim"
     LAT_STDEV_RANGE_PARAMETER_NAME="stdev_range.lateral"
@@ -56,6 +57,7 @@ class RacelinePropagator(rclpy.node.Node):
         self.declare_parameter(RacelinePropagator.STATE_PARAMETER_NAME, value="CREATED")
         self.declare_parameter(RacelinePropagator.GPU_PARAMETER_NAME, value=-1)
         self.declare_parameter(RacelinePropagator.NSEGMENTS_PARAMETER_NAME, value=4)
+        self.declare_parameter(RacelinePropagator.NPOINTS_CAVSIM_PARAMETER_NAME, value=200)
         self.declare_parameter(RacelinePropagator.TIMESCALE_PARAMETER_NAME, value=0.75)
         self.declare_parameter(RacelinePropagator.PREDICTION_HORIZON_PARAMETER_NAME, value=7.0)
         publish_cavsim_param = self.declare_parameter(RacelinePropagator.PUBLISH_CAVSIM_PARAMETER_NAME, value=False)
@@ -107,9 +109,10 @@ class RacelinePropagator(rclpy.node.Node):
         cbc_msg = C.toCompositeBezierCurveMsg(delta_t, control_points, header=odom.header)
        
         if self.cavsim_prediction_pub is not None:
+            npoints_cavsim =  self.get_parameter(RacelinePropagator.NPOINTS_CAVSIM_PARAMETER_NAME).get_parameter_value().integer_value
             lat_stdev_range = self.get_parameter(RacelinePropagator.LAT_STDEV_RANGE_PARAMETER_NAME).get_parameter_value().double_array_value
             long_stdev_range = self.get_parameter(RacelinePropagator.LONG_STDEV_RANGE_PARAMETER_NAME).get_parameter_value().double_array_value
-            tsamp = torch.linspace(0.0, self.tdelta[-1].item(), steps=200).type_as(self.tdelta)
+            tsamp = torch.linspace(0.0, self.tdelta[-1].item(), steps=npoints_cavsim).type_as(self.tdelta)
             batchtrack, batchtrack_prediction = cavsim_utils.cbc_to_track(
                 control_points, delta_t, tsamp,
                 lat_stdev_range, long_stdev_range,
