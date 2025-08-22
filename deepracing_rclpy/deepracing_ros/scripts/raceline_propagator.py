@@ -48,7 +48,6 @@ class RacelinePropagator(rclpy.node.Node):
     TIMESCALE_PARAMETER_NAME="timescale"
     NPOINTS_CAVSIM_PARAMETER_NAME="npoints_cavsim"
     PREDICTION_HORIZON_PARAMETER_NAME="time_horizon"
-    PUBLISH_CAVSIM_PARAMETER_NAME="publish_cavsim"
     LAT_STDEV_RANGE_PARAMETER_NAME="stdev_range.lateral"
     LONG_STDEV_RANGE_PARAMETER_NAME="stdev_range.longitudinal"
     def __init__(self, name="raceline_propagator"):
@@ -57,13 +56,12 @@ class RacelinePropagator(rclpy.node.Node):
         self.declare_parameter(RacelinePropagator.STATE_PARAMETER_NAME, value="CREATED")
         self.declare_parameter(RacelinePropagator.GPU_PARAMETER_NAME, value=-1)
         self.declare_parameter(RacelinePropagator.NSEGMENTS_PARAMETER_NAME, value=4)
-        self.declare_parameter(RacelinePropagator.NPOINTS_CAVSIM_PARAMETER_NAME, value=200)
+        npoints_cavsim = self.declare_parameter(RacelinePropagator.NPOINTS_CAVSIM_PARAMETER_NAME, value=-1).get_parameter_value().integer_value
         self.declare_parameter(RacelinePropagator.TIMESCALE_PARAMETER_NAME, value=0.75)
         self.declare_parameter(RacelinePropagator.PREDICTION_HORIZON_PARAMETER_NAME, value=7.0)
-        publish_cavsim_param = self.declare_parameter(RacelinePropagator.PUBLISH_CAVSIM_PARAMETER_NAME, value=False)
         self.declare_parameter(RacelinePropagator.LAT_STDEV_RANGE_PARAMETER_NAME, value=[0.0, 0.0])
         self.declare_parameter(RacelinePropagator.LONG_STDEV_RANGE_PARAMETER_NAME, value=[0.0, 0.0])
-        if publish_cavsim_param.value:
+        if npoints_cavsim>0:
             #rclcpp::QoS(1).best_effort();
             cavsim_qos = rclpy.qos.QoSProfile(depth=1)
             cavsim_qos.reliability = rclpy.qos.ReliabilityPolicy.BEST_EFFORT
@@ -118,7 +116,7 @@ class RacelinePropagator(rclpy.node.Node):
                 lat_stdev_range, long_stdev_range,
                 self.raceline_helper.__curve_of_r__.__curve__.matrix_factory,
                 self.raceline_helper.__curve_of_r__.__curve_deriv__.matrix_factory,
-                odom, track_id=3, reputation=1.0
+                odom, track_id=3, reputation=1.0 #, matrix_factory_2ndderiv=self.raceline_helper.__curve_of_r__.__curve_2nd_deriv__.matrix_factory
             )
             self.cavsim_track_pub.publish(batchtrack)
             self.cavsim_prediction_pub.publish(batchtrack_prediction)
