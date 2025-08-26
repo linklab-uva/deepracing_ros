@@ -17,6 +17,10 @@ dbf_overtaking:
       type: double
       default_value: 0.0
       description: "Alpha value for gauss-legendre integration of dynamics violation probability"
+    gamma:
+      type: double
+      default_value: 1.0
+      description: "Gamma value for gauss-legendre integration of dynamics violation probability"
   dynamics_newton:
     stepsize:
       type: double

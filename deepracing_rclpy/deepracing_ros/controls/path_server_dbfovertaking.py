@@ -136,6 +136,7 @@ class DBFOvertakingPathServer(PathServerROS):
             gauss_order=self.params.dynamics_gauss.order,
             stdev=self.params.dynamics_gauss.stdev,
             alpha=self.params.dynamics_gauss.alpha,
+            gamma=self.params.dynamics_gauss.gamma,
             newton_iterations=self.params.dynamics_newton.iterations,
             newton_stepsize=self.params.dynamics_newton.stepsize,
             max_step=self.params.dynamics_newton.max_step,

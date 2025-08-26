@@ -158,7 +158,7 @@ class SplinerPathServer(PathServerROS):
         potentially_colliding_uncertainties = torch.as_tensor(opponent_uncertainty_spline(potentially_colliding_times)).type_as(opponent_positions)
         opponent_lat_safety_distances =  3.0*potentially_colliding_uncertainties[:,0] + car_width
         opponent_lon_safety_distances =  3.0*potentially_colliding_uncertainties[:,1] + car_length
-        opponent_frenet_s, rlpoints, rlvels, lower_d_opponent, upper_d_opponent = self.raceline_frenet.at_closest_point(potentially_colliding_positions)
+        opponent_frenet_s, rlpoints, rlvels, lower_d_opponent, upper_d_opponent = self.raceline_frenet.at_closest_point(potentially_colliding_positions, newton_iterations=self.newton_iterations)
         rlspeeds : torch.Tensor = torch.linalg.vector_norm(rlvels, dim=-1)
         rltangents = rlvels/rlspeeds[..., None]
         rlnormals = rltangents[:,[1,0]].clone()
@@ -201,7 +201,8 @@ class SplinerPathServer(PathServerROS):
         guess = np.clip(guess, lower_d_numpy, upper_d_numpy)
         guess[0] = ego_current_d
         guess[-2] = guess[-1] = 0.0
-        extra_safety_margin = 0.0*opponent_uncertainty_spline(t_spliner.cpu())[:,0]
+        t_spliner_cpu = t_spliner.cpu()
+        extra_safety_margin = 3.0*opponent_uncertainty_spline(t_spliner_cpu)[:,0]
         collision_bounds = 1.75*car_width*np.ones(opponent_frenet_d.shape[0], dtype=float) + extra_safety_margin
         opponent_frenet_d_numpy = opponent_frenet_d.cpu().numpy()
         result = self.optim_wrapper.optimize_d(
@@ -235,7 +236,6 @@ class SplinerPathServer(PathServerROS):
         rlaccels = dv_dr * rlspeeds
         overtaking_points = rlpoints + rlnormals*(torch.as_tensor(optimized_ego_d).type_as(all_ego_s)[:,None])
         rlaccels = self.raceline_frenet.raceline.__along_of_t__(tglobal)[0].squeeze(-1)
-        t_spliner_cpu = t_spliner.cpu()
         splineout : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(
             t_spliner_cpu, overtaking_points.cpu(), k=2
         )
