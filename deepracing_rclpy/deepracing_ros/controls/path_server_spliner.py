@@ -1,4 +1,7 @@
 
+import math
+import builtin_interfaces
+import builtin_interfaces.msg
 import deepracing_models.math_utils.convert as math_C
 import deepracing_models.math_utils as mu, deepracing_ros.convert as C
 from deepracing_ros.controls.path_server_ros import PathServerROS
@@ -62,6 +65,8 @@ class SplinerPathServer(PathServerROS):
         self.pc2_pub = self.create_publisher(sensor_msgs.msg.PointCloud2, "pc2_out", predictions_qos)
         self.published_first_path=False
         self.path_switcher = self.create_publisher(std_msgs.msg.String, "path_switch", 1)
+
+        self.otend_publisher = self.create_publisher(builtin_interfaces.msg.Time, "overtake_end", 1)
         
         self.ego_frenet_pub = self.create_publisher(uva_iac_msgs.msg.FrenetPointStamped, "ego_frenet", 1)
         self.target_frenet_pub = self.create_publisher(uva_iac_msgs.msg.FrenetPointStamped, "target_frenet", 1)
@@ -107,7 +112,7 @@ class SplinerPathServer(PathServerROS):
             scipy.interpolate.make_interp_spline(prediction_times.cpu().numpy(), torch.stack([opponent_lat_uncertainties, opponent_lon_uncertainties], dim=1).cpu().numpy(), k=1)
 
         opponent_lat_safety_distances =  3.0*opponent_lat_uncertainties + car_width
-        opponent_lon_safety_distances =  3.0*opponent_lon_uncertainties + car_length
+        opponent_lon_safety_distances =  3.0*opponent_lon_uncertainties + 1.25*car_length
 
         opponent_frenet_s, rl_projections, rl_tangents, _ = self.raceline_frenet.raceline.closest_point_approximate(opponent_positions, newton_iterations=self.newton_iterations)
         rl_tangents : torch.Tensor = rl_tangents/torch.linalg.vector_norm(rl_tangents, dim=-1, keepdim=True)
@@ -131,6 +136,11 @@ class SplinerPathServer(PathServerROS):
         ego_frenet_msg.s = ego_current_s.item()
         ego_frenet_msg.d = ego_current_d
 
+        #Check if overtake is done
+        current_delta_s : float = ego_frenet_msg.s - opponent_frenet_msg.s
+        if (current_delta_s > (opponent_lon_safety_distances[0].item())) and (current_delta_s < 2000.0) and (math.fabs(ego_frenet_msg.d)<(0.25*car_width)):
+            self.otend_publisher.publish(ego_odom.header.stamp)
+
         self.target_frenet_pub.publish(opponent_frenet_msg)
         self.ego_frenet_pub.publish(ego_frenet_msg)
 
@@ -139,13 +149,15 @@ class SplinerPathServer(PathServerROS):
 
         ego_dense_s = self.raceline_frenet.raceline.__r_of_t__(ego_current_t + prediction_times)[0].squeeze(-1)
         relative_s = ego_dense_s - opponent_frenet_s
+        dense_potential_collision = torch.abs(relative_s) < opponent_lon_safety_distances
+        t_spliner = torch.linspace(0.0, prediction_times[-1], steps=30).type_as(prediction_times)
 
-        I_cstart = torch.argmax(((relative_s + opponent_lon_safety_distances)>0.0).short())
+        I_cstart = torch.argmax(dense_potential_collision.short())
         t_cstart = prediction_times[I_cstart].item()
-        I_cend = torch.argmax(((relative_s - opponent_lon_safety_distances)>0.0).short())
+
+        I_cend = dense_potential_collision.shape[0] - torch.argmax(torch.flip(dense_potential_collision, dims=[0]).short()) - 1
         t_cend = prediction_times[I_cend].item()
 
-        t_spliner = torch.linspace(0.0, prediction_times[-1], steps=30).type_as(prediction_times)
         idx_before_collision = (t_spliner < t_cstart)
         idx_after_collision = (t_spliner > t_cend)
         idx_potential_collision = (~idx_before_collision)*(~idx_after_collision)
@@ -293,7 +305,7 @@ class SplinerPathServer(PathServerROS):
     def initialize(self, raceline_structured : np.ndarray, innerbound_structured : np.ndarray, outerbound_structured : np.ndarray):
         self.set_parameters([rclpy.Parameter(PlannerParamNames.STATE, rclpy.Parameter.Type.STRING, "INITIALIZING"),])
         gpu = self.get_parameter(PlannerParamNames.GPU).get_parameter_value().integer_value
-        device = torch.device("cuda:%d" % gpu if gpu>=0 else "cpu")
+        device = torch.device("cuda:%d" % gpu if (torch.cuda.is_available() and gpu>=0) else "cpu")
         timescale = self.get_parameter(PlannerParamNames.TIMESCALE).get_parameter_value().double_value
         torch.set_float32_matmul_precision("high")
         times_in = raceline_structured["time"].astype(np.float64)
