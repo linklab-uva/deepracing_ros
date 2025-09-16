@@ -120,7 +120,7 @@ class DBFOvertakingPathServer(PathServerROS):
         ).eval().to(tensor=line_all_points)
         self.get_logger().info("Built Bounds Checker")
         nd = torch.distributions.Normal(0.0, 1.0)
-        scaledown = nd.cdf(torch.as_tensor(2.0).sqrt()).item()
+        scaledown = nd.cdf(torch.as_tensor(1.65).sqrt()).item()
         self.get_logger().info("Building Dynamics Checker")
         # brake_factor = long_accel_factor = lat_accel_factor = self.params.timescale
         _dynamic_violation_estimator_ = ExceedLimitsProbabilityEstimator(
@@ -325,6 +325,10 @@ class DBFOvertakingPathServer(PathServerROS):
             self.handleStateIdle(now)
 
     def handleStatePlanning(self, now : rclpy.time.Time):
+        time_since_epoch = (now - rclpy.time.Time(clock_type=now.clock_type)).nanoseconds*1e-9
+        if time_since_epoch<0.75:
+            # Wait for entire ROS system to stabilize
+            return
         with self.current_odom_mutex:
             current_pose_msg = deepcopy(self.current_odom.pose.pose)
             current_vel_msg = deepcopy(self.current_odom.twist.twist)
@@ -352,6 +356,10 @@ class DBFOvertakingPathServer(PathServerROS):
                 raise ValueError("Unable to acquire opponent_curve_mutex")
             opponent_curve_msg = deepcopy(self.opponent_curve_msg)
             self.opponent_curve_mutex.release()
+            time_since_opponent_curve = (now - rclpy.time.Time.from_msg(opponent_curve_msg.header.stamp)).nanoseconds*1e-9
+            if time_since_opponent_curve>0.1:
+                self.get_logger().warning("Old opponent curve: %.3f sec" % (time_since_opponent_curve,))
+                return
             TV_curve_dT, Targetvehicle_curve  = C.fromCompositeBezierCurveMsg(opponent_curve_msg, dtype=self.tfit.dtype, device=self.tfit.device)
             Targetvehicle_curve = Targetvehicle_curve[...,[0,1]]
             # print(Targetvehicle_curve.shape)

@@ -55,10 +55,10 @@ class RacelinePropagator(rclpy.node.Node):
         self.raceline_helper : mu.RacelineHelper = None
         self.declare_parameter(RacelinePropagator.STATE_PARAMETER_NAME, value="CREATED")
         self.declare_parameter(RacelinePropagator.GPU_PARAMETER_NAME, value=-1)
-        self.declare_parameter(RacelinePropagator.NSEGMENTS_PARAMETER_NAME, value=4)
         npoints_cavsim = self.declare_parameter(RacelinePropagator.NPOINTS_CAVSIM_PARAMETER_NAME, value=-1).get_parameter_value().integer_value
         self.declare_parameter(RacelinePropagator.TIMESCALE_PARAMETER_NAME, value=0.75)
         self.declare_parameter(RacelinePropagator.PREDICTION_HORIZON_PARAMETER_NAME, value=7.0)
+        self.declare_parameter(RacelinePropagator.NSEGMENTS_PARAMETER_NAME, value=4)
         self.declare_parameter(RacelinePropagator.LAT_STDEV_RANGE_PARAMETER_NAME, value=[0.0, 0.0])
         self.declare_parameter(RacelinePropagator.LONG_STDEV_RANGE_PARAMETER_NAME, value=[0.0, 0.0])
         if npoints_cavsim>0:
@@ -80,6 +80,7 @@ class RacelinePropagator(rclpy.node.Node):
             self.get_logger().warn("Received odometry while not in PREDICTING state. Current state: %s" % (state,))
             return
         # self.get_logger().info("Received odometry")
+        tick = time.time()
         pos_msg : geometry_msgs.msg.Point = odom.pose.pose.position
         vel_msg : geometry_msgs.msg.Vector3 = odom.twist.twist.linear
         quat_msg : geometry_msgs.msg.Quaternion = odom.pose.pose.orientation
@@ -91,7 +92,6 @@ class RacelinePropagator(rclpy.node.Node):
 
         vel = torch.as_tensor(rot.apply(vel_local)[:2]).type_as(self.raceline_helper.__arclengths_in__)
         pos = torch.as_tensor([pos_msg.x, pos_msg.y,]).type_as(vel)
-
         closest_r, _, _, _ = self.raceline_helper.closest_point_approximate(pos[None], newton_iterations=4)
 
         closest_t = self.raceline_helper.t_of_r(closest_r)[0]
@@ -105,7 +105,11 @@ class RacelinePropagator(rclpy.node.Node):
         delta_t = torch.diff(tswitch, dim=0)
 
         cbc_msg = C.toCompositeBezierCurveMsg(delta_t, control_points, header=odom.header)
-       
+        tock = time.time()
+        dt = tock - tick
+        if dt>0.1:
+            self.get_logger().warning("Long computation time: %.3f sec. Not publishing" % (dt,))
+            return
         if self.cavsim_prediction_pub is not None:
             npoints_cavsim =  self.get_parameter(RacelinePropagator.NPOINTS_CAVSIM_PARAMETER_NAME).get_parameter_value().integer_value
             lat_stdev_range = self.get_parameter(RacelinePropagator.LAT_STDEV_RANGE_PARAMETER_NAME).get_parameter_value().double_array_value
@@ -116,7 +120,8 @@ class RacelinePropagator(rclpy.node.Node):
                 lat_stdev_range, long_stdev_range,
                 self.raceline_helper.__curve_of_r__.__curve__.matrix_factory,
                 self.raceline_helper.__curve_of_r__.__curve_deriv__.matrix_factory,
-                odom, track_id=3, reputation=1.0 #, matrix_factory_2ndderiv=self.raceline_helper.__curve_of_r__.__curve_2nd_deriv__.matrix_factory
+                self.raceline_helper.__curve_of_r__.__curve_2nd_deriv__.matrix_factory,
+                odom, track_id=3, reputation=1.0
             )
             self.cavsim_track_pub.publish(batchtrack)
             self.cavsim_prediction_pub.publish(batchtrack_prediction)
@@ -129,15 +134,16 @@ class RacelinePropagator(rclpy.node.Node):
         self.set_parameters([stateparam,])
         racelinepoints = torch.as_tensor(np.stack([raceline_np[k] for k in ["x", "y",]], axis=1), dtype=torch.float64)#, device=torch.device("cuda:0"))
         gpu = self.get_parameter(RacelinePropagator.GPU_PARAMETER_NAME).get_parameter_value().integer_value
-        if gpu>=0: racelinepoints = racelinepoints.cuda(gpu)
+        if torch.cuda.is_available() and gpu >= 0: racelinepoints = racelinepoints.cuda(gpu)
         timescale = self.get_parameter(RacelinePropagator.TIMESCALE_PARAMETER_NAME).get_parameter_value().double_value
         racelinespeeds = timescale*torch.as_tensor(raceline_np["speed"]).type_as(racelinepoints)
         self.get_logger().info("Building raceline helper")
         raceline_helper = mu.RacelineHelper.from_closed_path(racelinepoints, racelinespeeds, 1.0).to(tensor=racelinepoints)#.float()
         self.get_logger().info("Built raceline helper")
 
+        Nsegments = self.get_parameter(RacelinePropagator.NSEGMENTS_PARAMETER_NAME).get_parameter_value().integer_value
         prediction_horizon = self.get_parameter(RacelinePropagator.PREDICTION_HORIZON_PARAMETER_NAME).get_parameter_value().double_value
-        self.tdelta = torch.linspace(0.0, prediction_horizon, steps=30).type_as(raceline_helper.__arclengths_in__)
+        self.tdelta = torch.linspace(0.0, prediction_horizon, steps=(Nsegments*10)).type_as(raceline_helper.__arclengths_in__)
 
 
         self.get_logger().info("Compiling raceline helper")
