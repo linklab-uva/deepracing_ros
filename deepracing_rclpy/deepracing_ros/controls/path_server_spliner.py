@@ -66,6 +66,7 @@ class SplinerPathServer(PathServerROS):
         self.published_first_path=False
         self.path_switcher = self.create_publisher(std_msgs.msg.String, "path_switch", 1)
 
+        self.otstart_publisher = self.create_publisher(builtin_interfaces.msg.Time, "overtake_start", 1)
         self.otend_publisher = self.create_publisher(builtin_interfaces.msg.Time, "overtake_end", 1)
         
         self.ego_frenet_pub = self.create_publisher(uva_iac_msgs.msg.FrenetPointStamped, "ego_frenet", 1)
@@ -111,8 +112,8 @@ class SplinerPathServer(PathServerROS):
         opponent_uncertainty_spline : scipy.interpolate.BSpline = \
             scipy.interpolate.make_interp_spline(prediction_times.cpu().numpy(), torch.stack([opponent_lat_uncertainties, opponent_lon_uncertainties], dim=1).cpu().numpy(), k=1)
 
-        opponent_lat_safety_distances =  3.0*opponent_lat_uncertainties + car_width
-        opponent_lon_safety_distances =  3.0*opponent_lon_uncertainties + 1.25*car_length
+        opponent_lat_safety_distances =  3.0*opponent_lat_uncertainties + 1.5*car_width
+        opponent_lon_safety_distances =  3.0*opponent_lon_uncertainties + 1.5*car_length
 
         opponent_frenet_s, rl_projections, rl_tangents, _ = self.raceline_frenet.raceline.closest_point_approximate(opponent_positions, newton_iterations=self.newton_iterations)
         rl_tangents : torch.Tensor = rl_tangents/torch.linalg.vector_norm(rl_tangents, dim=-1, keepdim=True)
@@ -138,7 +139,7 @@ class SplinerPathServer(PathServerROS):
 
         #Check if overtake is done
         current_delta_s : float = ego_frenet_msg.s - opponent_frenet_msg.s
-        if (current_delta_s > (opponent_lon_safety_distances[0].item())) and (current_delta_s < 2000.0) and (math.fabs(ego_frenet_msg.d)<(0.25*car_width)):
+        if (current_delta_s > (opponent_lon_safety_distances[0].item())) and (current_delta_s < 2000.0) and (math.fabs(ego_frenet_msg.d)<(0.05*car_width)):
             self.otend_publisher.publish(ego_odom.header.stamp)
 
         self.target_frenet_pub.publish(opponent_frenet_msg)
@@ -298,6 +299,7 @@ class SplinerPathServer(PathServerROS):
         self.pc2_pub.publish(cloud_msg)
         if not self.published_first_path:
             self.path_switcher.publish(std_msgs.msg.String(data="graph"))
+            self.otstart_publisher.publish(ego_odom.header.stamp)
             self.published_first_path = True
 
 
