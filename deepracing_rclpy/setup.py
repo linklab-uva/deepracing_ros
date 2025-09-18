@@ -43,6 +43,7 @@ setup(
               ])),
     entry_points={
         'console_scripts': [
+            'psutil_publisher = %s.scripts.psutil_publisher:main' % (python_pkg_name),
             'raceline_propagator = %s.scripts.raceline_propagator:main' % (python_pkg_name),
             'spliner_path_server = %s.scripts.spliner_path_server:main' % (python_pkg_name),
             'dbf_path_server = %s.scripts.dbf_path_server:main' % (python_pkg_name),
