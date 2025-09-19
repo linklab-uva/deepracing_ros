@@ -11,9 +11,7 @@
 # limitations under the License.
 
 
-from encodings import latin_1
 import threading
-from turtle import pos
 import rclpy
 import rclpy.qos
 import rclpy.client
