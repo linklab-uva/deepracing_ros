@@ -228,6 +228,9 @@ class SplinerPathServer(PathServerROS):
             opponent_frenet_d_numpy,  guess, collision_bounds,
             lower_d_numpy, upper_d_numpy, global_kappas.cpu().numpy(), delta_s.cpu().numpy()
         )
+        tock_wall = time.time()
+        delta_wall = tock_wall - tick_wall
+        self.computation_time_publisher.publish(std_msgs.msg.Float64(data=delta_wall))
 
         if result.success:
             optimized_ego_d : np.ndarray = result.x
@@ -294,11 +297,6 @@ class SplinerPathServer(PathServerROS):
         points_out[:,8] = (rlaccels).cpu().numpy()
         cloud_msg = sensor_msgs_py.point_cloud2.create_cloud(ego_odom.header, self.pc2fields_out, points_out.tolist())
         tock = self.get_clock().now()
-        tock_wall = time.time()
-
-        delta_wall = tock_wall - tick_wall
-
-        self.computation_time_publisher.publish(std_msgs.msg.Float64(data=delta_wall))
 
         delta = tock - tick
 

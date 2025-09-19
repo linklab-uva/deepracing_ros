@@ -338,6 +338,7 @@ class DBFOvertakingPathServer(PathServerROS):
         current_position_msg = current_pose_msg.position
         current_position = torch.as_tensor([current_position_msg.x, current_position_msg.y]).type_as(self.Curveparticle_tstart)
         current_velocity = (current_rotmat@torch.as_tensor([[current_vel_msg.linear.x,], [current_vel_msg.linear.y,]]).type_as(self.Curveparticle_tstart))[:,0]
+        total_comp_time = 0.0
         tick = time.time()
         
         rclosest, _, _, _ = self.raceline_helper.closest_point_approximate(current_position[None], newton_iterations=3)
@@ -354,6 +355,8 @@ class DBFOvertakingPathServer(PathServerROS):
         if self.opponent_curve_msg is None:
             self.get_logger().error("No opponent curve")
         else:
+            tock = time.time()
+            total_comp_time+=(tock-tick)
             if not self.opponent_curve_mutex.acquire(timeout=0.1):
                 raise ValueError("Unable to acquire opponent_curve_mutex")
             opponent_curve_msg = deepcopy(self.opponent_curve_msg)
@@ -364,6 +367,7 @@ class DBFOvertakingPathServer(PathServerROS):
                 return
             TV_curve_dT, Targetvehicle_curve  = C.fromCompositeBezierCurveMsg(opponent_curve_msg, dtype=self.tfit.dtype, device=self.tfit.device)
             Targetvehicle_curve = Targetvehicle_curve[...,[0,1]]
+            tick = time.time()
             # print(Targetvehicle_curve.shape)
             # print(TV_curve_dT.shape)
             TV_curve_tstart = torch.cumsum(TV_curve_dT, 0)-TV_curve_dT[0]
@@ -394,6 +398,9 @@ class DBFOvertakingPathServer(PathServerROS):
                 self.Curveparticles, self.Curveparticle_tstart, self.Curveparticle_dT, rfinal, rfinal_min,
                     TV_box_positions, TV_stdev_inv_matrix
             )
+            tock = time.time()
+            total_comp_time+=(tock-tick)
+            self.computation_time_publisher.publish(std_msgs.msg.Float64(data=total_comp_time))
             if (dbf_curve is not None) and (dbf_rfinal is not None):
                 Vfinal = self.params.kbezier*(dbf_curve[-1,-1] - dbf_curve[-1,-2])/self.Curveparticle_dT[0,-1]
                 tsplice = self.raceline_helper.t_of_r(dbf_rfinal[None]).item()
@@ -439,8 +446,6 @@ class DBFOvertakingPathServer(PathServerROS):
                 if tstart>0.075:
                     self.get_logger().warn("DBF took too long to compute: %f seconds. Not context switching" % (tstart,))
                     return
-                tock = time.time()
-                self.computation_time_publisher.publish(std_msgs.msg.Float64(data=tock-tick))
                 tsamp = torch.linspace(tstart, tstart+1.6, steps=41).type_as(self.overtaking_curve)
                 numpy_cloud = math_C.to_cavsim_cloud(self.overtaking_curve, self.overtaking_dT, tsamp, matrix_factories,) 
                 cloud_msg : sensor_msgs.msg.PointCloud2 = ros2_numpy.msgify(sensor_msgs.msg.PointCloud2, numpy_cloud)
@@ -452,8 +457,6 @@ class DBFOvertakingPathServer(PathServerROS):
                 self.set_parameters([stateparam,])
                 self.overtake_begin_pub.publish(self.get_clock().now().to_msg())
             else:
-                tock = time.time()
-                self.computation_time_publisher.publish(std_msgs.msg.Float64(data=tock-tick))
                 self.get_logger().debug("DBF algorithm did not converge in %f seconds" % (tock-tick,))
     def handleStateOvertaking(self, now : rclpy.time.Time):
         self.get_logger().debug("Handling Overtaking State")
