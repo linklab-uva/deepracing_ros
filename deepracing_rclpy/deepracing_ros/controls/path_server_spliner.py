@@ -68,9 +68,13 @@ class SplinerPathServer(PathServerROS):
 
         self.otstart_publisher = self.create_publisher(builtin_interfaces.msg.Time, "overtake_start", 1)
         self.otend_publisher = self.create_publisher(builtin_interfaces.msg.Time, "overtake_end", 1)
+
+        self.computation_time_publisher = self.create_publisher(std_msgs.msg.Float64, "computation_time", 1)
         
         self.ego_frenet_pub = self.create_publisher(uva_iac_msgs.msg.FrenetPointStamped, "ego_frenet", 1)
         self.target_frenet_pub = self.create_publisher(uva_iac_msgs.msg.FrenetPointStamped, "target_frenet", 1)
+
+        # self.comptime_publisher : rclpy.publisher.Publisher = self.create_publisher(std_msgs.msg.Float64, "computation_time", 1)
 
         spliner_params = self.get_parameters_by_prefix("spliner")
         self.optim_wrapper = SplinerOptim(**spliner_params)
@@ -81,7 +85,6 @@ class SplinerPathServer(PathServerROS):
             self.opponent_prediction_msg = msg
 
     def getTrajectory(self):
-        tick = self.get_clock().now()
         state = self.get_parameter(PlannerParamNames.STATE).get_parameter_value().string_value
         if state != "PLANNING":
             return
@@ -97,6 +100,9 @@ class SplinerPathServer(PathServerROS):
         #     return
         # with self.opponent_odom_mutex:
         #     opponent_odom = deepcopy(self.opponent_odom_msg)
+
+        tick = self.get_clock().now()
+        tick_wall = time.time()
         with self.opponent_prediction_mutex:
             opponent_prediction = sensor_msgs_py.point_cloud2.read_points(self.opponent_prediction_msg, 
                                                                           field_names=self.field_names_in, skip_nans=True)
@@ -286,7 +292,13 @@ class SplinerPathServer(PathServerROS):
         points_out[:,7] = (rlspeeds).cpu().numpy()
         #accels
         points_out[:,8] = (rlaccels).cpu().numpy()
+        cloud_msg = sensor_msgs_py.point_cloud2.create_cloud(ego_odom.header, self.pc2fields_out, points_out.tolist())
         tock = self.get_clock().now()
+        tock_wall = time.time()
+
+        delta_wall = tock_wall - tick_wall
+
+        self.computation_time_publisher.publish(std_msgs.msg.Float64(data=delta_wall))
 
         delta = tock - tick
 
@@ -295,7 +307,6 @@ class SplinerPathServer(PathServerROS):
             self.get_logger().error("Took too long, not publishing")
             return
         
-        cloud_msg = sensor_msgs_py.point_cloud2.create_cloud(ego_odom.header, self.pc2fields_out, points_out.tolist())
         self.pc2_pub.publish(cloud_msg)
         if not self.published_first_path:
             self.path_switcher.publish(std_msgs.msg.String(data="graph"))

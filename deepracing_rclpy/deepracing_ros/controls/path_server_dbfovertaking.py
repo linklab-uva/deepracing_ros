@@ -74,6 +74,7 @@ class DBFOvertakingPathServer(PathServerROS):
         self.overtake_end_pub : rclpy.publisher.Publisher =  self.create_publisher(builtin_interfaces.msg.Time, "overtake_end", 1)
         self.composite_bcurve_pub : rclpy.publisher.Publisher = self.create_publisher(CompositeBezierCurve, "bcurvesout", 1)
         self.opponent_composite_bcurve_pub : rclpy.publisher.Publisher = self.create_publisher(CompositeBezierCurve, "paired_opponent_curve", 1)
+        self.computation_time_publisher = self.create_publisher(std_msgs.msg.Float64, "computation_time", 1)
         
         if IMPORTED_UVA_IAC_MSGS:
             self.cavsim_reset_pub : rclpy.publisher.Publisher = self.create_publisher(uva_iac_msgs.msg.SetCavsimState, "cavsim_reset", 1)
@@ -329,6 +330,7 @@ class DBFOvertakingPathServer(PathServerROS):
         if time_since_epoch<0.75:
             # Wait for entire ROS system to stabilize
             return
+        tick = time.time()
         with self.current_odom_mutex:
             current_pose_msg = deepcopy(self.current_odom.pose.pose)
             current_vel_msg = deepcopy(self.current_odom.twist.twist)
@@ -387,12 +389,13 @@ class DBFOvertakingPathServer(PathServerROS):
             TV_stdev_inv_matrix : torch.Tensor = self.TV_invdiag@TV_eigvecs.transpose(-2,-1)
             TV_box_positions = TV_box_positions[None].expand(self.params.Nparticles, *TV_box_positions.shape)
 
-            tick = time.time()
+            # tick = time.time()
             dbf_curve, dbf_rfinal = self.attempt_dbf(
                 self.Curveparticles, self.Curveparticle_tstart, self.Curveparticle_dT, rfinal, rfinal_min,
                     TV_box_positions, TV_stdev_inv_matrix
             )
             tock = time.time()
+            self.computation_time_publisher.publish(std_msgs.msg.Float64(data=tock-tick))
             if (dbf_curve is not None) and (dbf_rfinal is not None):
                 Vfinal = self.params.kbezier*(dbf_curve[-1,-1] - dbf_curve[-1,-2])/self.Curveparticle_dT[0,-1]
                 tsplice = self.raceline_helper.t_of_r(dbf_rfinal[None]).item()
