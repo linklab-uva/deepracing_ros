@@ -439,13 +439,13 @@ class DBFOvertakingPathServer(PathServerROS):
                 if tstart>0.075:
                     self.get_logger().warn("DBF took too long to compute: %f seconds. Not context switching" % (tstart,))
                     return
+                tock = time.time()
+                self.computation_time_publisher.publish(std_msgs.msg.Float64(data=tock-tick))
                 tsamp = torch.linspace(tstart, tstart+1.6, steps=41).type_as(self.overtaking_curve)
                 numpy_cloud = math_C.to_cavsim_cloud(self.overtaking_curve, self.overtaking_dT, tsamp, matrix_factories,) 
                 cloud_msg : sensor_msgs.msg.PointCloud2 = ros2_numpy.msgify(sensor_msgs.msg.PointCloud2, numpy_cloud)
                 cloud_msg.header.frame_id="map"
                 cloud_msg.header.stamp = now.to_msg()
-                tock = time.time()
-                self.computation_time_publisher.publish(std_msgs.msg.Float64(data=tock-tick))
                 self.cloud_pub.publish(cloud_msg)
                 self.pathswitch_pub.publish(std_msgs.msg.String(data="graph"))
                 stateparam = rclpy.Parameter(PlannerParamNames.STATE, rclpy.Parameter.Type.STRING, "OVERTAKING")
