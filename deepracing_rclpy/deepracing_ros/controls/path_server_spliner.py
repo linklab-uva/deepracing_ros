@@ -102,7 +102,6 @@ class SplinerPathServer(PathServerROS):
         #     opponent_odom = deepcopy(self.opponent_odom_msg)
 
         tick = self.get_clock().now()
-        tick_wall = time.time()
         with self.opponent_prediction_mutex:
             opponent_prediction = sensor_msgs_py.point_cloud2.read_points(self.opponent_prediction_msg, 
                                                                           field_names=self.field_names_in, skip_nans=True)
@@ -121,6 +120,7 @@ class SplinerPathServer(PathServerROS):
         opponent_lat_safety_distances =  3.0*opponent_lat_uncertainties + 1.5*car_width
         opponent_lon_safety_distances =  3.0*opponent_lon_uncertainties + 1.5*car_length
 
+        tick_wall = time.time()
         opponent_frenet_s, rl_projections, rl_tangents, _ = self.raceline_frenet.raceline.closest_point_approximate(opponent_positions, newton_iterations=self.newton_iterations)
         rl_tangents : torch.Tensor = rl_tangents/torch.linalg.vector_norm(rl_tangents, dim=-1, keepdim=True)
         rl_normals = rl_tangents[:,[1,0]].clone()

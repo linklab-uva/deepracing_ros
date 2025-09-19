@@ -330,7 +330,6 @@ class DBFOvertakingPathServer(PathServerROS):
         if time_since_epoch<0.75:
             # Wait for entire ROS system to stabilize
             return
-        tick = time.time()
         with self.current_odom_mutex:
             current_pose_msg = deepcopy(self.current_odom.pose.pose)
             current_vel_msg = deepcopy(self.current_odom.twist.twist)
@@ -339,6 +338,7 @@ class DBFOvertakingPathServer(PathServerROS):
         current_position_msg = current_pose_msg.position
         current_position = torch.as_tensor([current_position_msg.x, current_position_msg.y]).type_as(self.Curveparticle_tstart)
         current_velocity = (current_rotmat@torch.as_tensor([[current_vel_msg.linear.x,], [current_vel_msg.linear.y,]]).type_as(self.Curveparticle_tstart))[:,0]
+        tick = time.time()
         
         rclosest, _, _, _ = self.raceline_helper.closest_point_approximate(current_position[None], newton_iterations=3)
         tclosest = self.raceline_helper.t_of_r(rclosest).item()
