@@ -234,9 +234,6 @@ class SplinerPathServer(PathServerROS):
             opponent_frenet_d_numpy,  guess, collision_bounds,
             lower_d_numpy, upper_d_numpy, global_kappas.cpu().numpy(), delta_s.cpu().numpy()
         )
-        tock_wall = time.time()
-        delta_wall += tock_wall - tick_wall
-        self.computation_time_publisher.publish(std_msgs.msg.Float64(data=delta_wall))
 
         if result.success:
             optimized_ego_d : np.ndarray = result.x
@@ -263,6 +260,9 @@ class SplinerPathServer(PathServerROS):
         dv_dr : torch.Tensor = self.raceline_frenet.raceline.__dspeed_dr__(all_ego_s)[0].squeeze(-1)
         rlaccels = dv_dr * rlspeeds
         overtaking_points = rlpoints + rlnormals*(torch.as_tensor(optimized_ego_d).type_as(all_ego_s)[:,None])
+        tock_wall = time.time()
+        delta_wall += tock_wall - tick_wall
+        self.computation_time_publisher.publish(std_msgs.msg.Float64(data=delta_wall))
         rlaccels = self.raceline_frenet.raceline.__along_of_t__(tglobal)[0].squeeze(-1)
         splineout : scipy.interpolate.BSpline = scipy.interpolate.make_interp_spline(
             t_spliner_cpu, overtaking_points.cpu(), k=2
