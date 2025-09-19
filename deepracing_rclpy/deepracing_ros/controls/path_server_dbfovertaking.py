@@ -338,9 +338,9 @@ class DBFOvertakingPathServer(PathServerROS):
         current_position_msg = current_pose_msg.position
         current_position = torch.as_tensor([current_position_msg.x, current_position_msg.y]).type_as(self.Curveparticle_tstart)
         current_velocity = (current_rotmat@torch.as_tensor([[current_vel_msg.linear.x,], [current_vel_msg.linear.y,]]).type_as(self.Curveparticle_tstart))[:,0]
-        total_comp_time = 0.0
+    
+    
         tick = time.time()
-        
         rclosest, _, _, _ = self.raceline_helper.closest_point_approximate(current_position[None], newton_iterations=3)
         tclosest = self.raceline_helper.t_of_r(rclosest).item()
         if self.Curveparticles is None:
@@ -356,7 +356,7 @@ class DBFOvertakingPathServer(PathServerROS):
             self.get_logger().error("No opponent curve")
         else:
             tock = time.time()
-            total_comp_time+=(tock-tick)
+            total_comp_time=(tock-tick)
             if not self.opponent_curve_mutex.acquire(timeout=0.1):
                 raise ValueError("Unable to acquire opponent_curve_mutex")
             opponent_curve_msg = deepcopy(self.opponent_curve_msg)
