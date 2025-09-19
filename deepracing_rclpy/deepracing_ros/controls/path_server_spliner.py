@@ -125,10 +125,6 @@ class SplinerPathServer(PathServerROS):
         rl_tangents : torch.Tensor = rl_tangents/torch.linalg.vector_norm(rl_tangents, dim=-1, keepdim=True)
         rl_normals = rl_tangents[:,[1,0]].clone()
         rl_normals[:,0]*=-1.0
-        opponent_frenet_msg = uva_iac_msgs.msg.FrenetPointStamped()
-        opponent_frenet_msg.header = ego_odom.header
-        opponent_frenet_msg.s = opponent_frenet_s[0].item()
-        opponent_frenet_msg.d = torch.sum((opponent_positions[0] - rl_projections[0]) * rl_normals[0]).item()
 
         ego_position = torch.as_tensor([ego_odom.pose.pose.position.x, ego_odom.pose.pose.position.y]).type_as(self.raceline_frenet.rsamp)
         (ego_current_s,), (projpoint,), (projtangent,), _ = self.raceline_frenet.raceline.closest_point_approximate(ego_position[None], newton_iterations=self.newton_iterations)
@@ -137,6 +133,14 @@ class SplinerPathServer(PathServerROS):
         projnormal[0]*=-1.0
 
         (ego_current_t,) = self.raceline_frenet.raceline.t_of_r(ego_current_s[None])
+        tock_wall = time.time()
+        delta_wall = tock_wall - tick_wall
+
+
+        opponent_frenet_msg = uva_iac_msgs.msg.FrenetPointStamped()
+        opponent_frenet_msg.header = ego_odom.header
+        opponent_frenet_msg.s = opponent_frenet_s[0].item()
+        opponent_frenet_msg.d = torch.sum((opponent_positions[0] - rl_projections[0]) * rl_normals[0]).item()
         ego_current_d : float = torch.linalg.vecdot(ego_position - projpoint, projnormal).item()
         ego_frenet_msg = uva_iac_msgs.msg.FrenetPointStamped()
         ego_frenet_msg.header = ego_odom.header
@@ -147,12 +151,14 @@ class SplinerPathServer(PathServerROS):
         current_delta_s : float = ego_frenet_msg.s - opponent_frenet_msg.s
         if (current_delta_s > (opponent_lon_safety_distances[0].item())) and (current_delta_s < 2000.0) and (math.fabs(ego_frenet_msg.d)<(0.05*car_width)):
             self.otend_publisher.publish(ego_odom.header.stamp)
+            return
 
         self.target_frenet_pub.publish(opponent_frenet_msg)
         self.ego_frenet_pub.publish(ego_frenet_msg)
 
         
 
+        tick_wall = time.time()
 
         ego_dense_s = self.raceline_frenet.raceline.__r_of_t__(ego_current_t + prediction_times)[0].squeeze(-1)
         relative_s = ego_dense_s - opponent_frenet_s
@@ -229,7 +235,7 @@ class SplinerPathServer(PathServerROS):
             lower_d_numpy, upper_d_numpy, global_kappas.cpu().numpy(), delta_s.cpu().numpy()
         )
         tock_wall = time.time()
-        delta_wall = tock_wall - tick_wall
+        delta_wall += tock_wall - tick_wall
         self.computation_time_publisher.publish(std_msgs.msg.Float64(data=delta_wall))
 
         if result.success:
