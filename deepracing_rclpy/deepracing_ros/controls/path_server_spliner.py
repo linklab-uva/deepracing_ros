@@ -234,24 +234,38 @@ class SplinerPathServer(PathServerROS):
             opponent_frenet_d_numpy,  guess, collision_bounds,
             lower_d_numpy, upper_d_numpy, global_kappas.cpu().numpy(), delta_s.cpu().numpy()
         )
-
         if result.success:
             optimized_ego_d : np.ndarray = result.x
         else:
+            tock_wall = time.time()
+            delta_wall += tock_wall - tick_wall
+            self.computation_time_publisher.publish(std_msgs.msg.Float64(data=delta_wall))
             self.get_logger().debug("Optimization failed: "  + result.message)
             return
         if np.any(optimized_ego_d<lower_d_numpy):
+            tock_wall = time.time()
+            delta_wall += tock_wall - tick_wall
+            self.computation_time_publisher.publish(std_msgs.msg.Float64(data=delta_wall))
             self.get_logger().error("Optimized d violates lower boundary for some reason.")
             return
         if np.any(optimized_ego_d>upper_d_numpy):
+            tock_wall = time.time()
+            delta_wall += tock_wall - tick_wall
+            self.computation_time_publisher.publish(std_msgs.msg.Float64(data=delta_wall))
             self.get_logger().error("Optimized d violates upper boundary for some reason.")
             return
         frenet_deltas = np.abs(opponent_frenet_d_numpy - optimized_ego_d)
         if np.any(frenet_deltas < collision_bounds):
+            tock_wall = time.time()
+            delta_wall += tock_wall - tick_wall
+            self.computation_time_publisher.publish(std_msgs.msg.Float64(data=delta_wall))
             self.get_logger().error("Optimized d violates collision limits for some reason")
             return
         curvature_constraint_vals = self.optim_wrapper.curvature_constraint.fun(optimized_ego_d)
         if np.any(curvature_constraint_vals>self.optim_wrapper.kappa_max):
+            tock_wall = time.time()
+            delta_wall += tock_wall - tick_wall
+            self.computation_time_publisher.publish(std_msgs.msg.Float64(data=delta_wall))
             self.get_logger().error("Optimized d violates curvature limits for some reason")
             return
         self.initial_guess = optimized_ego_d
