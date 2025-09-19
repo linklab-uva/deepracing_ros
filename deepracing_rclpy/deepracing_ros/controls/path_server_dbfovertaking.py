@@ -394,8 +394,6 @@ class DBFOvertakingPathServer(PathServerROS):
                 self.Curveparticles, self.Curveparticle_tstart, self.Curveparticle_dT, rfinal, rfinal_min,
                     TV_box_positions, TV_stdev_inv_matrix
             )
-            tock = time.time()
-            self.computation_time_publisher.publish(std_msgs.msg.Float64(data=tock-tick))
             if (dbf_curve is not None) and (dbf_rfinal is not None):
                 Vfinal = self.params.kbezier*(dbf_curve[-1,-1] - dbf_curve[-1,-2])/self.Curveparticle_dT[0,-1]
                 tsplice = self.raceline_helper.t_of_r(dbf_rfinal[None]).item()
@@ -438,7 +436,7 @@ class DBFOvertakingPathServer(PathServerROS):
                 }
                 deltat_ros = self.get_clock().now() - now
                 tstart : float = deltat_ros.nanoseconds*1e-9
-                if tstart>0.15:
+                if tstart>0.075:
                     self.get_logger().warn("DBF took too long to compute: %f seconds. Not context switching" % (tstart,))
                     return
                 tsamp = torch.linspace(tstart, tstart+1.6, steps=41).type_as(self.overtaking_curve)
@@ -446,12 +444,16 @@ class DBFOvertakingPathServer(PathServerROS):
                 cloud_msg : sensor_msgs.msg.PointCloud2 = ros2_numpy.msgify(sensor_msgs.msg.PointCloud2, numpy_cloud)
                 cloud_msg.header.frame_id="map"
                 cloud_msg.header.stamp = now.to_msg()
+                tock = time.time()
+                self.computation_time_publisher.publish(std_msgs.msg.Float64(data=tock-tick))
                 self.cloud_pub.publish(cloud_msg)
                 self.pathswitch_pub.publish(std_msgs.msg.String(data="graph"))
                 stateparam = rclpy.Parameter(PlannerParamNames.STATE, rclpy.Parameter.Type.STRING, "OVERTAKING")
                 self.set_parameters([stateparam,])
                 self.overtake_begin_pub.publish(self.get_clock().now().to_msg())
             else:
+                tock = time.time()
+                self.computation_time_publisher.publish(std_msgs.msg.Float64(data=tock-tick))
                 self.get_logger().debug("DBF algorithm did not converge in %f seconds" % (tock-tick,))
     def handleStateOvertaking(self, now : rclpy.time.Time):
         self.get_logger().debug("Handling Overtaking State")
